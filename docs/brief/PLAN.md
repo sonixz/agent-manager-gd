@@ -11,9 +11,14 @@ Chaque loop se termine par une revue du propriétaire (captures, rapport en fran
 | 5 ✅ | Reprendre et ramifier | voir le détail plus bas |
 | 6 ✅ | Le Brain branché d'office | voir le détail plus bas |
 | 7 ✅ | Le contexte qui survit | voir le détail plus bas |
-| 8 | Revue de diff avec commentaires | voir le détail plus bas |
-| 9 | Coûts par agent | voir le détail plus bas |
-| 10 | Thèmes, finition, installeur | voir le détail plus bas |
+| 8 | Revue de diff avec commentaires | voir « Loops 8 à 15 » plus bas |
+| 9 | Dépôts connectés et clés de déploiement | idem |
+| 10 | La voix : dictée vers les terminaux | idem |
+| 11 | La voix : commandes et état parlé | idem |
+| 12 | Sandbox Fly.io, « oui ou non » | idem |
+| 13 | Sandboxes complètes : tunnels, connexions, supervision avec le Brain | idem |
+| 14 | Coûts : Fly.io et agents, budgets | idem |
+| 15 | Finition et installeur | idem |
 
 ## Loops 4 à 10 en détail (structuré le 2026-11-08)
 
@@ -89,3 +94,70 @@ personnels de Claude Code ou de Codex : tout passe par des options de lancement 
 4. **Captures** sur écran virtuel (Xvfb), et un test manuel par le propriétaire sur Windows à la fin
    (seulement s'il le demande : aucune fenêtre ouverte sans demande).
 5. **Verdict** écrit dans `docs/research/TERMINAL.md` : le candidat retenu, ou l'arrêt.
+
+## Loops 8 à 15 en détail (structuré le 2026-11-08, après la Loop 7)
+
+Décisions du propriétaire : l'utilisateur crée ses dépôts, Agent Manager les connecte (une clé de déploiement par
+dépôt) ; une sandbox est une instance Fly.io jetable, pas un hôte persistant ; le Brain rejoint les sandboxes par un
+tunnel SSH, avec la gestion des tunnels, l'état des connexions et la supervision ; Agent Manager gère les coûts.
+Détails : `docs/brief/SANDBOX.md`. Mêmes règles qu'avant (tests, captures, rapport ; essai réel du propriétaire aux ★).
+
+### Loop 8 · Revue de diff avec commentaires
+- 8A : le diff d'une session (son worktree, son dossier ou sa branche), fichier par fichier, coloré, côte à côte ou
+  unifié ; navigation au clavier.
+- 8B : un commentaire par ligne ; « Envoyer la revue » les regroupe en une seule demande à l'agent ; les commentaires
+  envoyés restent visibles (ouverts ou traités).
+- Fini quand : on relit le travail d'un agent et on lui renvoie trois remarques sans quitter Agent Manager.
+
+### Loop 9 · Dépôts connectés et clés de déploiement (local)
+- 9A : vue « Dépôts » : ajouter (adresse SSH, dossier local), clé ed25519 par dépôt (privée 0600 dans nos données,
+  jamais dans un journal), clé publique à copier avec le lien GitHub *Deploy keys*, « Vérifier » (`git ls-remote`).
+- 9B : lancer un agent sur un dépôt (worktree par session) ; les commandes git de la session utilisent sa clé seule
+  (`GIT_SSH_COMMAND`) ; « Changer la clé », « Déconnecter », la documentation de chaque dépôt (empreinte, dates,
+  sessions qui y ont travaillé).
+- Fini quand : un dépôt créé par le propriétaire est connecté et un agent y pousse sa branche avec la clé du dépôt.
+
+### Loop 10 · La voix : dictée vers les terminaux
+- Reprise de la capture micro du Brain (Godot) et de sa transcription (clé OpenAI via dotenvx, coût affiché).
+- Maintenir une touche, parler : le texte s'écrit dans l'invite de la session active ; on le relit et on valide
+  (jamais d'Entrée automatique) ; accents et ponctuation française.
+- Fini quand : on dicte une consigne à Claude Code en français et elle arrive exacte dans son invite.
+- ★ Essai réel du propriétaire (micro, latence).
+
+### Loop 11 · La voix : commandes et état parlé
+- Commandes : « approuve Themes », « refuse », « va sur Docs », « vue grille », « qui m'attend ? », « clos la session ».
+  Toujours une confirmation visible avant une action qui coûte ou qui efface.
+- L'état parlé (voix courte, désactivable) : « Themes attend ton OK », « Docs a fini ».
+- Option locale plus tard (whisper.cpp, après accord pour le téléchargement).
+
+### Loop 12 · Sandbox Fly.io, « oui ou non »
+- Notre image (tmux, git, Claude Code, Codex, Python, mini moteur, sshd), le registre choisi par le propriétaire.
+- Une machine pour une session : secrets (clé du dépôt, clés API des agents), clonage, branche `am/<session>`,
+  l'agent dans tmux, le terminal dans Agent Manager (badge ☁) ; fin : résumé, branche poussée, machine détruite.
+- Mesures : temps de démarrage, latence du terminal, coût par exécution. Verdict écrit.
+- Besoins : compte et clé Fly (dotenvx), accord pour installer `flyctl`, clés API des agents, petit budget plafonné.
+
+### Loop 13 · Sandboxes complètes : tunnels, connexions, supervision avec le Brain
+- 13A Tunnels : un tunnel SSH inversé par sandbox (`ssh.exe` de Windows via `fly proxy`) vers le `/mcp` du Brain ;
+  clé du Brain par sandbox, révoquée à la destruction ; reconnexion automatique.
+- 13B Vue « Connexions » : pour chaque sandbox, l'état de la machine (démarre, travaille, arrêtée, détruite), l'état
+  du tunnel (ouvert, en reconnexion, coupé) et sa latence, le Brain joignable ou non depuis la sandbox (test de santé
+  à travers le tunnel), la dernière activité ; alertes quand un tunnel tombe ou qu'une sandbox ne répond plus.
+- 13C Supervision : les sandboxes dans l'arbre, le Tableau de bord et la file « ils t'attendent » comme les sessions
+  locales ; leurs propositions arrivent dans le Brain signées « Agent Manager · <session> ☁ » ; le résumé rapatrié
+  et proposé au Brain même si le tunnel était coupé.
+- Fini quand : deux sandboxes travaillent en parallèle sur deux dépôts, chacune proposant au Brain, et la coupure d'un
+  tunnel se voit, se répare et ne perd rien.
+
+### Loop 14 · Coûts : Fly.io et agents, budgets
+- Fly.io : compteur en direct par sandbox, totaux jour et mois (estimation sur la grille publiée, datée), budget
+  mensuel (alerte à 80 %, refus à 100 %), durée de vie maximale, destruction après N minutes d'inactivité,
+  « Tout arrêter », historique des sandboxes.
+- Agents : coût par session et par jour lu dans les journaux de Claude Code et de Codex (lecture seule), sans
+  estimation inventée ; mention claire quand une donnée manque.
+
+### Loop 15 · Finition et installeur
+- Builds de version Linux et Windows ; installation sans droits administrateur ; vérification au premier lancement
+  (WSL, python3, tmux, flyctl si sandboxes) avec des messages clairs et rien de téléchargé en silence ; raccourcis
+  configurables ; le MCP d'Agent Manager proposé aussi aux outils extérieurs (bouton « Brancher »).
+
