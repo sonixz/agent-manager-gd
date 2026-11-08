@@ -47,6 +47,8 @@ class Tmux:
 
     def new_session(self, name: str, cwd: str, command: list[str], env: dict[str, str] | None = None,
                     width: int = 160, height: int = 48) -> None:
+        # history for the wheel (tmux keeps it, the terminal shows tmux's screen): set before the pane exists
+        self.run("start-server", ";", "set-option", "-g", "history-limit", "50000")
         args = ["new-session", "-d", "-s", name, "-c", cwd, "-x", str(width), "-y", str(height)]
         for k, v in (env or {}).items():
             args += ["-e", f"{k}={v}"]
@@ -56,6 +58,9 @@ class Tmux:
         # a program's « copy to clipboard » (OSC 52) reaches Agent Manager's terminal through tmux
         self.run("set-option", "-s", "set-clipboard", "on")
         self.run("set-option", "-s", "terminal-features[90]", "*:clipboard")
+        # the wheel scrolls tmux's history (copy mode); a drag selects there and copies through OSC 52; Shift+drag
+        # still selects in Agent Manager's terminal itself
+        self.run("set-option", "-g", "mouse", "on")
         # keep the pane when the program ends, so a finished agent's last screen stays readable (and revivable)
         self.run("set-option", "-t", name, "remain-on-exit", "on")
 

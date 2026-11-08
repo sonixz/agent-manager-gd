@@ -572,6 +572,52 @@ func _run() -> void:
 			for sb in ov.get("sandboxes", []):  # pause them: never destroyed by Agent Manager
 				await main.engine.call_api("POST", "/sandboxes/%s/stop" % sb["id"], {}, true, 120.0)
 			report.append("stopped (not destroyed): %d" % (ov.get("sandboxes", []) as Array).size())
+		"remote":
+			main._open_new("", "claude")
+			await wait(1.5)
+			await shot("52-new-session-remote-control")
+			report.append("remote box: on=%s enabled=%s" % [main.f_remote.button_pressed, not main.f_remote.disabled])
+			main.new_dialog.hide()
+		"scroll":
+			# the wheel over a session: tmux's history comes back (copy mode)
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Scroll test", "tool": "shell", "cwd": "~"})
+			await main.refresh()
+			main.select(str(a["id"]))
+			await wait(3.0)
+			await main.engine.call_api("POST", "/sessions/%s/send" % a["id"], {"text": "seq -f 'line %g' 1 300"})
+			await wait(2.0)
+			var t = main.terms[str(a["id"])]
+			report.append("bottom shows line 300: %s" % t.get_screen_text().contains("line 300"))
+			var at: Vector2 = t.get_global_rect().get_center()
+			for i in 30:
+				for pressed in [true, false]:
+					var ev := InputEventMouseButton.new()
+					ev.button_index = MOUSE_BUTTON_WHEEL_UP
+					ev.pressed = pressed
+					ev.position = at
+					ev.global_position = at
+					main.get_viewport().push_input(ev)
+				await wait(0.05)
+			await wait(1.5)
+			var txt: String = t.get_screen_text()
+			report.append("after the wheel, an early line is shown: %s (line 200 %s, line 150 %s)" % [not txt.contains("line 300"), txt.contains("line 200"), txt.contains("line 150")])
+			await shot("51-scrolled-history")
+			# a full-screen program that takes the mouse (like Claude Code fullscreen): vim with mouse=a
+			await main.engine.call_api("POST", "/sessions/%s/send" % a["id"], {"text": "q"})
+			await main.engine.call_api("POST", "/sessions/%s/send" % a["id"], {"text": "seq -f 'row %g' 1 500 > /tmp/agmgd-rows.txt; vim -u NONE -c 'set mouse=a' /tmp/agmgd-rows.txt"})
+			await wait(2.5)
+			for i in 20:
+				for pressed in [true, false]:
+					var ev2 := InputEventMouseButton.new()
+					ev2.button_index = MOUSE_BUTTON_WHEEL_DOWN
+					ev2.pressed = pressed
+					ev2.position = at
+					ev2.global_position = at
+					main.get_viewport().push_input(ev2)
+				await wait(0.05)
+			await wait(1.5)
+			var vt: String = t.get_screen_text()
+			report.append("vim scrolled by the wheel: %s (row 1 still shown: %s)" % [not vt.contains("row 1\n"), vt.contains("row 1\n")])
 		"clipboard":
 			# a program copies through OSC 52 (as Claude Code's « c to copy » does), inside tmux: it reaches the clipboard
 			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Copy test", "tool": "shell", "cwd": "~"})

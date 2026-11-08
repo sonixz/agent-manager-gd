@@ -312,3 +312,20 @@ Then aligned with the Second Brain, which uses the same OpenAI project: the same
 (gpt-transcribe, gpt-4o-transcribe, gpt-4o-mini-transcribe, whisper-1), the ones the key's project allows read first
 from GET /models (free, nothing sent, remembered for the engine's run), `languages[]` for gpt-transcribe. The owner's
 project allows gpt-transcribe: a real one-second call now goes through (about $0.00007). Tests: 60.
+
+## Loop 16c: owner test round (2026-11-08)
+
+- **Remote Control** (asked by the owner): new Claude Code sessions start with `--remote-control "<Group · Name>"`, so
+  they appear under that name in claude.ai/code and the Claude app. On by default in New session (« Remote Control:
+  also on claude.ai/code and the Claude app »), untick to keep a session here only; remembered with the session
+  (restart, resume and fork keep it); cards show « ⇄ claude.ai ». Local sessions only for now (a sandbox's Claude Code
+  signs in separately).
+- **« working » that was not**: a local Claude Code's state came only from its hooks, and an interrupted turn (Esc)
+  sends no Stop hook. Now a « working » with no output for 15 s and no « esc to interrupt » on screen falls back to
+  idle. In a sandbox (no hooks) the state comes from what the agent shows (« esc to interrupt », an approval
+  question), no longer from screen redraws.
+- **Scrolling**: the wheel scrolls tmux's history (checked: a shell's 300 lines) and reaches full-screen programs that
+  take the mouse (checked with vim). In a sandbox, its tmux did not take the mouse, so the wheel scrolled an empty local
+  copy: the sandbox's tmux now has `mouse on` and 50,000 lines of history (applied at the next attach).
+- **Voice**: with F9, a phrase that is not a command is written into the active session like a dictation (F8),
+  instead of « not a command ». Tests: 62.

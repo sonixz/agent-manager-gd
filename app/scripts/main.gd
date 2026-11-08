@@ -49,6 +49,7 @@ var bg_rect: ColorRect
 var board_previews := {}      # id -> Label (Board view)
 var f_worktree: CheckBox
 var f_brain: CheckBox
+var f_remote: CheckBox
 var f_brief: CheckBox
 var dictation: Dictation
 var voice_mode := "dictate"     # F8 dictate, F9 command
@@ -515,8 +516,15 @@ func _build_new_dialog() -> void:
 	f_brief = CheckBox.new()
 	f_brief.text = "Brief it with the latest summary of this folder"
 	g.add_child(f_brief)
+	g.add_child(Control.new())
+	f_remote = CheckBox.new()  # Claude Code's Remote Control: on by default, untick to keep the session here only
+	f_remote.text = "Remote Control: also on claude.ai/code and the Claude app"
+	f_remote.button_pressed = true
+	f_remote.tooltip_text = "The session appears in claude.ai/code under « Group · Name »; Claude Code only"
+	g.add_child(f_remote)
 	f_cwd.text_changed.connect(func(_t: String) -> void: _check_brief())
 	f_tool.item_selected.connect(func(_i: int) -> void: _check_brief())
+	f_where.item_selected.connect(func(_i: int) -> void: _check_remote())
 	new_dialog.confirmed.connect(_create)
 
 
@@ -527,7 +535,15 @@ func _muted(t: String) -> Label:
 	return l
 
 
+func _check_remote() -> void:
+	var claude := str(f_tool.get_selected_metadata()) == "claude"
+	var local := str(f_where.get_selected_metadata()) != "sandbox"
+	f_remote.disabled = not (claude and local)
+	f_remote.tooltip_text = "The session appears in claude.ai/code under « Group · Name »" if not f_remote.disabled else ("Claude Code only" if not claude else "Not in cloud sandboxes yet")
+
+
 func _check_brief() -> void:
+	_check_remote()
 	f_brief.disabled = true
 	f_brief.button_pressed = false
 	f_brief.text = "Brief it with the latest summary of this folder (none yet)"
@@ -579,6 +595,8 @@ func _open_new(where := "", tool := "") -> void:
 	for i in f_tool.item_count:
 		if tool != "" and str(f_tool.get_item_metadata(i)) == tool:
 			f_tool.select(i)
+	f_remote.button_pressed = true
+	_check_remote()
 	new_dialog.popup_centered()
 	f_name.grab_focus()
 
@@ -1370,7 +1388,11 @@ func run_voice_command(text: String) -> void:
 			await _open_new()
 			f_name.text = str(c.get("name", "")).capitalize()
 		_:
-			_toast("Heard « %s »: %s" % [text, c.get("reason", "not a command")])
+			# not a command: what you said is for the agent, written into the active session like a dictation
+			if selected != "" and terms.has(selected) and text.strip_edges() != "":
+				on_transcribed(selected, text, 0.0)
+			else:
+				_toast("Heard « %s »: %s (select a session to write it there)" % [text, c.get("reason", "not a command")])
 
 
 func _speak(text: String, force := false) -> void:
@@ -2432,7 +2454,7 @@ func _create() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata())}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return

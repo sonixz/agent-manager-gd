@@ -187,7 +187,8 @@ def make_handler(sessions: Sessions, token: str):
                                                             int(b.get("width", 160)), int(b.get("height", 48)),
                                                             bool(b.get("worktree", False)), bool(b.get("brain", True)),
                                                             str(b.get("parent", "")), bool(b.get("brief", False)),
-                                                            str(b.get("repo", "")), str(b.get("host", "local"))))
+                                                            str(b.get("repo", "")), str(b.get("host", "local")),
+                                                            bool(b.get("remote", False))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""

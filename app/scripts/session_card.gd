@@ -80,7 +80,7 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 		m.custom_minimum_size = Vector2(10, 0)
 		v.add_child(m)
 	var where := ("⎇ " + str(s["repo_name"])) if str(s.get("repo_name", "")) != "" else (str(s["cwd"]).get_file() if str(s["cwd"]).get_file() != "" else str(s["cwd"]))
-	var meta := "▸ " + where + ("   ⎇ " + str(s["branch"]) if str(s.get("branch", "")) != "" else "") + ("   ✦ Brain" if s.get("brain", false) else "")
+	var meta := "▸ " + where + ("   ⎇ " + str(s["branch"]) if str(s.get("branch", "")) != "" else "") + ("   ✦ Brain" if s.get("brain", false) else "") + ("   ⇄ claude.ai" if s.get("remote_control", false) else "")
 	if str(s.get("parent_name", "")) != "":
 		meta = "↳ " + str(s["parent_name"]) + "   " + meta
 	var w := _label(meta, AmTheme.col("FAINT"), 11)

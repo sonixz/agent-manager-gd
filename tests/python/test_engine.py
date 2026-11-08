@@ -64,6 +64,29 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.sessions.get(s["id"])["state"], "missing")
         self.assertEqual(self.sessions.restart(s["id"])["state"], "running")
 
+    def test_remote_control_is_remembered_and_named_for_claude_ai(self):
+        rec = self.sessions.store.add("Site redesign", "claude", self.tmp, "GD Project")
+        self.sessions.store.update(rec["id"], remote_control=1)
+        rec = self.sessions.store.get(rec["id"])
+        cmd = self.sessions.command_for(rec)
+        self.assertIn("--remote-control", cmd)
+        self.assertEqual(cmd[cmd.index("--remote-control") + 1], "GD Project · Site redesign")
+        resumed = self.sessions.command_for(rec, "resume", "abc")            # a restart keeps it
+        self.assertIn("--remote-control", resumed)
+        plain = self.sessions.store.add("No remote", "claude", self.tmp)
+        self.assertNotIn("--remote-control", self.sessions.command_for(plain))
+
+    def test_a_stale_working_state_falls_back_to_idle(self):
+        from types import SimpleNamespace
+        s = self.sessions.create("Claude-like", "shell", self.tmp)
+        rec = dict(self.sessions.store.get(s["id"]), tool="claude")
+        old = time.time() - 60
+        t = SimpleNamespace(activity=old, pane_command="claude")
+        state, msg = self.sessions.activity(rec, t, {"state": "working", "time": old})
+        self.assertEqual(state, "idle")                                       # no « esc to interrupt », quiet for a minute
+        state, _ = self.sessions.activity(rec, SimpleNamespace(activity=time.time(), pane_command="claude"), {"state": "working", "time": old})
+        self.assertEqual(state, "working")                                    # output just now: still working
+
     def test_attach_command_names_the_private_server(self):
         s = self.sessions.create("t", "shell", self.tmp)
         cmd = self.sessions.attach_command(s["id"])

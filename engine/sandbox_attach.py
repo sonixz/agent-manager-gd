@@ -15,7 +15,8 @@ from engine.keys import Keys                      # noqa: E402
 from engine.sandboxes import FLYCTL, Fly, Sandboxes  # noqa: E402
 from engine.store import Store                    # noqa: E402
 
-TMUX_CLIPBOARD = ["set -s set-clipboard on", "set -s terminal-features[90] *:clipboard"]
+TMUX_CLIPBOARD = ["set -s set-clipboard on", "set -s terminal-features[90] *:clipboard", "set -g mouse on",
+                  "set -g history-limit 50000"]
 AGENT_CMD = {"claude": "claude --mcp-config /root/.agmgd/mcp.json", "codex": "codex", "shell": "bash -l"}
 
 

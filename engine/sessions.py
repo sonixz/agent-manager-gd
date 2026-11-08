@@ -39,6 +39,8 @@ CLAUDE_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"
 SHELLS = {"bash", "zsh", "fish", "sh", "dash", "pwsh", "nu"}
 APPROVAL_HINTS = re.compile(r"(allow|approve|run this command|would you like to|do you want to)", re.I)
 ACTIVE_SECONDS = 2.5
+CLAUDE_BUSY = re.compile(r"esc to interrupt", re.I)   # what Claude Code shows while it works
+STALE_WORKING_SECONDS = 15
 
 WRAPUP_PROMPT = (
     "Agent Manager GD is closing this session. Please write a short summary of it in Markdown to the file {path} "
@@ -65,6 +67,11 @@ class Sessions:
         self.sandboxes = Sandboxes(store.path, self.home, self.keys_store)
 
     # ---------------------------------------------------------------- launching
+    @staticmethod
+    def remote_name(rec: dict) -> str:
+        """The name Remote Control shows in claude.ai/code: « Group · Session », or the session's name alone."""
+        return (f"{rec['grp']} · {rec['name']}" if rec.get("grp") else rec["name"])[:80]
+
     def command_for(self, rec: dict, mode: str = "new", conversation: str = "") -> list[str]:
         """The tool's command with this session's hooks: options of this launch only, never the user's settings.
         mode: new (a fresh conversation), resume (its own conversation), fork (a copy of a conversation)."""
@@ -79,6 +86,8 @@ class Sessions:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(settings, f)
             base = ["claude", "--settings", path] + self._claude_mcp(rec)
+            if rec.get("remote_control"):  # seen and driven from claude.ai/code or the Claude app, under this name
+                base += ["--remote-control", self.remote_name(rec)]
             if mode == "resume" and conversation:
                 return base + ["--resume", conversation]
             if mode == "fork" and conversation:
@@ -173,7 +182,7 @@ class Sessions:
 
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
-               repo: str = "", host: str = "local") -> dict:
+               repo: str = "", host: str = "local", remote: bool = False) -> dict:
         if host == "sandbox":
             return self.create_sandbox_session(name, tool, grp, repo, brain)
         if tool not in TOOLS:
@@ -194,6 +203,9 @@ class Sessions:
         from .review import head
         rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent, start_commit=head(cwd),
                              repo_id=repo)
+        if remote and tool == "claude":
+            self.store.update(rec["id"], remote_control=1)
+            rec = self.store.get(rec["id"])
         if brain:
             self._connect_brain(rec)
         cmd = self.command_for(rec)
@@ -228,6 +240,7 @@ class Sessions:
                 "since": float(hs.get("time", 0) or (t.activity if t else 0) or rec["created"]),
                 "last_conversation": self.last_conversation(rec["id"]),
                 "brain": bool(rec.get("brain_client")),
+                "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",
                 "sandbox": {k: sb_info[k] for k in ("id", "region", "finished", "destroyed", "machine")} if sb_info else None,
@@ -235,14 +248,31 @@ class Sessions:
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
 
+    def _tail(self, rec: dict, lines: int = 15) -> str:
+        try:
+            return "\n".join(self.tmux.capture(self.tmux_name(rec["id"]), lines).splitlines()[-lines:])
+        except Exception:
+            return ""
+
     def activity(self, rec: dict, t, hs: dict) -> tuple[str, str]:
         """working | approval | waiting | done | idle, from the hooks first, the terminal second."""
         now = time.time()
         busy = bool(t and t.activity and now - t.activity < ACTIVE_SECONDS)
         if rec.get("cwd") == "/work" and self.sandboxes.by_session(rec["id"]):
-            return ("working" if busy else "idle"), "in a cloud sandbox"
+            # no hooks in a sandbox: what the agent shows, not the screen's redraws
+            if rec["tool"] == "shell":
+                return ("working" if busy else "idle"), "in a cloud sandbox"
+            tail = self._tail(rec) if t else ""
+            if CLAUDE_BUSY.search(tail):
+                return "working", "in a cloud sandbox"
+            if APPROVAL_HINTS.search(tail):
+                return "approval", "in a cloud sandbox"
+            return "idle", "in a cloud sandbox"
         if rec["tool"] == "claude" and hs.get("state"):
             st = hs["state"]
+            if st == "working" and t and not busy and now - max(t.activity or 0, hs.get("time", 0)) > STALE_WORKING_SECONDS \
+                    and not CLAUDE_BUSY.search(self._tail(rec)):
+                return "idle", "stopped (interrupted?)"  # e.g. Esc: Claude Code sends no Stop hook then
             return ("idle" if st == "ended" else st), str(hs.get("message", ""))
         if rec["tool"] == "codex":
             if busy and not (hs.get("state") == "done" and hs.get("time", 0) >= t.activity - 0.5):

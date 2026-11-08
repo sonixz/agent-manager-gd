@@ -1,0 +1,3 @@
+engine connected: true
+capture 52-new-session-remote-control
+remote box: on=true enabled=true
