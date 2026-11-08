@@ -7,7 +7,7 @@ shows its live state, revives on its own conversation, forks, and works in its o
 wired to your [Second Brain](https://github.com/sonixz/second-brain-gd) over MCP, so what one agent learns, the next
 one knows.
 
-Status: **alpha, private.** Loops 1 to 15 of the plan (`docs/brief/PLAN.md`) are done; the story is in `DEVLOG.md`.
+Status: **alpha.** Open source under the MIT licence (`LICENSE`). Loops 1 to 15 of the plan (`docs/brief/PLAN.md`) are done; the story is in `DEVLOG.md`.
 
 ## Install (Windows)
 
@@ -105,4 +105,4 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
 Tests: `python3 -m unittest discover -s tests/python -t .`; the app end to end on a virtual display:
 `tools/app_shots.sh <out-dir> [a folder Claude Code already trusts]`.
 
-Stack: Godot 4.7 (interface) + Python (engine), local-first. Licence: to be chosen by the owner.
+Stack: Godot 4.7 (interface) + Python (engine), local-first. Licence: MIT (`LICENSE`); third-party parts in `THIRD_PARTY_NOTICES.md`. Part of [GD Project](https://github.com/sonixz/gd-project).
