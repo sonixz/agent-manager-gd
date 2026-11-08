@@ -329,6 +329,55 @@ func _run() -> void:
 			await main.refresh()
 			await shot("21-agents-children")
 			report.append("children: %s" % ", ".join(main.sessions.filter(func(x): return str(x.get("parent", "")) != "").map(func(x): return "%s<-%s" % [x["name"], x["parent_name"]])))
+		"summary":
+			# a REAL Claude Code writes its own summary (one small prompt, owner-approved); no Brain proposal in this test
+			var trusted := OS.get_environment("DRIVE_TRUSTED")
+			var c: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Summary demo", "tool": "claude", "cwd": trusted, "brain": false, "group": "Ticket System"})
+			var cid := str(c["id"])
+			var w0 := Time.get_ticks_msec()
+			while Time.get_ticks_msec() - w0 < 40000:
+				await wait(1.0)
+				await main.refresh()
+				if str(main._session(cid).get("conversation", "")) != "":
+					break
+			main.select(cid)
+			await wait(1.0)
+			await main._wrap_up(cid)
+			await wait(4.0)
+			await main.refresh()
+			await shot("22-wrapping")
+			var approved := 0
+			w0 = Time.get_ticks_msec()
+			while Time.get_ticks_msec() - w0 < 240000:
+				await wait(2.0)
+				await main.refresh()
+				var s0: Dictionary = main._session(cid)
+				if s0.is_empty():
+					break  # archived: gone from the sidebar
+				if str(s0.get("activity", "")) == "approval" and approved < 3:
+					approved += 1
+					await main.engine.call_api("POST", "/sessions/%s/keys" % cid, {"keys": ["Enter"]})
+			var sums: Dictionary = await main.engine.call_api("GET", "/sessions/%s/summaries" % cid)
+			report.append("approvals pressed by the test: %d" % approved)
+			report.append("summary kept: %s" % (not (sums.get("summaries", []) as Array).is_empty()))
+			if not (sums.get("summaries", []) as Array).is_empty():
+				report.append("summary starts: %s" % str(sums["summaries"][0]["text"]).left(160).replace("\n", " | "))
+			main.set_view("history")
+			await wait(2.5)
+			await shot("23-history-summary")
+			if not (sums.get("summaries", []) as Array).is_empty():
+				main._read("Summary demo", str(sums["summaries"][0]["text"]))
+				await wait(0.8)
+				await shot("24-read-summary")
+				main.read_dialog.hide()
+			main._open_new()
+			main.f_cwd.text = trusted
+			main.f_tool.select(0)
+			await main._check_brief()
+			await wait(0.6)
+			report.append("brief offered: %s" % (not main.f_brief.disabled))
+			await shot("25-new-session-brief")
+			main.new_dialog.hide()
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())

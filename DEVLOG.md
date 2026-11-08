@@ -121,3 +121,15 @@ read_screen (any session), start_session (a child: parent link, the parent's fol
 send_to_session and wait_for_session (children only). No key-pressing tool: an agent cannot approve for another.
 Cards show « ↳ parent ». Tests: 28 (a lead starts a child, writes to it, waits and reads « déjà-fini »; writing to a
 session it did not start is refused).
+
+## Loop 7: the context that survives (2026-11-08)
+
+Wrap up: the engine types a request into the agent's session (write a Markdown summary to a file in our data folder:
+what was done, decisions, files touched, what is left, how to continue; propose it with propose_item when the
+session shares the Second Brain), shows « writing its summary », and when the file exists and the agent is no longer
+working (its Stop hook), stores the summary (`summaries` table: session, conversation, folder, text) and archives the
+session. History shows the latest summary (« Read » for all of it) and searches its text. A new Claude Code / Codex
+session in the same folder can be briefed: its first message points to the latest summary (and to the Brain when
+shared). Real check with Claude Code (one small prompt, owner-approved, Brain proposal off for the test): it wrote
+its summary unasked for permission, the engine kept it and archived the session; the new-session dialog then offered
+the brief. Tests: 31 (3 new with a fake agent). Captures in docs/screens/loop7.

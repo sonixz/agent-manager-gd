@@ -39,6 +39,16 @@ SHELLS = {"bash", "zsh", "fish", "sh", "dash", "pwsh", "nu"}
 APPROVAL_HINTS = re.compile(r"(allow|approve|run this command|would you like to|do you want to)", re.I)
 ACTIVE_SECONDS = 2.5
 
+WRAPUP_PROMPT = (
+    "Agent Manager GD is closing this session. Please write a short summary of it in Markdown to the file {path} "
+    "with these sections: ## What was done, ## Decisions (and why), ## Files touched, ## What is left, "
+    "## How to continue. Be concrete (names, paths, commands), at most about 300 words. "
+    "{brain}Then answer only: summary written.")
+BRAIN_HINT = ("If the second-brain MCP tools are available, also propose it with propose_item (title: "
+              "\"Session summary · {name} · {date}\", the summary as its text) so the owner can approve it. ")
+BRIEF_PROMPT = ("Context from earlier sessions on this project, kept by Agent Manager GD: read {path} (the latest "
+                "session summary){brain}. Then say in two lines what you understood and wait for instructions.")
+
 
 class Sessions:
     def __init__(self, store: Store, tmux: Tmux, home: str = "", brain=None):
@@ -148,7 +158,7 @@ class Sessions:
         return PREFIX + sid
 
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
-               worktree: bool = False, brain: bool = True, parent: str = "") -> dict:
+               worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False) -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
@@ -165,8 +175,14 @@ class Sessions:
         rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent)
         if brain:
             self._connect_brain(rec)
+        cmd = self.command_for(rec)
+        if brief and tool in ("claude", "codex"):
+            last = self.store.summaries(cwd=cwd)
+            if last:  # the first message: read the latest summary of this folder (a small prompt, owner-approved)
+                hint = " and search the Second Brain for this project if you need more" if self.store.get(rec["id"]).get("brain_client") else ""
+                cmd = cmd + [BRIEF_PROMPT.format(path=last[0]["path"], brain=hint)]
         try:
-            self.tmux.new_session(self.tmux_name(rec["id"]), cwd, self.command_for(rec),
+            self.tmux.new_session(self.tmux_name(rec["id"]), cwd, cmd,
                                   env=self.session_env(rec["id"]), width=width, height=height)
         except Exception:
             self.store.delete(rec["id"])
@@ -183,6 +199,8 @@ class Sessions:
         activity, message = self.activity(rec, t, hs) if state == "running" else (state, "")
         if rec.get("archived"):
             state, activity = "archived", "archived"
+        elif rec["id"] in self._wrapping and state == "running":
+            activity, message = "wrapping", "writing its summary"
         return {**rec, "tool_label": TOOLS.get(rec["tool"], {}).get("label", rec["tool"]), "state": state,
                 "activity": activity, "message": message, "conversation": hs.get("conversation", ""),
                 "since": float(hs.get("time", 0) or (t.activity if t else 0) or rec["created"]),
@@ -213,6 +231,7 @@ class Sessions:
         return ("working" if busy and rec["tool"] != "shell" else "idle"), ""
 
     def list(self) -> list[dict]:
+        self.check_wrapups()
         live = self.tmux.sessions()
         return [self.describe(r, live) for r in self.store.all()]
 
@@ -321,6 +340,47 @@ class Sessions:
         self.tmux.new_session(self.tmux_name(rec["id"]), rec["cwd"], self.command_for(rec, "fork", conv),
                               env=self.session_env(rec["id"]))
         return self.get(rec["id"])
+
+    # ---------------------------------------------------------------- wrap up (Loop 7)
+    _wrapping: dict = {}   # session id -> (start time, summary path, archive afterwards)
+
+    def wrap_up(self, sid: str, archive: bool = True) -> dict:
+        """Asks the agent to write its own summary (and propose it to the Second Brain with its own key); when it is
+        done, the summary is kept with the session (History) and the session is archived."""
+        d = self.get(sid)
+        if d["tool"] == "shell":
+            raise ValueError("a shell has no conversation to summarise")
+        if d["state"] != "running":
+            raise ValueError("start the session first (Resume), then wrap it up")
+        folder = os.path.join(self.home, "sessions", sid)
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, time.strftime("summary-%Y%m%d-%H%M%S.md"))
+        brain = BRAIN_HINT.format(name=d["name"], date=time.strftime("%Y-%m-%d")) if d.get("brain") else ""
+        self._wrapping[sid] = (time.time(), path, archive)
+        self.tmux.send_text(self.tmux_name(sid), WRAPUP_PROMPT.format(path=path, brain=brain))
+        return {**self.get(sid), "summary_path": path}
+
+    def check_wrapups(self) -> list[str]:
+        """Called regularly: a wrap-up is finished when the summary file exists and the agent is no longer working."""
+        finished = []
+        for sid, (start, path, archive) in list(self._wrapping.items()):
+            rec = self.store.get(sid)
+            if not rec:
+                self._wrapping.pop(sid, None)
+                continue
+            hs = self.hook_state(sid)
+            settled = hs.get("state") in ("done", "waiting", "idle") and float(hs.get("time", 0)) > start + 1
+            if os.path.exists(path) and (settled or time.time() - start > 900):
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    text = f.read().strip()[:20000]
+                self.store.add_summary(sid, self.last_conversation(sid), rec["cwd"], path, text)
+                self._wrapping.pop(sid, None)
+                if archive:
+                    self.archive(sid)
+                finished.append(sid)
+            elif time.time() - start > 1800:  # gave up: the session stays as it is
+                self._wrapping.pop(sid, None)
+        return finished
 
     def archive(self, sid: str) -> dict:
         """Out of the way but never forgotten: the record and every conversation id stay (History)."""

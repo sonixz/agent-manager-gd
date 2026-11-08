@@ -68,6 +68,10 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, {"sessions": sessions.list()})
                 if parts == ["brain"] and method == "GET":
                     return self._reply(200, sessions.brain.status() if sessions.brain else {"connected": False, "reason": "off"})
+                if parts == ["summaries"] and method == "GET":
+                    from .sessions import host_path
+                    cwd = os.path.expanduser(host_path(parse_qs(url.query).get("cwd", [""])[0]))
+                    return self._reply(200, {"summaries": sessions.store.summaries(cwd=cwd)[:5]})
                 if parts == ["history"] and method == "GET":
                     q = parse_qs(url.query).get("q", [""])[0]
                     return self._reply(200, {"sessions": sessions.history(q)})
@@ -104,7 +108,7 @@ def make_handler(sessions: Sessions, token: str):
                                                             str(b.get("cwd", "~")), str(b.get("group", "")),
                                                             int(b.get("width", 160)), int(b.get("height", 48)),
                                                             bool(b.get("worktree", False)), bool(b.get("brain", True)),
-                                                            str(b.get("parent", ""))))
+                                                            str(b.get("parent", "")), bool(b.get("brief", False))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
@@ -127,6 +131,10 @@ def make_handler(sessions: Sessions, token: str):
                     if method == "POST" and action == "fork":
                         b = self._body()
                         return self._reply(201, sessions.fork(sid, str(b.get("name", "")), str(b.get("conversation", ""))))
+                    if method == "POST" and action == "wrapup":
+                        return self._reply(200, sessions.wrap_up(sid, bool(self._body().get("archive", True))))
+                    if method == "GET" and action == "summaries":
+                        return self._reply(200, {"summaries": sessions.store.summaries(sid=sid)})
                     if method == "POST" and action == "archive":
                         return self._reply(200, sessions.archive(sid))
                     if method == "GET" and action == "conversations":

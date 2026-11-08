@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS conversations (
     note TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (session_id, conversation)
 );
+CREATE TABLE IF NOT EXISTS summaries (
+    session_id TEXT NOT NULL,
+    conversation TEXT NOT NULL DEFAULT '',
+    cwd TEXT NOT NULL,
+    created REAL NOT NULL,
+    path TEXT NOT NULL,
+    text TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS groups (
     name TEXT PRIMARY KEY,
     position INTEGER NOT NULL DEFAULT 0,
@@ -121,11 +129,27 @@ class Store:
         out = []
         for r in rows:
             r["conversations"] = by.get(r["id"], [])
+            r["summaries"] = self.summaries(sid=r["id"])
             hay = " ".join([r["name"], r["cwd"], r["grp"], r["tool"], r["id"]] +
-                           [c["conversation"] + " " + c["note"] for c in r["conversations"]]).lower()
+                           [c["conversation"] + " " + c["note"] for c in r["conversations"]] +
+                           [x["text"] for x in r["summaries"]]).lower()
             if not q or all(w in hay for w in q.split()):
                 out.append(r)
         return out
+
+    # ---------------------------------------------------------------- summaries (Loop 7)
+    def add_summary(self, sid: str, conversation: str, cwd: str, path: str, text: str) -> None:
+        with closing(self._db()) as db, db:
+            db.execute("INSERT INTO summaries VALUES (?, ?, ?, ?, ?, ?)", (sid, conversation, cwd, time.time(), path, text))
+
+    def summaries(self, sid: str = "", cwd: str = "") -> list[dict]:
+        q, args = "SELECT * FROM summaries", []
+        if sid:
+            q, args = q + " WHERE session_id = ?", [sid]
+        elif cwd:
+            q, args = q + " WHERE cwd = ?", [cwd]
+        with closing(self._db()) as db:
+            return [dict(r) for r in db.execute(q + " ORDER BY created DESC", args)]
 
     # ---------------------------------------------------------------- groups (the project tree)
     def groups(self) -> list[dict]:

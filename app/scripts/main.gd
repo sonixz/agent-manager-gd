@@ -49,6 +49,9 @@ var bg_rect: ColorRect
 var board_previews := {}      # id -> Label (Board view)
 var f_worktree: CheckBox
 var f_brain: CheckBox
+var f_brief: CheckBox
+var read_dialog: AcceptDialog
+var read_text: RichTextLabel
 var brain_ok := false
 var history_search: LineEdit
 var history_list: VBoxContainer
@@ -67,7 +70,8 @@ func activity_of(s: Dictionary) -> Array:
 		"done": return [AmTheme.col("MINT") if not AmTheme.is_light() else AmTheme.col("FOREST_LIGHT"), "done"]
 		"idle": return [AmTheme.col("FAINT"), "ready"]
 		"exited": return [AmTheme.col("WARM").darkened(0.2), "ended"]
-		"missing": return [AmTheme.col("ERROR"), "gone · Restart brings it back"]
+		"missing": return [AmTheme.col("ERROR"), "gone · Resume brings it back"]
+		"wrapping": return [AmTheme.col("WARM"), "writing its summary"]
 	return [AmTheme.col("MUTED"), a]
 
 
@@ -377,6 +381,12 @@ func _build_new_dialog() -> void:
 	f_brain = CheckBox.new()
 	f_brain.text = "Share the Second Brain (a key of its own, proposals wait for your OK)"
 	g.add_child(f_brain)
+	g.add_child(Control.new())
+	f_brief = CheckBox.new()
+	f_brief.text = "Brief it with the latest summary of this folder"
+	g.add_child(f_brief)
+	f_cwd.text_changed.connect(func(_t: String) -> void: _check_brief())
+	f_tool.item_selected.connect(func(_i: int) -> void: _check_brief())
 	new_dialog.confirmed.connect(_create)
 
 
@@ -387,12 +397,31 @@ func _muted(t: String) -> Label:
 	return l
 
 
+func _check_brief() -> void:
+	f_brief.disabled = true
+	f_brief.button_pressed = false
+	f_brief.text = "Brief it with the latest summary of this folder (none yet)"
+	if str(f_tool.get_selected_metadata()) == "shell" or f_cwd.text.strip_edges() == "":
+		return
+	var cwd := f_cwd.text.strip_edges()
+	var r := await engine.call_api("GET", "/summaries?cwd=" + cwd.uri_encode())
+	if f_cwd.text.strip_edges() != cwd:
+		return  # the folder changed while we asked
+	var list: Array = r.get("summaries", [])
+	if list.is_empty():
+		return
+	f_brief.disabled = false
+	f_brief.button_pressed = true
+	f_brief.text = "Brief it with the latest summary of this folder (%s, a short first message)" % _date(float(list[0]["created"]))
+
+
 func _open_new() -> void:
 	f_name.text = ""
 	f_worktree.button_pressed = false
 	f_brain.disabled = not brain_ok
 	f_brain.button_pressed = brain_ok
 	f_brain.tooltip_text = "" if brain_ok else "The Second Brain is not running on this computer"
+	_check_brief()
 	f_group.clear()
 	f_group.add_item("(no group)")
 	f_group.set_item_metadata(0, "")
@@ -496,7 +525,7 @@ func _render_list() -> void:
 			hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 			hint.add_theme_font_size_override("font_size", 12)
 			list_box.add_child(hint)
-	empty_label.visible = sessions.is_empty()
+	empty_label.visible = sessions.is_empty() and view != "history"
 
 
 func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
@@ -662,6 +691,7 @@ func set_view(v: String) -> void:
 		for id in grid_ids:
 			await _ensure_terminal(id)
 	content.modulate.a = 0.0
+	empty_label.visible = sessions.is_empty() and v != "history"
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.18)
 	_render_header()
@@ -952,6 +982,30 @@ func _history_row(h: Dictionary) -> Control:
 	meta.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 	meta.add_theme_font_size_override("font_size", 12)
 	v.add_child(meta)
+	var sums: Array = h.get("summaries", [])
+	if not sums.is_empty():
+		var sp := PanelContainer.new()
+		sp.add_theme_stylebox_override("panel", AmTheme.box(Color(AmTheme.col("WARM"), 0.08), 8, Color(AmTheme.col("WARM"), 0.35), 1, 10))
+		var sv := VBoxContainer.new()
+		sp.add_child(sv)
+		var sh := HBoxContainer.new()
+		sv.add_child(sh)
+		var stl := Label.new()
+		stl.text = "Summary · %s%s" % [_date(float(sums[0]["created"])), ("   (%d earlier)" % (sums.size() - 1)) if sums.size() > 1 else ""]
+		stl.add_theme_color_override("font_color", AmTheme.col("WARM"))
+		stl.add_theme_font_size_override("font_size", 12)
+		stl.size_flags_horizontal = SIZE_EXPAND_FILL
+		sh.add_child(stl)
+		var full := str(sums[0]["text"])
+		sh.add_child(_small("Read", func() -> void: _read(str(h["name"]), full)))
+		var ex := Label.new()
+		var lines := full.split("\n")
+		ex.text = "\n".join(lines.slice(0, 5)) + ("\n…" if lines.size() > 5 else "")
+		ex.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+		ex.add_theme_font_size_override("font_size", 12)
+		ex.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sv.add_child(ex)
+		v.add_child(sp)
 	for c in (h["conversations"] as Array).slice(0, 6):
 		var cr := HBoxContainer.new()
 		cr.add_theme_constant_override("separation", 8)
@@ -976,6 +1030,21 @@ static func _date(t: float) -> String:
 		return ""
 	var bias := int(Time.get_time_zone_from_system().get("bias", 0)) * 60
 	return Time.get_datetime_string_from_unix_time(int(t) + bias, true).left(16)
+
+
+func _read(title: String, text: String) -> void:
+	read_dialog.title = "Summary · " + title
+	read_text.text = text
+	read_dialog.popup_centered(Vector2i(760, 560))
+
+
+func _wrap_up(id: String) -> void:
+	var r := await engine.call_api("POST", "/sessions/%s/wrapup" % id, {"archive": true})
+	if r.has("error"):
+		status_label.text = str(r["error"])
+		return
+	_toast("%s is writing its summary; it goes to History when done" % _session(id).get("name", ""))
+	await refresh()
 
 
 func _resume(id: String, conversation: String) -> void:
@@ -1057,6 +1126,8 @@ func open_palette() -> void:
 			items.append({"label": "Resume " + sname, "hint": "its own conversation", "run": func() -> void: _resume(sid2, "")})
 			items.append({"label": "Fork " + sname, "hint": "a copy of the conversation", "run": func() -> void: _fork(sid2)})
 		items.append({"label": "Archive " + sname, "hint": "kept in History", "run": func() -> void: _archive(sid2)})
+		if str(_session(selected).get("tool", "")) != "shell":
+			items.append({"label": "Wrap up " + sname, "hint": "its own summary, then archive", "run": func() -> void: _wrap_up(sid2)})
 		items.append({"label": "Restart " + sname + " fresh", "hint": "a new conversation", "run": _restart})
 		items.append({"label": "Rename " + str(_session(selected).get("name", "")), "hint": "", "run": func() -> void: _rename_session(selected)})
 	palette.open(items)
@@ -1067,7 +1138,7 @@ func _create() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed})
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled})
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return
@@ -1160,6 +1231,7 @@ func _build_menus() -> void:
 	row_menu.add_item("Resume its conversation", 7)
 	row_menu.add_item("Fork…", 8)
 	row_menu.add_item("Finish its git branch…", 9)
+	row_menu.add_item("Wrap up: its summary, then archive", 11)
 	row_menu.add_item("Archive (kept in History)", 10)
 	move_menu = PopupMenu.new()
 	move_menu.about_to_popup.connect(func() -> void:
@@ -1181,7 +1253,8 @@ func _build_menus() -> void:
 		var agent := str(s.get("tool", "")) != "shell"
 		row_menu.set_item_disabled(row_menu.get_item_index(7), not agent)
 		row_menu.set_item_disabled(row_menu.get_item_index(8), not agent)
-		row_menu.set_item_disabled(row_menu.get_item_index(9), str(s.get("worktree", "")) == ""))
+		row_menu.set_item_disabled(row_menu.get_item_index(9), str(s.get("worktree", "")) == "")
+		row_menu.set_item_disabled(row_menu.get_item_index(11), not agent or str(s.get("state", "")) != "running"))
 	row_menu.id_pressed.connect(_on_row_menu)
 	add_child(row_menu)
 	group_menu = PopupMenu.new()
@@ -1205,6 +1278,13 @@ func _build_menus() -> void:
 		theme_menu.set_item_metadata(theme_menu.item_count - 1, t)
 	theme_menu.index_pressed.connect(func(i: int) -> void: set_theme_name(str(theme_menu.get_item_metadata(i))))
 	add_child(theme_menu)
+	read_dialog = AcceptDialog.new()
+	read_text = RichTextLabel.new()
+	read_text.custom_minimum_size = Vector2(700, 460)
+	read_text.selection_enabled = true
+	read_text.add_theme_color_override("default_color", AmTheme.col("TEXT"))
+	read_dialog.add_child(read_text)
+	add_child(read_dialog)
 	finish_dialog = ConfirmationDialog.new()
 	finish_dialog.title = "Finish this git branch"
 	finish_dialog.ok_button_text = "Finish"
@@ -1278,6 +1358,9 @@ func _on_row_menu(mid: int) -> void:
 		return
 	if mid == 10:
 		_archive(menu_target)
+		return
+	if mid == 11:
+		_wrap_up(menu_target)
 		return
 	selected = menu_target
 	if mid == 2:
