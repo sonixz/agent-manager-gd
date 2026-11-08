@@ -40,9 +40,10 @@ ACTIVE_SECONDS = 2.5
 
 
 class Sessions:
-    def __init__(self, store: Store, tmux: Tmux, home: str = ""):
+    def __init__(self, store: Store, tmux: Tmux, home: str = "", brain=None):
         self.store = store
         self.tmux = tmux
+        self.brain = brain  # engine.brain.Brain or None (tests, or the Brain switched off)
         self.home = home or os.path.dirname(os.path.dirname(store.path))
 
     # ---------------------------------------------------------------- launching
@@ -59,7 +60,7 @@ class Sessions:
             path = os.path.join(folder, "claude-settings.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(settings, f)
-            base = ["claude", "--settings", path]
+            base = ["claude", "--settings", path] + self._claude_mcp(rec)
             if mode == "resume" and conversation:
                 return base + ["--resume", conversation]
             if mode == "fork" and conversation:
@@ -69,13 +70,40 @@ class Sessions:
             self.store.touch_conversation(rec["id"], "claude", new_id)
             return base + ["--session-id", new_id]
         if rec["tool"] == "codex":
-            notify = ["-c", "notify=" + json.dumps(hook + ["codex"])]
+            notify = ["-c", "notify=" + json.dumps(hook + ["codex"])] + self._codex_mcp(rec)
             if mode == "resume":  # without a known id Codex shows its own picker
                 return ["codex", "resume"] + notify + ([conversation] if conversation else [])
             if mode == "fork":
                 return ["codex", "fork"] + notify + ([conversation] if conversation else [])
             return ["codex"] + notify
         return list(TOOLS[rec["tool"]]["command"])
+
+    # ---------------------------------------------------------------- the Second Brain (Loop 6)
+    def _brain_spec(self, rec: dict) -> dict | None:
+        cid = (self.store.get(rec["id"]) or {}).get("brain_client", "") if rec.get("id") else ""
+        return self.brain.server_spec(cid) if (self.brain and cid) else None
+
+    def _claude_mcp(self, rec: dict) -> list[str]:
+        spec = self._brain_spec(rec)
+        if not spec:
+            return []
+        path = os.path.join(self.home, "sessions", rec["id"], "mcp.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"mcpServers": {"second-brain": {"type": "stdio", **spec}}}, f)
+        return ["--mcp-config", path]
+
+    def _codex_mcp(self, rec: dict) -> list[str]:
+        spec = self._brain_spec(rec)
+        if not spec:
+            return []
+        return ["-c", "mcp_servers.second-brain.command=" + json.dumps(spec["command"]),
+                "-c", "mcp_servers.second-brain.args=" + json.dumps(spec["args"])]
+
+    def _connect_brain(self, rec: dict) -> None:
+        if self.brain and rec["tool"] in ("claude", "codex"):
+            cid = self.brain.connect(rec["name"])
+            if cid:
+                self.store.update(rec["id"], brain_client=cid)
 
     def session_env(self, sid: str) -> dict:
         return {"AGMGD_SESSION": sid, "AGMGD_HOME": self.home}
@@ -110,7 +138,7 @@ class Sessions:
         return PREFIX + sid
 
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
-               worktree: bool = False) -> dict:
+               worktree: bool = False, brain: bool = True) -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
@@ -123,13 +151,15 @@ class Sessions:
             wt, base = self._add_worktree(cwd, name)
             cwd = wt
         rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base)
+        if brain:
+            self._connect_brain(rec)
         try:
             self.tmux.new_session(self.tmux_name(rec["id"]), cwd, self.command_for(rec),
                                   env=self.session_env(rec["id"]), width=width, height=height)
         except Exception:
             self.store.delete(rec["id"])
             raise
-        return self.describe(rec)
+        return self.get(rec["id"])
 
     def describe(self, rec: dict, live: dict | None = None) -> dict:
         live = self.tmux.sessions() if live is None else live
@@ -145,6 +175,7 @@ class Sessions:
                 "activity": activity, "message": message, "conversation": hs.get("conversation", ""),
                 "since": float(hs.get("time", 0) or (t.activity if t else 0) or rec["created"]),
                 "last_conversation": self.last_conversation(rec["id"]),
+                "brain": bool(rec.get("brain_client")),
                 "branch": self.branch(rec["cwd"]),
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
@@ -224,7 +255,9 @@ class Sessions:
         return self.get(sid)
 
     def remove(self, sid: str) -> None:
-        import shutil
+        rec = self.store.get(sid) or {}
+        if self.brain and rec.get("brain_client"):
+            self.brain.revoke(rec["brain_client"])  # its key stops working at once
         self.tmux.kill(self.tmux_name(sid))
         self.store.delete(sid)
         shutil.rmtree(os.path.join(self.home, "sessions", sid), ignore_errors=True)
@@ -271,6 +304,8 @@ class Sessions:
         if not conv and d["tool"] == "claude":
             raise ValueError("no conversation recorded yet for this session")
         rec = self.store.add((name or d["name"] + " (fork)").strip()[:60], d["tool"], d["cwd"], d["grp"], parent=sid)
+        if d.get("brain_client"):
+            self._connect_brain(rec)
         self.tmux.new_session(self.tmux_name(rec["id"]), rec["cwd"], self.command_for(rec, "fork", conv),
                               env=self.session_env(rec["id"]))
         return self.get(rec["id"])

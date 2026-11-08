@@ -286,6 +286,33 @@ func _run() -> void:
 			report.append("main after finishing: %s" % "".join(out).strip_edges().replace("\n", " | "))
 			report.append("worktree folder gone: %s" % (not DirAccess.dir_exists_absolute(str(b["cwd"]))))
 			await shot("18-after-finish")
+		"brain":
+			# the real Second Brain (on Windows): a Claude Code session gets its own key and connects to it
+			var trusted := OS.get_environment("DRIVE_TRUSTED")
+			report.append("brain status: %s" % main.status_label.text)
+			main.f_name.text = "Brain themes"
+			main._open_new()
+			main.f_name.text = "Brain themes"
+			main.f_tool.select(0)
+			main.f_cwd.text = trusted
+			main.new_dialog.hide()
+			await main._create()
+			var sh: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Build", "tool": "shell", "cwd": trusted})
+			await wait(12.0)
+			await main.refresh()
+			var s0: Dictionary = main._session(main.selected)
+			report.append("session shares the Brain: %s" % s0.get("brain", false))
+			var ps := []
+			OS.execute("bash", ["-c", "ps -eo args | grep -c [r]elay.py.--client"], ps)
+			report.append("Brain relays started by Claude Code: %s" % "".join(ps).strip_edges())
+			await shot("19-brain-session")
+			main._open_new()
+			await wait(0.5)
+			await shot("20-new-session-dialog")
+			main.new_dialog.hide()
+			for x in main.sessions.duplicate():  # removing revokes the test sessions' Brain keys (never the owner's)
+				await main.engine.call_api("DELETE", "/sessions/%s" % x["id"])
+			report.append("test sessions removed, their Brain keys revoked")
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())

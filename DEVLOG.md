@@ -97,3 +97,17 @@ made with its conversations, searchable, each resumable or forkable, ids copyabl
 repository's current branch on request (aborted on conflict), removes the worktree, deletes the branch with `-d` only.
 Dialog windows now take the theme. Engine tests: 21 (5 new with fake claude/codex printing their options, and a real
 temporary git repository). Captures in docs/screens/loop5.
+
+## Loop 6A–6B: the Second Brain in every session (2026-11-08)
+
+engine/brain.py finds the Second Brain (Windows %LOCALAPPDATA%\SecondBrainGD from WSL, or a Linux install), its Python
+(install_state.json) and its repository (from its install log, for the relay). The Brain needed no change: it already
+creates (`POST /mcp/clients`) and revokes (`DELETE /mcp/clients/<id>`) keys and ships a stdio relay. From WSL the
+Brain's 127.0.0.1 is not reachable, so calls go through the Brain's own Windows Python (engine/brain_call.py), which
+reads the app token from the Brain's files itself and strips any token from its answer: no key in an argument, a log
+or our files. Each Claude Code / Codex session gets its own key at creation (level propose_items), passed with
+`--mcp-config <file with the relay command>` or `-c mcp_servers.second-brain.*`; a fork gets a new key; removing a
+session revokes its key. Live check against the owner's running Brain: a key created, the relay answering with the
+Brain's 13 tools (propose_item included), refused once revoked; an app session started Claude Code which launched the
+relay. 25 engine tests (4 with a fake Brain recording the calls). The Brain timeline per agent (6B) is the Brain's
+existing feature: the client name carries the session name.

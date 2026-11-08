@@ -66,6 +66,8 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, {k: v["label"] for k, v in TOOLS.items()})
                 if parts == ["sessions"] and method == "GET":
                     return self._reply(200, {"sessions": sessions.list()})
+                if parts == ["brain"] and method == "GET":
+                    return self._reply(200, sessions.brain.status() if sessions.brain else {"connected": False, "reason": "off"})
                 if parts == ["history"] and method == "GET":
                     q = parse_qs(url.query).get("q", [""])[0]
                     return self._reply(200, {"sessions": sessions.history(q)})
@@ -101,7 +103,7 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(201, sessions.create(str(b.get("name", "")), str(b.get("tool", "shell")),
                                                             str(b.get("cwd", "~")), str(b.get("group", "")),
                                                             int(b.get("width", 160)), int(b.get("height", 48)),
-                                                            bool(b.get("worktree", False))))
+                                                            bool(b.get("worktree", False)), bool(b.get("brain", True))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""

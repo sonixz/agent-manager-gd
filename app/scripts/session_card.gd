@@ -80,7 +80,7 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 		m.custom_minimum_size = Vector2(10, 0)
 		v.add_child(m)
 	var where := str(s["cwd"]).get_file() if str(s["cwd"]).get_file() != "" else str(s["cwd"])
-	var meta := "▸ " + where + ("   ⎇ " + str(s["branch"]) if str(s.get("branch", "")) != "" else "")
+	var meta := "▸ " + where + ("   ⎇ " + str(s["branch"]) if str(s.get("branch", "")) != "" else "") + ("   ✦ Brain" if s.get("brain", false) else "")
 	var w := _label(meta, AmTheme.col("FAINT"), 11)
 	w.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	w.custom_minimum_size = Vector2(10, 0)

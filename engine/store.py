@@ -43,7 +43,7 @@ class Store:
             cols = {r[1] for r in db.execute("PRAGMA table_info(sessions)")}
             if "position" not in cols:  # Loop 4A: the order inside a group
                 db.execute("ALTER TABLE sessions ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
-            for col in ("parent", "worktree", "base_repo"):  # Loop 5: forks and git worktrees
+            for col in ("parent", "worktree", "base_repo", "brain_client"):  # Loop 5 forks, worktrees; Loop 6 Brain
                 if col not in cols:
                     db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
             if "archived_at" not in cols:
@@ -81,7 +81,8 @@ class Store:
         return dict(r) if r else None
 
     def update(self, sid: str, **fields) -> None:
-        allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived", "archived_at", "cwd", "worktree")}
+        allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived", "archived_at", "cwd", "worktree",
+                                                            "brain_client")}
         if not allowed:
             return
         sets = ", ".join(f"{k} = :{k}" for k in allowed)

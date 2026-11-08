@@ -31,7 +31,10 @@ def main(argv: list[str] | None = None) -> int:
     if not port_free(a.port):
         print(f"port {a.port} is busy: is the engine already running?", file=sys.stderr)
         return 3
-    sessions = Sessions(Store(os.path.join(h, "data", "sessions.sqlite3")), tmux, h)
+    from .brain import Brain
+    brain = Brain()
+    sessions = Sessions(Store(os.path.join(h, "data", "sessions.sqlite3")), tmux, h, brain if brain.enabled else None)
+    print("Second Brain: " + ("connected" if brain.enabled and brain.status()["connected"] else "not connected"), flush=True)
     srv = serve(sessions, load_token(h), a.port)
     print(f"engine ready on 127.0.0.1:{a.port} (data: {h})", flush=True)
     try:

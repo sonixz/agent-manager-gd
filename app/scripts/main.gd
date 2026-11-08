@@ -48,6 +48,8 @@ var palette: CommandPalette
 var bg_rect: ColorRect
 var board_previews := {}      # id -> Label (Board view)
 var f_worktree: CheckBox
+var f_brain: CheckBox
+var brain_ok := false
 var history_search: LineEdit
 var history_list: VBoxContainer
 var finish_dialog: ConfirmationDialog
@@ -87,7 +89,9 @@ func _ready() -> void:
 	if not await engine.connect_engine():
 		status_label.text = "The engine did not start (python3 and tmux are needed%s)." % (" in WSL" if engine.on_windows else "")
 		return
-	status_label.text = "Engine ready · Ctrl+Shift+K for commands"
+	var b := await engine.call_api("GET", "/brain")
+	brain_ok = bool(b.get("connected", false))
+	status_label.text = ("✦ Second Brain connected" if brain_ok else "Second Brain: " + str(b.get("reason", "not connected"))) + " · Ctrl+Shift+K for commands"
 	await refresh()
 	if sessions.size() > 0:
 		select(str(sessions[0]["id"]))
@@ -369,6 +373,10 @@ func _build_new_dialog() -> void:
 	f_worktree.text = "In its own git branch (a worktree beside the repository)"
 	f_worktree.tooltip_text = "The session works in <repository>-worktrees/<name> on branch am/<name>; Finish merges it back."
 	g.add_child(f_worktree)
+	g.add_child(Control.new())
+	f_brain = CheckBox.new()
+	f_brain.text = "Share the Second Brain (a key of its own, proposals wait for your OK)"
+	g.add_child(f_brain)
 	new_dialog.confirmed.connect(_create)
 
 
@@ -382,6 +390,9 @@ func _muted(t: String) -> Label:
 func _open_new() -> void:
 	f_name.text = ""
 	f_worktree.button_pressed = false
+	f_brain.disabled = not brain_ok
+	f_brain.button_pressed = brain_ok
+	f_brain.tooltip_text = "" if brain_ok else "The Second Brain is not running on this computer"
 	f_group.clear()
 	f_group.add_item("(no group)")
 	f_group.set_item_metadata(0, "")
@@ -602,6 +613,8 @@ func _render_header() -> void:
 		meta = "%s  ·  %s" % [s["tool_label"], s["cwd"]]
 		if str(s.get("branch", "")) != "":
 			meta += "  ·  ⎇ " + str(s["branch"])
+		if s.get("brain", false):
+			meta += "  ·  ✦ shares the Second Brain"
 	header_meta.text = meta
 	var act := activity_of(s) if s else [AmTheme.col("MUTED"), ""]
 	var msg := str(s.get("message", ""))
@@ -1049,7 +1062,7 @@ func _create() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed})
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed})
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return
