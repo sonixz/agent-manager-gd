@@ -33,6 +33,7 @@ def host_path(path: str) -> str:
 
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hook.py")
 AGENTS_MCP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_agents.py")
+SANDBOX_ATTACH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sandbox_attach.py")
 CLAUDE_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop",
                  "SubagentStop", "PreCompact", "SessionEnd"]
 SHELLS = {"bash", "zsh", "fish", "sh", "dash", "pwsh", "nu"}
@@ -60,6 +61,8 @@ class Sessions:
         from .keys import Keys
         self.repos = Repos(store.path, self.home)
         self.keys_store = Keys(self.home)
+        from .sandboxes import Sandboxes
+        self.sandboxes = Sandboxes(store.path, self.home, self.keys_store)
 
     # ---------------------------------------------------------------- launching
     def command_for(self, rec: dict, mode: str = "new", conversation: str = "") -> list[str]:
@@ -170,7 +173,9 @@ class Sessions:
 
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
-               repo: str = "") -> dict:
+               repo: str = "", host: str = "local") -> dict:
+        if host == "sandbox":
+            return self.create_sandbox_session(name, tool, grp, repo, brain)
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
@@ -209,6 +214,7 @@ class Sessions:
         live = self.tmux.sessions() if live is None else live
         t = live.get(self.tmux_name(rec["id"]))
         state = "missing" if t is None else ("exited" if t.pane_dead else "running")
+        sb_info = self.sandboxes.by_session(rec["id"]) if rec.get("cwd") == "/work" else None
         hs = self.hook_state(rec["id"])
         if hs.get("conversation"):
             self.store.touch_conversation(rec["id"], rec["tool"], hs["conversation"])
@@ -223,6 +229,8 @@ class Sessions:
                 "last_conversation": self.last_conversation(rec["id"]),
                 "brain": bool(rec.get("brain_client")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
+                "host": "sandbox" if sb_info else "local",
+                "sandbox": {k: sb_info[k] for k in ("id", "region", "finished", "destroyed", "machine")} if sb_info else None,
                 "branch": self.branch(rec["cwd"]),
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
@@ -231,6 +239,8 @@ class Sessions:
         """working | approval | waiting | done | idle, from the hooks first, the terminal second."""
         now = time.time()
         busy = bool(t and t.activity and now - t.activity < ACTIVE_SECONDS)
+        if rec.get("cwd") == "/work" and self.sandboxes.by_session(rec["id"]):
+            return ("working" if busy else "idle"), "in a cloud sandbox"
         if rec["tool"] == "claude" and hs.get("state"):
             st = hs["state"]
             return ("idle" if st == "ended" else st), str(hs.get("message", ""))
@@ -304,6 +314,8 @@ class Sessions:
 
     def remove(self, sid: str) -> None:
         rec = self.store.get(sid) or {}
+        if self.sandboxes.by_session(sid):
+            raise ValueError("this session has a cloud sandbox: destroy it first in Sandboxes (or archive the session)")
         if self.brain and rec.get("brain_client"):
             self.brain.revoke(rec["brain_client"])  # its key stops working at once
         self.tmux.kill(self.tmux_name(sid))
@@ -313,6 +325,27 @@ class Sessions:
             os.remove(os.path.join(self.home, "state", sid + ".json"))
         except OSError:
             pass
+
+    # ---------------------------------------------------------------- cloud sandboxes (Loop 13)
+    def create_sandbox_session(self, name: str, tool: str, grp: str, repo: str, brain: bool) -> dict:
+        if tool not in TOOLS:
+            raise ValueError(f"unknown tool: {tool}")
+        if not NAME_OK.match(name or ""):
+            raise ValueError("a name of 1 to 60 characters")
+        rec = self.store.add(name.strip(), tool, "/work", grp, repo_id=repo)
+        try:
+            sb = self.sandboxes.create(rec["id"], repo_id=repo)
+        except Exception:
+            self.store.delete(rec["id"])
+            raise
+        if brain and self.brain and tool in ("claude", "codex"):
+            cid = self.brain.connect(rec["name"] + " ☁")
+            if cid:
+                self.store.update(rec["id"], brain_client=cid)
+                self.sandboxes._set(sb["id"], brain_client=cid)
+        self.tmux.new_session(self.tmux_name(rec["id"]), self.home, [sys.executable or "python3", SANDBOX_ATTACH, sb["id"]],
+                              env=self.session_env(rec["id"]))
+        return self.get(rec["id"])
 
     # ---------------------------------------------------------------- history, resume, fork (Loop 5)
     def _repo_name(self, rid: str) -> str:

@@ -88,7 +88,7 @@ func _demo() -> Dictionary:
 	var made := {}
 	for it in [["Themes", "claude", "Second Brain"], ["MCP fixes", "claude", "Second Brain"], ["Docs", "claude", "Second Brain"],
 			["Terminal", "claude", "Agent Manager"], ["Build", "shell", "Agent Manager"], ["Scratch", "shell", ""]]:
-		var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": it[0], "tool": it[1], "cwd": trusted if it[1] == "claude" else home, "group": it[2]})
+		var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": it[0], "tool": it[1], "cwd": trusted if it[1] == "claude" else home, "group": it[2], "brain": false})
 		made[it[0]] = str(r.get("id", ""))
 	var c0 := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - c0 < 40000:
@@ -173,7 +173,7 @@ func _run() -> void:
 			var made := {}
 			for it in [["Themes", "claude", "Second Brain"], ["MCP fixes", "claude", "Second Brain"], ["Docs", "claude", "Second Brain"],
 					["Terminal", "claude", "Agent Manager"], ["Build", "shell", "Agent Manager"], ["Scratch", "shell", ""]]:
-				var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": it[0], "tool": it[1], "cwd": trusted if it[1] == "claude" else home, "group": it[2]})
+				var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": it[0], "tool": it[1], "cwd": trusted if it[1] == "claude" else home, "group": it[2], "brain": false})
 				made[it[0]] = str(r.get("id", ""))
 			var c0 := Time.get_ticks_msec()  # Claude Code starts; its SessionStart hook says « ready »
 			while Time.get_ticks_msec() - c0 < 40000:
@@ -257,9 +257,9 @@ func _run() -> void:
 			var repo := data.path_join("demo-repo")
 			OS.execute("bash", ["-c", "mkdir -p %s && cd %s && git init -q -b main && git -c user.name=demo -c user.email=d@d commit -q --allow-empty -m start" % [repo, repo]])
 			var trusted := OS.get_environment("DRIVE_TRUSTED")
-			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Brain themes", "tool": "claude", "cwd": trusted, "group": "Second Brain"})
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Brain themes", "tool": "claude", "cwd": trusted, "group": "Second Brain", "brain": false})
 			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Fix login", "tool": "shell", "cwd": repo, "worktree": true, "group": "Demo"})
-			var n: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Old notes", "tool": "claude", "cwd": trusted})
+			var n: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Old notes", "tool": "claude", "cwd": trusted, "brain": false})
 			report.append("worktree session cwd: %s" % b.get("cwd", b.get("error", "")))
 			await wait(4.0)
 			await main.refresh()
@@ -513,6 +513,65 @@ func _run() -> void:
 			await shot("37-sandbox-terminal")
 			report.append("sandbox screen: %s" % main.terms[str(a["id"])].get_screen_text().contains("Claude Code"))
 			await main.engine.call_api("POST", "/sessions/%s/send" % a["id"], {"text": "tmux detach"})
+		"sandboxes":
+			var data := OS.get_environment("AGMGD_HOME")
+			# the owner's Fly token (DPAPI blob for this Windows user) copied into the test data folder
+			OS.execute("bash", ["-c", "mkdir -p %s/keys/api && cp ~/.local/share/agent-manager-gd/keys/api/fly.json %s/keys/api/ && chmod 600 %s/keys/api/fly.json" % [data, data, data]])
+			main.set_view("sandboxes")
+			await wait(2.0)
+			await shot("38-sandboxes-not-prepared")
+			if OS.get_environment("DRIVE_FLY_APP") != "":  # reuse an app made by an earlier test (no new app each run)
+				OS.execute("python3", ["-c", "import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute('CREATE TABLE IF NOT EXISTS sandbox_config (k TEXT PRIMARY KEY, v TEXT NOT NULL)'); db.execute('INSERT OR REPLACE INTO sandbox_config VALUES (?,?)', ('app', sys.argv[2])); db.execute('INSERT OR REPLACE INTO sandbox_config VALUES (?,?)', ('org', 'agent-manager')); db.commit()", data.path_join("data/sessions.sqlite3"), OS.get_environment("DRIVE_FLY_APP")])
+			await main.engine.call_api("POST", "/sandboxes/prepare", {"region": "yyz"})
+			await wait(3.0)
+			await main._load_sandboxes()
+			await wait(1.0)
+			await shot("38b-sandboxes-preparing")
+			var p: Dictionary = {}
+			var w0 := Time.get_ticks_msec()
+			while Time.get_ticks_msec() - w0 < 600000:
+				await wait(5.0)
+				p = await main.engine.call_api("GET", "/sandboxes")
+				if p.get("ready", false) or str(p.get("job", {}).get("state", "")) == "error":
+					break
+			report.append("prepare: ready=%s app=%s job=%s" % [p.get("ready"), p.get("app"), p.get("job")])
+			if not p.get("ready", false):
+				main.engine.stop_engine()
+				print("\n".join(report))
+				quit()
+				return
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Sandbox shell", "tool": "shell", "host": "sandbox", "group": "Cloud"}, true, 240.0)
+			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Claude in the cloud", "tool": "claude", "host": "sandbox", "group": "Cloud"}, true, 240.0)
+			report.append("sessions: %s / %s" % [a.get("host", a.get("error", "")), b.get("host", b.get("error", ""))])
+			if not a.has("id") or not b.has("id"):
+				main.engine.stop_engine()
+				print("\n".join(report))
+				quit()
+				return
+			await main.refresh()
+			main.select(str(a["id"]))
+			await wait(40.0)
+			await main.engine.call_api("POST", "/sessions/%s/send" % a["id"], {"text": "clear; echo '☁ inside the sandbox'; uname -n; curl -s http://127.0.0.1:8765/sandbox-brain/x/health; echo; ls /root/.agmgd; claude --version"})
+			await wait(4.0)
+			await shot("39-sandbox-session")
+			main.select(str(b["id"]))
+			await wait(40.0)
+			await shot("40-claude-sandbox")
+			var ov: Dictionary = await main.engine.call_api("GET", "/sandboxes")
+			for sb in ov.get("sandboxes", []):
+				var c: Dictionary = await main.engine.call_api("GET", "/sandboxes/%s/connection" % sb["id"], null, true, 120.0)
+				report.append("connection %s: %s" % [sb["id"], JSON.stringify(c)])
+			main.set_view("sandboxes")
+			await wait(3.0)
+			for btn in main.sbx_box.find_children("*", "Button", true, false):
+				if btn.text == "Check connection":
+					btn.pressed.emit()
+			await wait(25.0)
+			await shot("41-sandboxes-manager")
+			report.append("orphans: %s" % ", ".join((ov.get("orphans", []) as Array).map(func(o): return "%s %s" % [o["app"], o["machine"]])))
+			for sb in ov.get("sandboxes", []):  # pause them: never destroyed by Agent Manager
+				await main.engine.call_api("POST", "/sandboxes/%s/stop" % sb["id"], {}, true, 120.0)
+			report.append("stopped (not destroyed): %d" % (ov.get("sandboxes", []) as Array).size())
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())

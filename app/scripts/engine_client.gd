@@ -81,9 +81,9 @@ func _health() -> bool:
 
 
 ## Returns the JSON reply, or {"error": …}.
-func call_api(method: String, path: String, body: Variant = null, auth := true) -> Dictionary:
+func call_api(method: String, path: String, body: Variant = null, auth := true, timeout := 10.0) -> Dictionary:
 	var http := HTTPRequest.new()
-	http.timeout = 10.0
+	http.timeout = timeout  # a cloud sandbox takes ~20 s to start: its creation passes a longer timeout
 	add_child(http)
 	var headers := PackedStringArray(["Content-Type: application/json"])
 	if auth:

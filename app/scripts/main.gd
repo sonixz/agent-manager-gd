@@ -59,6 +59,8 @@ var voice_label: Label
 var voice_meter: ProgressBar
 var keys_list: VBoxContainer
 var usage_box: VBoxContainer
+var sbx_box: VBoxContainer
+var f_where: OptionButton
 var repos_list: VBoxContainer
 var repos_cache: Array = []
 var f_repo: OptionButton
@@ -286,6 +288,13 @@ func _build() -> void:
 	resume_btn.visible = false
 	resume_btn.pressed.connect(func() -> void: _resume(selected, ""))
 	hb.add_child(resume_btn)
+	var sbx_btn := Button.new()
+	sbx_btn.text = "☁ Sandboxes"
+	sbx_btn.tooltip_text = "Cloud sandboxes: the manager and their connections"
+	sbx_btn.toggle_mode = true
+	sbx_btn.pressed.connect(set_view.bind("sandboxes"))
+	hb.add_child(sbx_btn)
+	view_buttons["sandboxes"] = sbx_btn
 	var repos_btn := Button.new()
 	repos_btn.text = "⎇ Repos"
 	repos_btn.tooltip_text = "Connected repositories and their deploy keys"
@@ -409,6 +418,14 @@ func _build_new_dialog() -> void:
 	g.add_child(_muted("Group"))
 	f_group = OptionButton.new()
 	g.add_child(f_group)
+	g.add_child(_muted("Where"))
+	f_where = OptionButton.new()
+	f_where.add_item("This computer")
+	f_where.set_item_metadata(0, "local")
+	f_where.add_item("☁ A cloud sandbox (Fly.io)")
+	f_where.set_item_metadata(1, "sandbox")
+	f_where.tooltip_text = "A throw-away machine on Fly.io for this session; you destroy it yourself in Sandboxes"
+	g.add_child(f_where)
 	g.add_child(_muted("Repository"))
 	f_repo = OptionButton.new()
 	f_repo.tooltip_text = "A connected repository: the session works in its folder and git uses its deploy key"
@@ -590,7 +607,7 @@ func _render_list() -> void:
 			hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 			hint.add_theme_font_size_override("font_size", 12)
 			list_box.add_child(hint)
-	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage"]
+	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes"]
 
 
 func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
@@ -732,7 +749,7 @@ func select(id: String) -> void:
 	if not grid_ids.has(id):
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
-	if view in ["board", "history", "repos", "keys", "usage"]:
+	if view in ["board", "history", "repos", "keys", "usage", "sandboxes"]:
 		view = "focus"  # picking a session opens it (Review follows the selected session)
 	if view == "review":
 		review_file = 0
@@ -758,7 +775,7 @@ func set_view(v: String) -> void:
 		for id in grid_ids:
 			await _ensure_terminal(id)
 	content.modulate.a = 0.0
-	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage"]
+	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes"]
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.18)
 	_render_header()
@@ -803,7 +820,7 @@ func _park_all() -> void:
 
 func _layout_view() -> void:
 	_park_all()
-	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage"]:
+	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes"]:
 		return
 	match view:
 		"focus":
@@ -837,6 +854,9 @@ func _layout_view() -> void:
 		"usage":
 			content.add_child(_usage_view())
 			_load_usage()
+		"sandboxes":
+			content.add_child(_sandboxes_view())
+			_load_sandboxes()
 		"board":
 			var scroll := ScrollContainer.new()
 			scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1314,6 +1334,149 @@ func set_spoken(on: bool) -> void:
 	spoken = on
 	_save("spoken", on)
 	_toast("Spoken status " + ("on: short spoken notices when an agent waits or finishes" if on else "off"))
+
+
+# ------------------------------------------------------------------ cloud sandboxes (Loop 13)
+func _sandboxes_view() -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sbx_box = VBoxContainer.new()
+	sbx_box.size_flags_horizontal = SIZE_EXPAND_FILL
+	sbx_box.add_theme_constant_override("separation", 12)
+	scroll.add_child(sbx_box)
+	return scroll
+
+
+func _load_sandboxes() -> void:
+	var r := await engine.call_api("GET", "/sandboxes")
+	if sbx_box == null or not is_instance_valid(sbx_box):
+		return
+	for c in sbx_box.get_children():
+		c.queue_free()
+	var title := Label.new()
+	title.text = "Cloud sandboxes"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	sbx_box.add_child(title)
+	if r.has("error"):
+		sbx_box.add_child(_muted(str(r["error"])))
+		return
+	var head := _muted("Fly.io · organisation %s · app %s · region %s · %s   ·   Agent Manager never destroys a sandbox on its own." % [
+		r.get("org", "—") if str(r.get("org", "")) != "" else "—", r.get("app", "—") if str(r.get("app", "")) != "" else "—",
+		r.get("region", "yyz"), "image ready" if r.get("ready", false) else "not prepared"])
+	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sbx_box.add_child(head)
+	var job: Dictionary = r.get("job", {})
+	if str(job.get("state", "")) == "preparing":
+		sbx_box.add_child(_muted("⏳ Preparing: " + str(job.get("message", ""))))
+		get_tree().create_timer(5.0).timeout.connect(func() -> void:
+			if view == "sandboxes":
+				_load_sandboxes())
+	elif str(job.get("state", "")) == "error":
+		var er := _muted("Preparing failed: " + str(job.get("message", "")))
+		er.add_theme_color_override("font_color", AmTheme.col("ERROR"))
+		er.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sbx_box.add_child(er)
+	if not r.get("ready", false) and str(job.get("state", "")) != "preparing":
+		var prep := Button.new()
+		prep.text = "Prepare cloud sandboxes (once: an app and our image in your organisation)"
+		prep.disabled = not (r.get("token", false) and r.get("flyctl", false))
+		prep.tooltip_text = "" if not prep.disabled else "Paste the Fly.io token in Keys first"
+		prep.pressed.connect(func() -> void:
+			_toast("Preparing: Fly builds our image (about 2 minutes)…")
+			await engine.call_api("POST", "/sandboxes/prepare", {})
+			await _load_sandboxes())
+		sbx_box.add_child(prep)
+	var tot := Label.new()
+	tot.text = "Estimated cost so far: $%.4f   (%s)" % [float(r.get("total_cost_usd", 0)), r.get("prices", "")]
+	tot.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	tot.add_theme_font_size_override("font_size", 12)
+	sbx_box.add_child(tot)
+	var finished: Array = (r.get("sandboxes", []) as Array).filter(func(x): return int(x["finished"]) == 1 and int(x["destroyed"]) == 0)
+	if not finished.is_empty():
+		sbx_box.add_child(_small("Destroy the finished ones (%d)…" % finished.size(), func() -> void:
+			_confirm("Destroy %d finished sandbox(es): %s?\nTheir machines, files and keys are deleted for good." % [finished.size(), ", ".join(finished.map(func(x): return str(x["id"])))], func() -> void:
+				for x in finished:
+					await engine.call_api("POST", "/sandboxes/%s/destroy" % x["id"], {"confirmed": true})
+				await refresh()
+				await _load_sandboxes())))
+	for sb in r.get("sandboxes", []):
+		sbx_box.add_child(_sandbox_card(sb))
+	var orph: Array = r.get("orphans", [])
+	if not orph.is_empty():
+		var ot := Label.new()
+		ot.text = "Not known by this Agent Manager (listed, never touched)"
+		ot.add_theme_font_override("font", AmTheme.ui_font(650))
+		sbx_box.add_child(ot)
+		for o in orph:
+			var ol := _muted("• app %s %s %s   — destroy it from Fly's dashboard if you do not need it" % [o["app"], ("machine " + str(o["machine"])) if str(o["machine"]) != "" else "", ("(" + str(o["name"]) + ", " + str(o["state"]) + ")")])
+			ol.add_theme_font_size_override("font_size", 12)
+			sbx_box.add_child(ol)
+
+
+func _sandbox_card(sb: Dictionary) -> Control:
+	var sbid := str(sb["id"])
+	var st := str(sb["state"])
+	var col: Color = {"started": AmTheme.col("MINT"), "stopped": AmTheme.col("WARN"), "destroyed": AmTheme.col("FAINT")}.get(st, AmTheme.col("ERROR"))
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, Color(col, 0.6), 1, 14))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	card.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	v.add_child(top)
+	var sess := _session(str(sb["session_id"]))
+	var n := Label.new()
+	n.text = "☁ " + str(sess.get("name", "session " + str(sb["session_id"])))
+	n.add_theme_font_size_override("font_size", 16)
+	n.add_theme_font_override("font", AmTheme.ui_font(650))
+	top.add_child(n)
+	var chip := Label.new()
+	chip.text = "● " + st + ("  · finished, ready to destroy" if int(sb["finished"]) == 1 and st != "destroyed" else "")
+	chip.add_theme_color_override("font_color", col)
+	chip.add_theme_font_size_override("font_size", 12)
+	chip.size_flags_horizontal = SIZE_EXPAND_FILL
+	top.add_child(chip)
+	var secs := int(sb["running_seconds"])
+	var meta := _muted("sandbox %s · machine %s · %s · %s · ran %dh%02dm · ≈ $%.4f · made %s" % [sbid, sb["machine"], sb["region"], sb["size"], secs / 3600, (secs % 3600) / 60, float(sb["cost_usd"]), _date(float(sb["created"]))])
+	meta.add_theme_font_size_override("font_size", 12)
+	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(meta)
+	var conn := _muted("Connection: not checked yet")
+	conn.add_theme_font_size_override("font_size", 12)
+	v.add_child(conn)
+	if st != "destroyed":
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		v.add_child(row)
+		row.add_child(_small("Open", func() -> void: select(str(sb["session_id"]))))
+		row.add_child(_small("Check connection", func() -> void:
+			conn.text = "Connection: checking…"
+			var c := await engine.call_api("GET", "/sandboxes/%s/connection" % sbid, null, true, 90.0)
+			conn.text = "Connection: machine %s · terminal %s · tunnel %s%s · Second Brain %s" % [c.get("machine", "?"), "open" if c.get("terminal", false) else "closed", c.get("tunnel", "?"), ("  (%d ms)" % int(c["latency_ms"])) if c.get("latency_ms") != null else "", {true: "reachable", false: "not reachable"}.get(c.get("brain"), "—")]))
+		if st == "stopped":
+			row.add_child(_small("Start", func() -> void:
+				await engine.call_api("POST", "/sandboxes/%s/start" % sbid, {}, true, 120.0)
+				await _load_sandboxes()))
+		elif st == "started":
+			row.add_child(_small("Stop (pause)", func() -> void:
+				await engine.call_api("POST", "/sandboxes/%s/stop" % sbid, {}, true, 120.0)
+				await _load_sandboxes()))
+		row.add_child(_small("Not finished" if int(sb["finished"]) == 1 else "Mark finished", func() -> void:
+			await engine.call_api("POST", "/sandboxes/%s/finish" % sbid, {"finished": int(sb["finished"]) == 0})
+			await _load_sandboxes()))
+		row.add_child(_small("Destroy…", func() -> void:
+			_toast("Checking for work not pushed…")
+			var u := await engine.call_api("GET", "/sandboxes/%s/unpushed" % sbid, null, true, 120.0)
+			var rep := str(u.get("report", u.get("error", "")))
+			var warn := "Nothing unsaved found." if u.get("clean", false) else ("Work that would be LOST:\n" + rep.left(900) if u.get("checked", false) else "Could not check the sandbox (%s): its work may be lost." % rep.left(200))
+			_confirm("Destroy the sandbox of « %s »? Its machine, files and key are deleted for good.\n\n%s" % [sess.get("name", sbid), warn], func() -> void:
+				var d := await engine.call_api("POST", "/sandboxes/%s/destroy" % sbid, {"confirmed": true}, true, 120.0)
+				_toast(str(d.get("error", "Sandbox destroyed")))
+				await refresh()
+				await _load_sandboxes())))
+	return card
 
 
 # ------------------------------------------------------------------ usage (Loop 14)
@@ -1856,6 +2019,7 @@ func open_palette() -> void:
 	items.append({"label": "Repositories", "hint": "connected repositories and deploy keys", "run": set_view.bind("repos")})
 	items.append({"label": "Keys", "hint": "your API keys: OpenAI (voice), Fly.io, Anthropic", "run": set_view.bind("keys")})
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
+	items.append({"label": "Sandboxes", "hint": "cloud sandboxes: manager, connections, costs", "run": set_view.bind("sandboxes")})
 	items.append({"label": "Dictate (hold F8)", "hint": "speak into the active session; you press Enter", "run": func() -> void: _toast("Hold F8 and speak, release to write it into the prompt")})
 	items.append({"label": "Voice command (hold F9)", "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold F9 and say a command")})
 	items.append({"label": "Spoken status: " + ("turn off" if spoken else "turn on"), "hint": "short spoken notices", "run": func() -> void: set_spoken(not spoken)})
@@ -1883,10 +2047,12 @@ func open_palette() -> void:
 
 # ------------------------------------------------------------------ actions
 func _create() -> void:
+	if str(f_where.get_selected_metadata()) == "sandbox":
+		_toast("Starting a cloud sandbox… (about 30 seconds)")
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else ""})
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata())}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return

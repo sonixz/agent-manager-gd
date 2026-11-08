@@ -155,7 +155,10 @@ class EngineTest(unittest.TestCase):
     def test_codex_notify_and_terminal_activity(self):
         s = self.sessions.create("x", "shell", self.tmp)
         rec = {**self.sessions.store.get(s["id"]), "tool": "codex"}
-        time.sleep(ACTIVE + 1.2)  # tmux's window_activity has a one-second resolution
+        # the shell's first prompt can come late under load: wait until the terminal has been quiet long enough
+        end = time.time() + 15
+        while self.sessions.describe(rec)["activity"] != "idle" and time.time() < end:
+            time.sleep(0.3)
         self.assertEqual(self.sessions.describe(rec)["activity"], "idle")
         self.run_hook(s["id"], "codex", {"type": "agent-turn-complete", "thread-id": "t-9", "last-assistant-message": "Fini."})
         d = self.sessions.describe(rec)

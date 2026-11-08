@@ -198,3 +198,23 @@ is closed to new machines); the terminal attaches in 0.6 s with 45 ms key-to-ech
 sandbox's 127.0.0.1:8765 reach this computer (the Brain's path); the sandbox's tmux opens in Agent Manager. Fly's own
 SSH (port 22) gives no usable pseudo-terminal to a program, hence our sshd on 2222 behind `flyctl proxy`. Cost ≈ $0.004;
 the machines are stopped, not destroyed. Details: docs/research/SANDBOX-SPIKE.md.
+
+## Loop 13: the sandbox manager, tunnels, connections, supervision with the Brain (2026-11-08)
+
+engine/sandboxes.py: « Prepare » (an app « agmgd-… » in the owner's organisation and our image built by Fly into its
+private registry; a minimal fly.toml because a new app has no machine to take a configuration from; run in the
+background with its progress shown), one machine per sandbox with its own SSH key, records, Start, Stop, Mark
+finished, the work not pushed (git status and unpushed commits over SSH), Destroy only when confirmed (revokes the
+sandbox's Brain key, deletes its SSH key), orphans (machines and Agent Manager apps it does not know) listed and never
+touched, running time from the machine's events and the estimated cost from Fly's published prices.
+engine/sandbox_attach.py: the session's terminal (starts the machine if stopped, flyctl proxy to our sshd, first-run
+setup — the agents' API keys and the repository's deploy key travel on ssh's stdin into 0600 files, the repository
+cloned on am/<sandbox>, the agent started in tmux — then ssh -t with a reverse tunnel). The engine's
+/sandbox-brain/<secret>/ forwards MCP calls to the Brain through the Brain's own Windows Python, which reads the
+client's token itself. Connection report: machine, terminal, tunnel, latency, Brain reachable. The ☁ Sandboxes view
+and « Where » in New session. A session cannot be removed while its sandbox exists. Real check on the owner's account:
+two sandboxes (a shell, Claude Code sharing the Brain), terminals open, tunnels up, the Brain reachable from the
+Claude sandbox, a wrong secret refused, orphans listed, machines stopped (not destroyed). Bugs found on the way:
+prepare failed on a new app (fly.toml), and the app gave up after 10 s while a sandbox takes ~20 s to start
+(timeouts per call now). The test that failed now and then was caught: a shell's first prompt can come late under
+load. Tests: 51.

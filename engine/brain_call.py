@@ -17,8 +17,28 @@ def scrub(x):
     return x
 
 
+def mcp(home, client_id, body, session):
+    """Forward one MCP message for a client: its token is read here, from the Brain's own folder."""
+    with open(os.path.join(home, "mcp", client_id + ".token"), encoding="utf-8") as f:
+        token = f.read().strip()
+    with open(os.path.join(home, "runtime", "server.json"), encoding="utf-8") as f:
+        port = int(json.load(f)["port"])
+    headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+    if session:
+        headers["Mcp-Session-Id"] = session
+    req = urllib.request.Request(f"http://127.0.0.1:{port}/mcp", data=body, method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return {"status": r.status, "text": r.read().decode("utf-8", "replace"), "session": r.headers.get("Mcp-Session-Id", "")}
+    except urllib.error.HTTPError as e:
+        return {"status": e.code, "text": e.read().decode("utf-8", "replace")[:2000], "session": ""}
+
+
 def main(argv):
     home, method, path = argv[1], argv[2], argv[3]
+    if method == "MCP":
+        sys.stdout.write(json.dumps(mcp(home, path, sys.stdin.buffer.read(), argv[4] if len(argv) > 4 else "")))
+        return 0
     with open(os.path.join(home, "runtime", "api_token"), encoding="utf-8") as f:
         token = f.read().strip()
     with open(os.path.join(home, "runtime", "server.json"), encoding="utf-8") as f:

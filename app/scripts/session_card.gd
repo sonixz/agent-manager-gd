@@ -67,7 +67,7 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 	var top := HBoxContainer.new()
 	top.mouse_filter = MOUSE_FILTER_IGNORE
 	v.add_child(top)
-	var name := _label(str(s["name"]), AmTheme.col("TEXT"), 14, 600)
+	var name := _label(("☁ " if str(s.get("host", "")) == "sandbox" else "") + str(s["name"]), AmTheme.col("TEXT"), 14, 600)
 	name.size_flags_horizontal = SIZE_EXPAND_FILL
 	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	top.add_child(name)

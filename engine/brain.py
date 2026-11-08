@@ -104,6 +104,22 @@ class Brain:
         except (OSError, ValueError, KeyError) as e:
             return 0, {"error": str(e)[:200]}
 
+    def mcp_forward(self, client_id: str, body: bytes, session: str = "") -> dict:
+        """One MCP message for a client, sent to the Brain (the client's token is read on the Brain's side)."""
+        if self.windows:
+            out = subprocess.run([self.python, _wslpath("-w", os.path.join(HERE, "brain_call.py")), _wslpath("-w", self.home),
+                                  "MCP", client_id] + ([session] if session else []), input=body, capture_output=True,
+                                 timeout=150, cwd="/mnt/c")
+            try:
+                return json.loads(out.stdout.decode("utf-8", "replace") or "{}")
+            except ValueError:
+                return {"status": 502, "text": "", "session": ""}
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("brain_call", os.path.join(HERE, "brain_call.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.mcp(self.home, client_id, body, session)
+
     def status(self) -> dict:
         if not self.enabled:
             return {"connected": False, "reason": "off (AGMGD_BRAIN=off)"}

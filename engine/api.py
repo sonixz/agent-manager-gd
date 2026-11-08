@@ -59,6 +59,8 @@ def make_handler(sessions: Sessions, token: str):
             parts = [p for p in url.path.split("/") if p]
             if parts == ["health"]:
                 return self._reply(200, {"ok": True, "version": VERSION, "tmux": sessions.tmux.version()})
+            if len(parts) >= 3 and parts[0] == "sandbox-brain":
+                return self._sandbox_brain(method, parts)
             if not self._authorised():
                 return self._reply(401, {"error": "unauthorised"})
             try:
@@ -100,6 +102,31 @@ def make_handler(sessions: Sessions, token: str):
                 if parts == ["usage"] and method == "GET":
                     from . import usage
                     return self._reply(200, usage.report(sessions.store.history()))
+                if parts == ["sandboxes"] and method == "GET":
+                    return self._reply(200, sessions.sandboxes.overview())
+                if parts == ["sandboxes", "prepare"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.sandboxes.prepare_async(str(b.get("org", "")), str(b.get("region", "yyz"))))
+                if len(parts) == 3 and parts[0] == "sandboxes":
+                    sbid, act = parts[1], parts[2]
+                    sbx = sessions.sandboxes
+                    if act == "start" and method == "POST":
+                        return self._reply(200, sbx.start(sbid))
+                    if act == "stop" and method == "POST":
+                        return self._reply(200, sbx.stop(sbid))
+                    if act == "finish" and method == "POST":
+                        sbx.mark_finished(sbid, bool(self._body().get("finished", True)))
+                        return self._reply(200, sbx.get(sbid) | {"secret": ""})
+                    if act == "unpushed" and method == "GET":
+                        from .sandbox_ops import ssh_run
+                        return self._reply(200, sbx.unpushed(sbid, lambda i, c: ssh_run(sbx, i, c)))
+                    if act == "connection" and method == "GET":
+                        from .sandbox_ops import connection
+                        return self._reply(200, connection(sbx, sbid))
+                    if act == "destroy" and method == "POST":
+                        out = sbx.destroy(sbid, bool(self._body().get("confirmed", False)), sessions.brain)
+                        sessions.tmux.kill(sessions.tmux_name(out["session_id"]))
+                        return self._reply(200, {k: v for k, v in out.items() if k != "secret"})
                 if parts == ["brain"] and method == "GET":
                     return self._reply(200, sessions.brain.status() if sessions.brain else {"connected": False, "reason": "off"})
                 if parts == ["summaries"] and method == "GET":
@@ -143,7 +170,7 @@ def make_handler(sessions: Sessions, token: str):
                                                             int(b.get("width", 160)), int(b.get("height", 48)),
                                                             bool(b.get("worktree", False)), bool(b.get("brain", True)),
                                                             str(b.get("parent", "")), bool(b.get("brief", False)),
-                                                            str(b.get("repo", ""))))
+                                                            str(b.get("repo", "")), str(b.get("host", "local"))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
@@ -226,6 +253,29 @@ def make_handler(sessions: Sessions, token: str):
                 return self._reply(400, {"error": str(e)})
             except RuntimeError as e:
                 return self._reply(500, {"error": str(e)})
+
+        def _sandbox_brain(self, method: str, parts: list) -> None:
+            """The Brain for a sandbox, through its reverse tunnel. Authenticated by the sandbox's own secret (in its
+            URL), never by the engine's token; answers only for a live sandbox with a Brain key."""
+            sb = sessions.sandboxes.by_secret(parts[1])
+            if not sb or not sb["brain_client"] or not sessions.brain:
+                return self._reply(404, {"error": "unknown sandbox"})
+            if parts[2] == "health" and method == "GET":
+                return self._reply(200, {"ok": True, "brain": sessions.brain.status().get("connected", False)})
+            if parts[2] == "mcp" and method == "POST":
+                n = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(min(n, 4_000_000)) if n else b""
+                res = sessions.brain.mcp_forward(sb["brain_client"], body, self.headers.get("Mcp-Session-Id", ""))
+                data = str(res.get("text", "")).encode("utf-8")
+                self.send_response(int(res.get("status", 502)) or 502)
+                self.send_header("Content-Type", "application/json")
+                if res.get("session"):
+                    self.send_header("Mcp-Session-Id", res["session"])
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            return self._reply(404, {"error": "not found"})
 
         def do_GET(self):
             self._route("GET")

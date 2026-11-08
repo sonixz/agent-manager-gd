@@ -62,6 +62,14 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
 - **Usage** (◐ → Usage…): tokens per session, per day and per tool, read from the agents' own logs (Claude Code,
   Codex) on this computer. No money amount is shown for agents: their logs carry none (and subscriptions have no
   per-token price).
+- **Cloud sandboxes** (☁ Sandboxes; New session → Where: a cloud sandbox): a throw-away Fly.io machine for one session,
+  with your Fly token (Keys). « Prepare » once makes an app and our image (`sandbox/Dockerfile`) in your organisation's
+  private registry; then a sandbox is ready in about 30 s. Its terminal opens like any session; the same SSH
+  connection carries a tunnel so the agent reaches your Second Brain (through the engine, authenticated by the
+  sandbox's own secret; the Brain's keys never leave Windows). The manager shows each sandbox's machine, running time,
+  estimated cost, and its connection (terminal, tunnel, latency, Brain reachable); Start, Stop (pause), Mark finished,
+  **Destroy** — only by you, confirmed, after Agent Manager showed the work not pushed. Machines of your organisation
+  it does not know are listed, never touched. Agent Manager never destroys a sandbox on its own.
 - **Connected repositories** (⎇ Repos): add a repository's SSH address; Agent Manager makes a deploy key for it only,
   shows the public key to add on GitHub (*Deploy keys*, with write access), checks it, and sessions started on that
   repository use that key only. Rotate or disconnect any time. Details: `docs/REPOSITORIES.md`.
