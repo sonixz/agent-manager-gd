@@ -101,9 +101,35 @@ class VoiceErrorsTest(unittest.TestCase):
         def refuse(req, timeout=0):
             body = io.BytesIO(b'{"error": {"message": "Project `proj_x` does not have access to model `m` (sk-proj-abc123)", "code": "model_not_found"}}')
             raise urllib.error.HTTPError(voice.URL, 403, "Forbidden", {}, body)
-        with mock.patch("urllib.request.urlopen", refuse):
+        with mock.patch("urllib.request.urlopen", refuse), mock.patch.object(voice, "allowed_models", lambda k: ["gpt-transcribe", "whisper-1"]):
             with self.assertRaises(ValueError) as e:
                 voice.transcribe(b"\0" * 4000, "sk-test-not-real", 1.0)
-        self.assertIn("does not allow gpt-4o-mini-transcribe or whisper-1", str(e.exception))
+        self.assertIn("does not allow gpt-transcribe or whisper-1", str(e.exception))
         self.assertIn("Limits", str(e.exception))
+
+    def test_the_first_model_the_project_allows_is_used_like_the_brain(self):
+        import io
+        import json as _json
+        from unittest import mock
+        from engine import voice
+        voice._allowed_cache.clear()
+        sent = []
+
+        class Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def api(req, timeout=0):
+            if req.full_url.endswith("/models"):
+                return Resp(_json.dumps({"data": [{"id": "gpt-transcribe"}, {"id": "gpt-4o"}]}).encode())
+            sent.append(req.data)
+            return Resp(b'{"text": "bonjour"}')
+        with mock.patch("urllib.request.urlopen", api):
+            out = voice.transcribe(b"\0" * 4000, "sk-test-not-real", 2.0, "fr")
+        self.assertEqual(out["model"], "gpt-transcribe")
+        self.assertIn(b'name="languages[]"', sent[0])
+        self.assertEqual(voice.allowed_models("sk-test-not-real"), ["gpt-transcribe"])
 

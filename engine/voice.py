@@ -12,8 +12,10 @@ import urllib.error
 import urllib.request
 
 URL = "https://api.openai.com/v1/audio/transcriptions"
-MODELS = ["gpt-4o-mini-transcribe", "whisper-1"]   # first that works; the setting AGMGD_VOICE_MODEL overrides
-PRICE_PER_MIN = {"gpt-4o-mini-transcribe": 0.003, "whisper-1": 0.006}   # USD, OpenAI's price list (estimate shown)
+# The Second Brain's order (engine/sources/audio.py): the first one the key's project allows; AGMGD_VOICE_MODEL overrides
+MODELS = ["gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"]
+PRICE_PER_MIN = {"gpt-transcribe": 0.0045, "gpt-4o-transcribe": 0.006, "gpt-4o-mini-transcribe": 0.003, "whisper-1": 0.006}  # USD
+_allowed_cache: dict[str, list[str]] = {}  # key fingerprint -> models in order, asked once per engine run
 MAX_BYTES = 20 * 1024 * 1024
 
 
@@ -36,14 +38,14 @@ def transcribe(wav: bytes, key: str, seconds: float, language: str = "") -> dict
         raise ValueError("no OpenAI key yet: paste one in Keys to use the voice")
     if len(wav) > MAX_BYTES or len(wav) < 1000:
         raise ValueError("the recording is empty or too long")
-    models = [os.environ["AGMGD_VOICE_MODEL"]] if os.environ.get("AGMGD_VOICE_MODEL") else MODELS
+    models = [os.environ["AGMGD_VOICE_MODEL"]] if os.environ.get("AGMGD_VOICE_MODEL") else allowed_models(key)
     last = ""
     denied: list[str] = []
     for model in models:
         fields = {"model": model, "response_format": "json",
                   "prompt": "Dictée pour un agent de code. Ponctuation et accents français. Noms de fichiers et de commandes exacts."}
         if language:
-            fields["language"] = language
+            fields["languages[]" if model == "gpt-transcribe" else "language"] = language
         body, boundary = _multipart(fields, wav)
         req = urllib.request.Request(URL, data=body, method="POST", headers={
             "Authorization": "Bearer " + key, "Content-Type": "multipart/form-data; boundary=" + boundary})
@@ -67,8 +69,26 @@ def transcribe(wav: bytes, key: str, seconds: float, language: str = "") -> dict
             raise ValueError("transcription failed: " + str(e)[:120])
     if denied:
         raise ValueError("your OpenAI project does not allow " + " or ".join(denied) + ": on platform.openai.com, open "
-                         "Settings → Projects → (the key's project) → Limits, allow one of them, then try again")
+                         "Settings → Projects → (the key's project) → Limits, allow gpt-transcribe (or another), then try again")
     raise ValueError("no transcription model available (" + last + ")")
+
+
+def allowed_models(key: str) -> list[str]:
+    """Our models in order, keeping those the key may use (GET /models: free, nothing sent). If the list cannot be
+    read, all of them, tried in order."""
+    import hashlib
+    fp = hashlib.sha256(key.encode()).hexdigest()[:16]
+    if fp in _allowed_cache:
+        return _allowed_cache[fp]
+    try:
+        req = urllib.request.Request("https://api.openai.com/v1/models", headers={"Authorization": "Bearer " + key})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            ids = {m.get("id") for m in json.loads(r.read()).get("data", [])}
+        found = [m for m in MODELS if m in ids]
+    except (urllib.error.URLError, OSError, ValueError):
+        return list(MODELS)
+    _allowed_cache[fp] = found or list(MODELS)
+    return _allowed_cache[fp]
 
 
 def _openai_error(e) -> dict:

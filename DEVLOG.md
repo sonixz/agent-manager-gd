@@ -308,3 +308,7 @@ second of silence: the key's project does not allow gpt-4o-mini-transcribe nor w
 engine now tries the next model on that 403 too, and says what to do (allow one of them in the project's Limits on
 platform.openai.com) instead of a bare « HTTP 403 »; OpenAI's message is read without anything that looks like a key.
 Test added. Tests: 59.
+Then aligned with the Second Brain, which uses the same OpenAI project: the same models in the same order
+(gpt-transcribe, gpt-4o-transcribe, gpt-4o-mini-transcribe, whisper-1), the ones the key's project allows read first
+from GET /models (free, nothing sent, remembered for the engine's run), `languages[]` for gpt-transcribe. The owner's
+project allows gpt-transcribe: a real one-second call now goes through (about $0.00007). Tests: 60.
