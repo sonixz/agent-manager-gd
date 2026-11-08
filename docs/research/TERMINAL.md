@@ -89,3 +89,33 @@ colour emoji and grapheme clusters, the idle redraw cost. libtsm (its VT core) i
 **Recommendation:** round 2 with libghostty-vt (modern, complete VT state, grapheme clusters, Kitty keyboard) and
 our own renderer in a GDExtension (glyph atlas, box drawing drawn as shapes like Ghostty does, redraw only what
 changed). godot-xterm stays the fallback and the development terminal meanwhile.
+
+## Round 2: libghostty-vt + our renderer (VtTerminal) (2026-11-08)
+
+Built with the owner's agreement: Zig 0.17.0 (ziglang.org, SHA-256 checked), Ghostty at commit `e035beb9`
+(libghostty-vt 1.1.0, `zig build -Demit-lib-vt -Doptimize=ReleaseFast`), godot-cpp 10.0.0-stable, SCons 4.10.1 in a
+venv; all in the user's folders, no admin rights. Our code: `native/vtterm/` (C++ GDExtension, about 650 lines):
+libghostty-vt keeps the terminal state and encodes keys (Kitty protocol aware), mouse, paste and focus; the node owns
+the pseudo-terminal (forkpty on Linux) and draws the grid itself: backgrounds, glyphs through Godot fonts with system
+fallbacks, box drawing and block elements as shapes, underline styles, cursor; it redraws only when something changed.
+Bench: `prototype/terminal-ghostty/` (same tests as round 1).
+
+| # | Check | Round 1 (godot-xterm) | Round 2 (VtTerminal) |
+|---|---|---|---|
+| 1 | French text and keys | pass | **pass**: all accents, « » — œ; AltGr+E gives €; Claude Code shows the typed sentence exactly |
+| 2 | Colours and styles | dim, strike missing | **pass**: 16/256/24-bit, bold, dim, italic, underline (single, double, curly, dotted, dashed), strike, overline, inverse |
+| 3 | Wide chars, emoji | monochrome, split | **pass**: CJK widths, **colour emoji**; flags show as letters (Windows fonts have no flag glyphs) |
+| 4 | Full-screen TUIs | pass | **pass**: Claude Code and Codex; Claude's separators and logo are continuous |
+| 5 | Copy / paste | no paste | **pass**: **bracketed paste** (`ESC[200~…ESC[201~`), drag selection, Ctrl+Shift+C/V, middle click |
+| 6 | Keys | 29/30 | **31/31**: Shift+Tab (`ESC[Z`, Claude Code changed mode), Shift+Enter (extended key, forwarded by tmux) |
+| 7 | Mouse | nothing sent | **pass**: SGR reports for click, right click, wheel; tmux scrolls its history |
+| 8 | Scrollback | via mouse only | **pass**: tmux history by wheel; the terminal keeps 10 000 lines of its own |
+| 9 | Resize | pass | **pass** (88x23 after resize, tmux follows) |
+| 10 | Speed (virtual display, no GPU) | idle 43 fps; 4 terms 12.5 fps | **idle 131.5 fps** (0 redraws when nothing changes); **4 terms with one streaming 180 000 lines: 51.7 fps**; draw 0.8 ms median; key-to-echo through tmux 35 ms median, frame-quantised |
+| 11 | Platforms | Linux; Windows untested | Linux: pass. **Windows: next step** (ConPTY, cross-build with Zig) |
+| 12 | Themes | overrides | **pass**: background, text and 16 ANSI colours set from the Brain's Neon and Terminal themes |
+
+**Verdict, round 2: GO on Linux/WSL.** Every line of the grid passes except native Windows, not built yet.
+Still to do before calling it impeccable everywhere: the Windows pseudo-console (ConPTY) and a Windows build,
+a real-GPU measurement on the owner's PC (opens a window: only when asked), real dead keys and IME composition on
+Windows, double/triple-click word and line selection, OSC 52 clipboard and hyperlinks.

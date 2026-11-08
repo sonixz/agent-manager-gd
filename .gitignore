@@ -30,3 +30,8 @@ Thumbs.db
 
 # Third-party addon for the terminal prototype (in vendor-cache, copied here)
 /prototype/terminal/addons/
+
+# Built binaries (VtTerminal extension and libghostty-vt): rebuilt with native/vtterm, never committed
+/prototype/terminal-ghostty/addons/vtterm/bin/
+/native/vtterm/src/*.os
+/native/vtterm/.sconsign.dblite

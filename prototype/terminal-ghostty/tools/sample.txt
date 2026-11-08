@@ -1,0 +1,6 @@
+Français : é è ê ë à â ç ù û ô œ Œ « guillemets » — tiret cadratin … ’apostrophe’
+Deutsch ß ü · Español ñ ¿¡ · Ελληνικά · Русский · 日本語のテキスト · 한국어 · 中文字符
+Largeur : |漢字|ＡＢ|  (les barres doivent s'aligner)
+          |abcd|abcd|
+Symboles : ✓ ✗ ⏺ ⎿ ● ○ ◐ ▶ ← → ↑ ↓ ⇠ ⇢ ★ ☰ ⠿ │ ─ ┌ ┐ └ ┘ ├ ┤ ╭ ╮ ╰ ╯ █ ▓ ▒ ░
+Emoji : 😀 🚀 👍 🎉 🇨🇦 👩‍💻 (ZWJ) ❤️ (VS16)
