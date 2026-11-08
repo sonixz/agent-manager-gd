@@ -572,6 +572,21 @@ func _run() -> void:
 			for sb in ov.get("sandboxes", []):  # pause them: never destroyed by Agent Manager
 				await main.engine.call_api("POST", "/sandboxes/%s/stop" % sb["id"], {}, true, 120.0)
 			report.append("stopped (not destroyed): %d" % (ov.get("sandboxes", []) as Array).size())
+		"finish":
+			main.set_view("setup")
+			await wait(3.0)
+			await shot("43-setup-check")
+			main._save_key("palette", "Ctrl+Shift+P")
+			main.key_capture = "dictate"
+			main.set_view("shortcuts")
+			await wait(1.5)
+			await shot("44-shortcuts")
+			main.key_capture = ""
+			main._save_key("palette", "Ctrl+K")
+			main.set_view("connect")
+			await wait(1.5)
+			await shot("45-connect-tools")
+			report.append("connect: " + main.connect_commands()["claude"])
 		"budget":
 			# read-only on Fly: the existing (stopped) app is listed, nothing is created or started
 			var data := OS.get_environment("AGMGD_HOME")

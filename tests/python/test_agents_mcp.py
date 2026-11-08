@@ -30,8 +30,8 @@ class AgentsMcpTest(unittest.TestCase):
         self.tmux.kill_server()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def mcp(self, calls):
-        env = {**os.environ, "AGMGD_SESSION": self.parent["id"], "AGMGD_HOME": self.tmp,
+    def mcp(self, calls, me=None):
+        env = {**os.environ, "AGMGD_SESSION": self.parent["id"] if me is None else me, "AGMGD_HOME": self.tmp,
                "AGMGD_PORT": str(self.srv.server_address[1])}
         msgs = [{"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
                 {"jsonrpc": "2.0", "method": "notifications/initialized"}]
@@ -57,6 +57,15 @@ class AgentsMcpTest(unittest.TestCase):
     def test_an_agent_cannot_write_to_a_session_it_did_not_start(self):
         (refused,) = self.mcp([("send_to_session", {"id": self.other["id"], "text": "rm -rf ~"})])
         self.assertIn("only write to sessions you started", refused["error"])
+
+    def test_an_outside_tool_looks_and_starts_but_never_types(self):
+        listed, started = self.mcp([("list_sessions", {}), ("start_session", {"name": "From outside", "tool": "shell", "cwd": self.tmp})], me="")
+        self.assertEqual(listed["me"], "")
+        self.assertEqual(started["parent"], "")
+        sent_other, sent_own = self.mcp([("send_to_session", {"id": self.other["id"], "text": "ls"}),
+                                         ("send_to_session", {"id": started["id"], "text": "ls"})], me="")
+        self.assertIn("error", sent_other)
+        self.assertIn("error", sent_own)
 
     def test_every_agent_session_is_offered_the_server(self):
         cmd = self.s.command_for({"id": "x1", "tool": "claude", "name": "x"})

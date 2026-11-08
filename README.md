@@ -7,8 +7,15 @@ shows its live state, revives on its own conversation, forks, and works in its o
 wired to your [Second Brain](https://github.com/sonixz/second-brain-gd) over MCP, so what one agent learns, the next
 one knows.
 
-Status: **pre-alpha, private.** Loops 1 to 3 done: the plan (`docs/brief/`), an impeccable terminal on Ghostty's
-engine (`native/vtterm`, `docs/research/TERMINAL.md`), and persistent sessions (`engine/`, `app/`).
+Status: **alpha, private.** Loops 1 to 15 of the plan (`docs/brief/PLAN.md`) are done; the story is in `DEVLOG.md`.
+
+## Install (Windows)
+
+`tools/build_release.sh` makes `dist/AgentManagerGD-<version>-win64.zip`. Unzip it, then right-click `install.ps1` →
+*Run with PowerShell*: it copies the app to `%LOCALAPPDATA%\Programs\AgentManagerGD` and adds a Start menu shortcut,
+for your user only, **without administrator rights**, and downloads nothing. `uninstall.ps1` removes it (your
+sessions, keys and settings stay). The first launch opens the **Setup check** if something is missing (WSL, python3,
+tmux, git, ssh; Claude Code, Codex and flyctl are optional). Details: `docs/INSTALL.md`.
 
 ## Run it (development)
 
@@ -49,6 +56,11 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   uncommitted changes, everything since the session started, or its branch against the target. Click a line to
   comment it (or comment the whole file); **Send review** sends the open comments to the agent as one numbered request
   (file:line, the comment, the line's code); sent comments stay visible until marked handled.
+- **Shortcuts** (◐ → Shortcuts…): change any shortcut (click it, press the new keys); the voice keys are held keys.
+- **Connect other tools** (◐ → Connect other tools (MCP)…): the command to plug Agent Manager's MCP into Claude Code,
+  Codex or any MCP client outside the app. Such a tool may list sessions, read their screens and start new ones; it
+  can never type into a session or approve anything.
+- **Setup check** (◐ → Setup check…): what is found, what is missing, and the command to run yourself.
 - **Keys** (◐ → Keys…): paste your own API keys (OpenAI for the voice, Fly.io and Anthropic for cloud sandboxes).
   On Windows they are encrypted with DPAPI for your Windows user; they are never shown again or logged, and are read
   only when a feature needs them.

@@ -18,7 +18,8 @@ func _init() -> void:
 
 ## The repository root as the engine sees it (a WSL path on Windows).
 func engine_root() -> String:
-	var root := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
+	# development: the repository (app/..); a release build: the folder of the executable, where engine/ is shipped
+	var root := OS.get_executable_path().get_base_dir() if OS.has_feature("template") else ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
 	if on_windows and root.length() > 1 and root[1] == ":":
 		root = "/mnt/" + root[0].to_lower() + root.substr(2).replace("\\", "/")
 	return root

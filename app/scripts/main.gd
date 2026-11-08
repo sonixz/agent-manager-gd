@@ -108,6 +108,7 @@ func _ready() -> void:
 	AmTheme.apply(str(cfg.get_value("ui", "theme", OS.get_environment("AGMGD_THEME") if OS.get_environment("AGMGD_THEME") != "" else "focus")))
 	view = str(cfg.get_value("ui", "view", "focus"))
 	spoken = bool(cfg.get_value("ui", "spoken", false))
+	_load_keymap()
 	theme = AmTheme.build()
 	font = TermFont.make()
 	_build()
@@ -115,11 +116,12 @@ func _ready() -> void:
 	add_child(engine)
 	status_label.text = "Starting the engine…"
 	if not await engine.connect_engine():
-		status_label.text = "The engine did not start (python3 and tmux are needed%s)." % (" in WSL" if engine.on_windows else "")
+		status_label.text = "The engine did not start: see the setup check."
+		set_view("setup")
 		return
 	var b := await engine.call_api("GET", "/brain")
 	brain_ok = bool(b.get("connected", false))
-	status_label.text = ("✦ Second Brain connected" if brain_ok else "Second Brain: " + str(b.get("reason", "not connected"))) + " · Ctrl+Shift+K for commands"
+	status_label.text = ("✦ Second Brain connected" if brain_ok else "Second Brain: " + str(b.get("reason", "not connected"))) + " · %s for commands" % key_text("palette")
 	await refresh()
 	if sessions.size() > 0:
 		select(str(sessions[0]["id"]))
@@ -136,36 +138,91 @@ func _notification(what: int) -> void:
 
 
 # ------------------------------------------------------------------ shortcuts
+const DEFAULT_KEYS := {"palette": "Ctrl+K", "new": "Ctrl+N", "focus": "Ctrl+F", "grid": "Ctrl+G", "board": "Ctrl+B",
+	"history": "Ctrl+H", "review": "Ctrl+R", "next": "Ctrl+Down", "prev": "Ctrl+Up", "approve": "Ctrl+A",
+	"dictate": "F8", "command": "F9"}
+const KEY_LABELS := {"palette": "Command palette", "new": "New session", "focus": "Focus view", "grid": "Grid view",
+	"board": "Board view", "history": "History", "review": "Review", "next": "Next session", "prev": "Previous session",
+	"approve": "Approve the first session waiting for an OK", "dictate": "Hold to dictate (voice)",
+	"command": "Hold for a voice command"}
+var keymap := DEFAULT_KEYS.duplicate()
+var key_capture := ""  # the action waiting for its new key (Shortcuts screen)
+
+
+func _load_keymap() -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS)
+	for a in DEFAULT_KEYS:
+		keymap[a] = str(cfg.get_value("keys", a, DEFAULT_KEYS[a]))
+
+
+func _save_key(action: String, binding: String) -> void:
+	keymap[action] = binding
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS)
+	cfg.set_value("keys", action, binding)
+	cfg.save(SETTINGS)
+
+
+func key_text(action: String) -> String:
+	return str(keymap.get(action, ""))
+
+
+func _run_action(a: String) -> void:
+	match a:
+		"palette": open_palette()
+		"new": _open_new()
+		"focus", "grid", "board", "history", "review": set_view(a)
+		"next": _step(1)
+		"prev": _step(-1)
+		"approve": _approve_first()
+
+
 func _input(e: InputEvent) -> void:
-	# F8: hold to dictate into the active session (works even when the terminal has the focus)
-	if e is InputEventKey and e.keycode in [KEY_F8, KEY_F9] and not e.echo:
-		if e.pressed:
-			voice_mode = "dictate" if e.keycode == KEY_F8 else "command"
+	if not (e is InputEventKey):
+		return
+	var k := e as InputEventKey
+	if key_capture != "" and k.pressed and not k.echo:
+		if k.keycode not in [KEY_CTRL, KEY_SHIFT, KEY_ALT, KEY_META]:
+			if k.keycode != KEY_ESCAPE:
+				var t := k.as_text_keycode()
+				if key_capture in ["dictate", "command"]:
+					t = OS.get_keycode_string(k.keycode)  # a key you hold: no modifiers
+				_save_key(key_capture, t)
+			key_capture = ""
+			if view == "shortcuts":
+				_layout_view()
+		get_viewport().set_input_as_handled()
+		return
+	# the voice keys: hold to talk (works even when the terminal has the focus)
+	var single := OS.get_keycode_string(k.keycode)
+	if not k.echo and (single == keymap["dictate"] or single == keymap["command"]):
+		if k.pressed:
+			voice_mode = "dictate" if single == keymap["dictate"] else "command"
 			_voice_start()
 		else:
 			_voice_stop()
 		get_viewport().set_input_as_handled()
 		return
-	if not (e is InputEventKey and e.pressed and not e.echo):
+	if not (k.pressed and not k.echo):
 		return
-	var k := e as InputEventKey
 	var in_terminal := get_viewport().gui_get_focus_owner() != null and get_viewport().gui_get_focus_owner().is_class("VtTerminal")
-	if k.ctrl_pressed and (k.shift_pressed or not in_terminal):
-		var handled := true
-		match k.keycode:
-			KEY_K: open_palette()
-			KEY_N: _open_new()
-			KEY_F: set_view("focus")
-			KEY_G: set_view("grid")
-			KEY_B: set_view("board")
-			KEY_H: set_view("history")
-			KEY_R: set_view("review")
-			KEY_DOWN: _step(1)
-			KEY_UP: _step(-1)
-			KEY_A: _approve_first()
-			_: handled = false
-		if handled:
+	var t := k.as_text_keycode()
+	# a terminal keeps its keys: there, only Ctrl+Shift shortcuts (or a Ctrl binding typed with Shift) and F-keys act
+	var without_shift := t.replace("Shift+", "") if k.ctrl_pressed and k.shift_pressed else ""
+	for a in keymap:
+		if a in ["dictate", "command"]:
+			continue
+		var b := str(keymap[a])
+		var ok := false
+		if b == t:
+			ok = not in_terminal or b.begins_with("Ctrl+Shift+") or (not b.contains("Ctrl+") and not b.contains("Alt+") and t.begins_with("F"))
+		elif without_shift != "" and b == without_shift:
+			ok = true
+		if ok:
+			_run_action(a)
 			get_viewport().set_input_as_handled()
+			return
 
 
 func _step(d: int) -> void:
@@ -607,7 +664,7 @@ func _render_list() -> void:
 			hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 			hint.add_theme_font_size_override("font_size", 12)
 			list_box.add_child(hint)
-	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes"]
+	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect"]
 
 
 func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
@@ -775,7 +832,7 @@ func set_view(v: String) -> void:
 		for id in grid_ids:
 			await _ensure_terminal(id)
 	content.modulate.a = 0.0
-	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes"]
+	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect"]
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.18)
 	_render_header()
@@ -820,7 +877,7 @@ func _park_all() -> void:
 
 func _layout_view() -> void:
 	_park_all()
-	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes"]:
+	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect"]:
 		return
 	match view:
 		"focus":
@@ -854,6 +911,12 @@ func _layout_view() -> void:
 		"usage":
 			content.add_child(_usage_view())
 			_load_usage()
+		"setup":
+			content.add_child(_page(_setup_rows()))
+		"shortcuts":
+			content.add_child(_page(_shortcut_rows()))
+		"connect":
+			content.add_child(_page(_connect_rows()))
 		"sandboxes":
 			content.add_child(_sandboxes_view())
 			_load_sandboxes()
@@ -1232,9 +1295,9 @@ func _voice_start() -> void:
 		return
 	dictation.start()
 	if voice_mode == "command":
-		voice_label.text = "🎙  A command…  (« approve Themes », « go to Docs », « who is waiting? »)  release F9"
+		voice_label.text = "🎙  A command…  (« approve Themes », « go to Docs », « who is waiting? »)  release %s" % key_text("command")
 	else:
-		voice_label.text = "🎙  Listening to you for « %s »…  release F8 to write it" % _session(selected).get("name", "")
+		voice_label.text = "🎙  Listening to you for « %s »…  release %s to write it" % [_session(selected).get("name", ""), key_text("dictate")]
 	voice_overlay.visible = true
 	voice_overlay.reset_size()
 
@@ -2086,10 +2149,13 @@ func open_palette() -> void:
 	items.append({"label": "Keys", "hint": "your API keys: OpenAI (voice), Fly.io, Anthropic", "run": set_view.bind("keys")})
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
 	items.append({"label": "Sandboxes", "hint": "cloud sandboxes: manager, connections, costs", "run": set_view.bind("sandboxes")})
-	items.append({"label": "Dictate (hold F8)", "hint": "speak into the active session; you press Enter", "run": func() -> void: _toast("Hold F8 and speak, release to write it into the prompt")})
-	items.append({"label": "Voice command (hold F9)", "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold F9 and say a command")})
+	items.append({"label": "Dictate (hold %s)" % key_text("dictate"), "hint": "speak into the active session; you press Enter", "run": func() -> void: _toast("Hold %s and speak, release to write it into the prompt" % key_text("dictate"))})
+	items.append({"label": "Voice command (hold %s)" % key_text("command"), "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold %s and say a command" % key_text("command"))})
+	items.append({"label": "Shortcuts", "hint": "change the keyboard shortcuts", "run": set_view.bind("shortcuts")})
+	items.append({"label": "Connect other tools (MCP)", "hint": "Agent Manager's MCP for Claude Code, Codex, any MCP client", "run": set_view.bind("connect")})
+	items.append({"label": "Setup check", "hint": "python3, tmux, git, ssh, agents, flyctl: found or not", "run": set_view.bind("setup")})
 	items.append({"label": "Spoken status: " + ("turn off" if spoken else "turn on"), "hint": "short spoken notices", "run": func() -> void: set_spoken(not spoken)})
-	items.append({"label": "New session", "hint": "Ctrl+Shift+N", "run": _open_new})
+	items.append({"label": "New session", "hint": key_text("new"), "run": _open_new})
 	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", func(n: String) -> void:
 		await engine.call_api("POST", "/groups", {"name": n})
 		await refresh())})
@@ -2263,10 +2329,18 @@ func _build_menus() -> void:
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__usage")
 	theme_menu.add_item("Keys…")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__keys")
+	theme_menu.add_item("Shortcuts…")
+	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__shortcuts")
+	theme_menu.add_item("Connect other tools (MCP)…")
+	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__connect")
+	theme_menu.add_item("Setup check…")
+	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__setup")
 	theme_menu.index_pressed.connect(func(i: int) -> void:
 		var m := str(theme_menu.get_item_metadata(i))
 		if m == "__keys":
 			set_view("keys")
+		elif m in ["__shortcuts", "__connect", "__setup"]:
+			set_view(m.substr(2))
 		elif m == "__usage":
 			set_view("usage")
 		elif m == "__spoken":
@@ -2390,3 +2464,161 @@ func _rename_session(id: String) -> void:
 		if r.has("error"):
 			status_label.text = str(r["error"])
 		await refresh())
+
+
+# ------------------------------------------------------------------ Loop 15: setup check, shortcuts, connect other tools
+func _page(rows: Array) -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", 10)
+	for r in rows:
+		if r is Button:
+			r.size_flags_horizontal = SIZE_SHRINK_BEGIN
+		box.add_child(r)
+	scroll.add_child(box)
+	return scroll
+
+
+func _title(t: String) -> Label:
+	var l := Label.new()
+	l.text = t
+	l.add_theme_font_size_override("font_size", 18)
+	l.add_theme_font_override("font", AmTheme.ui_font(650))
+	return l
+
+
+func _wrap(t: String) -> Label:
+	var l := _muted(t)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return l
+
+
+## Read-only: runs engine/doctor.sh where tmux lives (WSL on Windows). Nothing is installed or downloaded.
+func setup_check() -> Dictionary:
+	var out := []
+	var argv := engine.host_command(["bash", "-l", engine.engine_root().path_join("engine/doctor.sh")])
+	var code := OS.execute(argv[0], argv.slice(1), out, true)
+	var found := {}
+	if code == 0:
+		for line in str(out[0] if out.size() else "").split("\n", false):
+			var kv := line.split("=", true, 1)
+			if kv.size() == 2:
+				var pv := kv[1].split("|")
+				found[kv[0]] = {"path": pv[0], "version": pv[1] if pv.size() > 1 else ""}
+	return {"code": code, "found": found}
+
+
+const SETUP_ITEMS := [
+	["python3", true, "Runs the engine (3.10 or newer).", "sudo apt install python3"],
+	["tmux", true, "Keeps every session alive when the app closes.", "sudo apt install tmux"],
+	["git", true, "Branches per session, review, connected repositories.", "sudo apt install git"],
+	["ssh", true, "Connected repositories and cloud sandboxes.", "sudo apt install openssh-client"],
+	["claude", false, "Claude Code, your own install and login.", "see docs.anthropic.com (Claude Code)"],
+	["codex", false, "Codex CLI, your own install and login.", "see github.com/openai/codex"],
+	["flyctl", false, "Only for cloud sandboxes.", "the app asks before downloading it (pinned version, checksum checked)"],
+]
+
+
+func _setup_rows() -> Array:
+	var rows: Array = [_title("Setup check"),
+		_wrap("What Agent Manager GD needs%s. This check only looks: it installs and downloads nothing. Run the commands yourself in a terminal." % (" inside WSL" if engine.on_windows else ""))]
+	var r := setup_check()
+	if int(r["code"]) != 0:
+		var msg := "WSL does not answer. Install it once from an administrator PowerShell: wsl --install (Microsoft's own installer), then restart." if engine.on_windows else "bash did not run the check (exit %d)." % int(r["code"])
+		var er := _wrap(msg)
+		er.add_theme_color_override("font_color", AmTheme.col("ERROR"))
+		rows.append(er)
+		return rows
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 18)
+	grid.add_theme_constant_override("v_separation", 8)
+	var missing_required := false
+	for it in SETUP_ITEMS:
+		var f: Dictionary = r["found"].get(it[0], {"path": "", "version": ""})
+		var ok := str(f["path"]) != ""
+		if it[0] == "python3" and ok and str(f["version"]) != "":
+			var v := str(f["version"]).split(".")
+			ok = int(v[0]) > 3 or (int(v[0]) == 3 and int(v[1]) >= 10)
+		missing_required = missing_required or (it[1] and not ok)
+		var mark := Label.new()
+		mark.text = "✓" if ok else ("✗" if it[1] else "–")
+		mark.add_theme_color_override("font_color", AmTheme.col("MINT") if ok else (AmTheme.col("ERROR") if it[1] else AmTheme.col("FAINT")))
+		grid.add_child(mark)
+		var name := Label.new()
+		name.text = "%s %s" % [it[0], str(f["version"])]
+		name.add_theme_font_override("font", AmTheme.ui_font(650))
+		grid.add_child(name)
+		grid.add_child(_muted(("" if it[1] else "optional · ") + str(it[2])))
+		grid.add_child(_muted(str(f["path"]) if ok else str(it[3])))
+	rows.append(grid)
+	rows.append(_wrap("Everything needed is there." if not missing_required else "Install what is marked ✗, then press Check again."))
+	var again := _small("Check again", func() -> void:
+		_layout_view()
+		if not engine.connected and await engine.connect_engine():
+			status_label.text = "Engine started."
+			await refresh())
+	rows.append(again)
+	return rows
+
+
+func _shortcut_rows() -> Array:
+	var rows: Array = [_title("Shortcuts"),
+		_wrap("Click a shortcut, then press the new keys (Escape cancels). In a terminal, Ctrl shortcuts act only with Shift added (Ctrl+Shift+K), so the terminal keeps its own keys. The voice keys are held: one key, no modifier.")]
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 18)
+	for a in DEFAULT_KEYS:
+		grid.add_child(_muted(str(KEY_LABELS[a])))
+		var action: String = a
+		var b := Button.new()
+		b.text = "Press the new keys…" if key_capture == a else key_text(a)
+		b.custom_minimum_size = Vector2(200, 0)
+		b.pressed.connect(func() -> void:
+			key_capture = action
+			_layout_view())
+		grid.add_child(b)
+	rows.append(grid)
+	rows.append(_small("Back to the defaults", func() -> void:
+		for a in DEFAULT_KEYS:
+			_save_key(a, DEFAULT_KEYS[a])
+		_layout_view()))
+	return rows
+
+
+## The Agent Manager MCP for tools outside the app (Claude Code, Codex, any MCP client): they may look at sessions
+## and start new ones; they can never type into a session (that stays with a session's own parent agent).
+func connect_commands() -> Dictionary:
+	var script := engine.engine_root().path_join("engine/mcp_agents.py")
+	var cmd := ["wsl.exe", "-e", "python3", script] if engine.on_windows else ["python3", script]
+	var cfg := {"mcpServers": {"agent-manager": {"command": cmd[0], "args": cmd.slice(1)}}}
+	return {
+		"claude": "claude mcp add --scope user agent-manager -- %s" % " ".join(cmd),
+		"codex": "[mcp_servers.agent-manager]\ncommand = \"%s\"\nargs = %s" % [cmd[0], JSON.stringify(cmd.slice(1))],
+		"json": JSON.stringify(cfg, "  "),
+	}
+
+
+func _connect_rows() -> Array:
+	var c := connect_commands()
+	var rows: Array = [_title("Connect other tools to Agent Manager (MCP)"),
+		_wrap("Sessions inside Agent Manager already have it. Plug it into a tool you run elsewhere: it can list sessions, read their screens and state, and start new sessions; it can never type into a session or approve anything. Local only: it talks to the engine on this computer with its own token.")]
+	for item in [["Claude Code (run in a terminal)", "claude"], ["Codex (~/.codex/config.toml)", "codex"], ["Any MCP client (JSON)", "json"]]:
+		var h := Label.new()
+		h.text = item[0]
+		h.add_theme_font_override("font", AmTheme.ui_font(650))
+		rows.append(h)
+		var te := TextEdit.new()
+		te.text = c[item[1]]
+		te.editable = false
+		te.custom_minimum_size = Vector2(0, 40 + 25 * te.text.count("\n"))
+		te.scroll_fit_content_height = true
+		te.add_theme_font_override("font", font)
+		rows.append(te)
+		var txt: String = c[item[1]]
+		rows.append(_small("Copy", func() -> void:
+			DisplayServer.clipboard_set(txt)
+			_toast("Copied")))
+	return rows

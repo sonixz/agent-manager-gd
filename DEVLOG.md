@@ -229,3 +229,23 @@ destroy: a test checks no destroy call is ever made. API: POST /sandboxes/budget
 Sandboxes view gets the budget line (amber past 80 %, red at 100 %), its settings and the Stop everything button
 (confirmed). Capture on the owner's real (stopped) Fly app, read-only: docs/screens/loop14/42-sandbox-budget.png.
 Tests: 52.
+
+## Loop 15: finish and installer (2026-11-08)
+
+- **Setup check**: engine/doctor.sh (read-only) finds python3 (3.10+), tmux, git, ssh, and the optional claude, codex
+  and flyctl, inside WSL on Windows. The ◐ menu's « Setup check… » shows each one found or missing with the command
+  to run yourself; it opens on its own when the engine cannot start, and says how to get WSL when it is missing.
+  Nothing is installed or downloaded.
+- **Shortcuts**: every shortcut is now a setting (◐ → Shortcuts…): click it, press the new keys, Escape cancels, back
+  to the defaults. A terminal keeps its keys: Ctrl shortcuts act there with Shift added. The palette, the voice
+  overlay and the status line show your keys.
+- **Connect other tools**: Agent Manager's MCP (engine/mcp_agents.py) offered to tools outside the app, with the
+  commands for Claude Code, Codex and any MCP client, copy buttons. Without a session of its own such a tool can
+  look and start sessions but never type into one (test). It finds the engine's data folder on its own.
+- **Release build**: export presets (Windows; Linux waits for Godot's Linux export template), release builds of
+  VtTerminal, tools/build_release.sh (the app, its libraries, engine/ and the sandbox recipe next to the executable,
+  a zip), installer/install.ps1 and uninstall.ps1 (per user, no administrator rights). In a release build the app
+  starts the engine from its own folder. The terminal font is now loaded as an imported resource (a release has no
+  raw .ttf inside: found by the first headless run). Checked on Windows, headless: the release and an installed copy
+  each start their engine from their own folder through WSL (own port and data folder), then everything removed.
+- Docs: docs/INSTALL.md, README. Captures: docs/screens/loop15. Tests: 53.

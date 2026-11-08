@@ -2,8 +2,8 @@ class_name TermFont
 ## The terminal font: JetBrains Mono (bundled, OFL) and system fallbacks for symbols, CJK and colour emoji.
 
 static func make() -> Font:
-	var main := FontFile.new()
-	main.load_dynamic_font("res://assets/fonts/JetBrainsMonoNL-Regular.ttf")
+	# the imported resource (a release build has no raw .ttf inside); its own copy, as the fallbacks are set on it
+	var main := (load("res://assets/fonts/JetBrainsMonoNL-Regular.ttf") as FontFile).duplicate() as FontFile
 	var fb: Array[Font] = []
 	for names in [["Cascadia Mono", "DejaVu Sans Mono"], ["Segoe UI Symbol", "DejaVu Sans"], ["Yu Gothic", "Noto Sans CJK JP"],
 			["Malgun Gothic", "Noto Sans CJK KR"], ["Segoe UI Emoji", "Noto Color Emoji"]]:

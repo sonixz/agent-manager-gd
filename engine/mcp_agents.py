@@ -36,7 +36,9 @@ TOOLS = [
 class Engine:
     def __init__(self):
         self.me = os.environ.get("AGMGD_SESSION", "")
-        home = os.environ.get("AGMGD_HOME", "")
+        # a tool outside the app (Connect other tools) has no AGMGD_HOME: the engine's default data folder
+        home = os.environ.get("AGMGD_HOME") or os.path.join(
+            os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "agent-manager-gd")
         self.port = int(os.environ.get("AGMGD_PORT", "8790"))
         with open(os.path.join(home, "runtime", "api_token"), encoding="utf-8") as f:
             self.token = f.read().strip()
