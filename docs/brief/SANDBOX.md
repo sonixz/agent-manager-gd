@@ -1,53 +1,74 @@
-# Cloud sandboxes on Fly.io — design notes (draft, 2026-11-08)
+# Repositories and cloud sandboxes — design notes (draft v2, 2026-11-08)
 
-Not built yet. The owner's input: log the agents in once, for good; projects come from many repositories (and some
-are not git at all), so the code flow must not assume one repository; the Second Brain should reach the cloud
-through a tunnel.
+Not built yet. Owner's decisions: the user creates the repositories himself; Agent Manager connects them (a deploy
+key per repository) and launches agents on them, locally or in a sandbox with access to the Brain. A sandbox is a
+**cheap, non-persistent instance**, not a persistent host. Agent Manager manages the Fly.io costs.
 
-## 1. A cloud host, not a cloud session
+## 1. Connected repositories (local and cloud)
 
-A Fly Machine with a persistent volume is a **cloud host**, like a remote WSL: our image (tmux, git, Claude Code,
-Codex, Python, sshd) runs **our own engine**, and Agent Manager talks to it exactly as it talks to the local one.
-Every feature (tree, states, history, resume, Brain, summaries) works the same; a session simply lives on a host
-(« Local » or « Cloud · <name> », badge ☁).
+**« Add a repository »** (a Repositories view):
+1. The user gives the repository's SSH address (`git@github.com:org/repo.git`) and, optionally, a local folder where
+   it is (or should be) cloned.
+2. Agent Manager makes a **deploy key** for that repository only (ed25519): the private key stays in Agent Manager's
+   data folder (file 0600, never in a log, never in the repository); the public key is shown with a « Copy » button
+   and a link to the repository's GitHub page *Settings → Deploy keys* (tick « Allow write access » so agents can
+   push their branch).
+3. « Check »: Agent Manager tests the key (`git ls-remote` with that key only) and records it as connected.
 
-- **Log in once, for good**: the home folder is on the volume (`~/.claude`, `~/.codex`, `~/.config/gh`). The first
-  time, the owner logs in himself in a terminal of that host (`claude`, `codex login`, `gh auth login`); it stays.
-  Agent Manager never copies, reads or relays a login token.
-- **Many projects on one host**: each session has its own folder on the volume (`~/projects/<name>`); one machine,
-  many sessions, as locally.
-- **Cost**: the machine stops when no session works (auto-stop), restarts on demand; the cost shows on the host,
-  with a monthly cap set by the owner.
-- **Isolation, later**: throw-away machines per risky task (a copy of a project, destroyed after).
+The Repositories view documents each one: address, local folder, key fingerprint, added on, last used, the sessions
+that worked on it; **Rotate key** (a new key, the old one to remove on GitHub, shown step by step) and **Disconnect**
+(the key file deleted; reminder to delete it on GitHub). A deploy key opens one repository only: a leaked key never
+opens the others.
 
-## 2. Code in both directions, per session (no single repository assumed)
+**Start an agent on a repository**: pick the repository instead of a folder, then *Local* (its local folder; a git
+worktree per session as today) or *Sandbox* (below). Git commands of that session use its deploy key
+(`GIT_SSH_COMMAND` with that key only), not the user's personal keys.
 
-When starting a cloud session, the owner picks where its code comes from:
+## 2. Sandboxes: cheap, throw-away instances
 
-| Source | In | Back |
-|---|---|---|
-| A git remote (GitHub, GitLab…) | `git clone` on the host (git credentials logged in once, on the volume) | the agent pushes a branch; or the local repo fetches it from the host through the tunnel (`git fetch sandbox am/<name>`) |
-| A local folder (git or not) | uploaded as a snapshot over SSH (a tar, `.gitignore` respected) | reviewed as a diff in Agent Manager (Loop 8), then applied locally on approval; never synced silently |
-| Nothing | an empty folder | download the folder |
+One sandbox = one Fly Machine for one session, destroyed when the work is done.
 
-Live two-way sync (rsync or mutagen) stays out at first: it hides who changed what. The diff review is the gate.
+1. **Start**: a small machine from our image (tmux, git, Claude Code, Codex, Python, our mini engine); the
+   repository's deploy key and the agent's credentials are given as machine secrets; the repository is cloned and a
+   branch `am/<session>` created; the agent starts in tmux. The terminal opens in Agent Manager like any session
+   (badge ☁, through `fly ssh console`).
+2. **Work**: states, approvals, the Brain (through the tunnel, below), Board and Grid views as for local sessions.
+3. **Finish**: Wrap up (the agent's summary), the agent commits and pushes its branch with the deploy key; Agent
+   Manager shows the branch's diff (Loop 8) and can open the pull request link; the summary comes back to History and
+   is proposed to the Brain; the machine and its secrets are **destroyed**. Nothing persists in the cloud.
+
+**Logging in once, with throw-away machines**: a login made inside a machine would vanish with it. So the
+credentials are given once to Agent Manager (dotenvx or the system keyring) and injected into each sandbox as
+secrets: **API keys** (`ANTHROPIC_API_KEY` for Claude Code, `CODEX_API_KEY`/`OPENAI_API_KEY` for Codex), billed per
+use. Agent Manager never copies a subscription login (claude.ai, ChatGPT) into the cloud: Anthropic's terms forbid
+third-party products from relaying it. (`claude setup-token` exists for automation; whether using it from a
+third-party tool is allowed must be checked with Anthropic first: off by default.)
 
 ## 3. The Second Brain through a tunnel
 
-The Brain only listens on 127.0.0.1 of the owner's computer. While Agent Manager is open, it keeps an **SSH reverse
-tunnel** to each cloud host (Windows' own `ssh.exe` over `fly proxy`, so it reaches the Brain on Windows' localhost):
-the host's 127.0.0.1:8765 leads to the Brain's `/mcp`. Each cloud session gets its own Brain key as today (level
-« propose items », revoked when the session is removed), used over HTTP through the tunnel. When the app is closed
-the tunnel is down: the agent gets a clear « Brain unreachable » and keeps working; its end-of-session summary is
-brought back and proposed to the Brain locally.
+The Brain listens only on 127.0.0.1 of the owner's computer. While Agent Manager is open it keeps an **SSH reverse
+tunnel** to each running sandbox (Windows' own `ssh.exe` over `fly proxy`, so it reaches the Brain on Windows'
+localhost): the sandbox's 127.0.0.1:8765 leads to the Brain's `/mcp`. Each sandbox session gets its own Brain key
+(level « propose items »), revoked when the sandbox is destroyed. App closed: no tunnel, the agent gets « Brain
+unreachable » and keeps working; its summary is proposed to the Brain when it comes back.
 
-## 4. What is needed from the owner
+## 4. Fly.io costs in Agent Manager
 
-A Fly.io account and its API token (dotenvx), the agreement to install `flyctl` (a download, checked), a registry for
-the image (Fly's or GHCR; visibility is the owner's choice), and a small test budget with a cap.
+- A live counter per sandbox and a total per day and month: running seconds × the machine size's price from Fly's
+  published price list (shown as an estimate, with the date of the price list).
+- **Caps**: a monthly budget, a maximum lifetime per sandbox, destroy after N minutes without activity; a warning
+  at 80 %, new sandboxes refused at 100 %.
+- **Stop everything**: one button destroys every running sandbox.
+- A history of past sandboxes: repository, duration, estimated cost, outcome (branch pushed or not).
 
-## 5. First milestone (go/no-go, like the terminal)
+## 5. Needed from the owner
 
-One host: create the machine and volume from our image, log in once, a session's terminal attached in Agent Manager,
-stop and restart it with the login kept, the Brain reachable through the tunnel, destroy it. Measured: start time,
-terminal latency, cost per hour.
+A Fly.io account and API token (dotenvx), the agreement to install `flyctl` (a download, checked), a registry for the
+image (Fly's or GHCR; visibility is the owner's choice), API keys for the agents used in sandboxes, a test budget.
+
+## 6. Milestones
+
+1. **Repositories and deploy keys** (local only): add, check, rotate, disconnect; agents launched on a repository.
+2. **Sandbox go/no-go**: one machine from our image, a session's terminal attached, a branch pushed with the deploy
+   key, the Brain through the tunnel, destroyed at the end. Measured: start time, terminal latency, cost per run.
+3. **Fly.io costs and caps**, then several sandboxes in parallel.
