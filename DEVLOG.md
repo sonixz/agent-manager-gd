@@ -249,3 +249,17 @@ Tests: 52.
   raw .ttf inside: found by the first headless run). Checked on Windows, headless: the release and an installed copy
   each start their engine from their own folder through WSL (own port and data folder), then everything removed.
 - Docs: docs/INSTALL.md, README. Captures: docs/screens/loop15. Tests: 53.
+
+## Loop 15b: managing Fly leftovers and Brain keys from the app (2026-11-08)
+
+The owner asked to handle these in Agent Manager instead of Fly's dashboard and by hand.
+- **Fly orphans**: « Destroy… » on each one, confirmed. For a whole other Agent Manager app, the confirmation first
+  lists its machines. Only `agmgd-…` apps of the organisation; never the app in use, never a machine of a sandbox
+  Agent Manager knows (that one is destroyed from its card, after its unpushed work). Before « Prepare », the
+  organisation is the token's own, so leftovers from tests show up. API: GET /sandboxes/orphans/<app>,
+  POST /sandboxes/orphans/destroy {app, machine, confirmed}.
+- **Second Brain keys**: the Keys screen lists every key named « Agent Manager · … » (from the Brain's own
+  GET /mcp/clients; nothing changed in the Brain), with what uses it (a session, an archived one, a sandbox). Unused
+  keys can be revoked one by one or all at once, confirmed; a key in use is refused (it goes with its session or
+  sandbox). API: GET /brain/keys, POST /brain/keys/<id>/revoke {confirmed}.
+- Captures (read-only; the confirmation opened, never accepted): docs/screens/loop15/46, 47. Tests: 55.

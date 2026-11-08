@@ -73,7 +73,8 @@ A view listing every sandbox, running, stopped or finished:
   Manager checks for uncommitted changes and commits not pushed and shows them, so no work is lost by mistake),
   **Destroy the finished ones** (a list to tick, confirmed);
 - **orphans**: machines in the Fly account tagged as Agent Manager's but unknown locally (made from another computer,
-  or left after a crash) are listed, never touched without the owner.
+  or left after a crash) are listed, never touched without the owner. The owner may destroy one (a machine, or a
+  whole other `agmgd-…` app after seeing its machines), confirmed; never the app in use or a known sandbox's machine.
 
 ## 6. Needed from the owner
 

@@ -143,6 +143,17 @@ class Brain:
         code, _ = self.call("DELETE", f"/mcp/clients/{client_id}")
         return code == 200
 
+    PREFIX = "Agent Manager · "
+
+    def clients(self) -> list[dict]:
+        """The Brain keys Agent Manager made (by their name), still active: id, name, created, last seen, calls."""
+        if not self.status()["connected"]:
+            raise ValueError("the Second Brain is not running")
+        code, body = self.call("GET", "/mcp/clients")
+        if code != 200:
+            raise ValueError("the Second Brain did not list its keys")
+        return [c for c in body.get("clients", []) if str(c.get("name", "")).startswith(self.PREFIX)]
+
     def server_spec(self, client_id: str) -> dict:
         """How an agent starts the Brain's MCP server: the relay, run by the Brain's Python, with this session's key."""
         return {"command": self.python, "args": [self.relay_path(), "--client", client_id]}

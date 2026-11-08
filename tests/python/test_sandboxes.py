@@ -46,7 +46,7 @@ class FakeFly:
         if args[:2] == ("machine", "list"):
             return self.machines
         if args[:2] == ("apps", "list"):
-            return [{"Name": "agmgd-spike-96416e", "Status": "deployed"}]
+            return [{"Name": "agmgd-spike-96416e", "Status": "deployed"}] + getattr(self, "apps_extra", [])
         return []
 
 
@@ -59,6 +59,11 @@ class FakeBrain:
 
     def revoke(self, cid):
         self.revoked.append(cid)
+        return True
+
+    def clients(self):
+        return [{"id": c, "name": "Agent Manager · " + c, "created_at": "", "last_seen": None, "calls": 0}
+                for c in ("cbrain1", "cold-test") if c not in self.revoked]
 
     def status(self):
         return {"connected": True}
@@ -153,6 +158,38 @@ class SandboxesTest(unittest.TestCase):
         self.assertFalse(any(c[:2] == ("machine", "destroy") for c in self.fly.calls))      # caps never destroy
         self.s.sandboxes.set_budget(0, 10, False)
         self.assertEqual(self.s.sandboxes.enforce({sb["id"]: 60}), [])                          # not idle long enough
+
+    def test_orphans_are_destroyed_only_on_request_and_never_a_known_sandbox(self):
+        self.s.sandboxes.prepare()
+        d = self.s.create("Cloud work", "shell", "", host="sandbox")
+        sb = self.s.sandboxes.by_session(d["id"])
+        app = self.s.sandboxes.config("app")
+        self.fly.apps_extra = [{"Name": app}]
+        with self.assertRaises(ValueError):
+            self.s.sandboxes.destroy_orphan(app, "orphan-1", False)                  # needs the confirmation
+        with self.assertRaises(ValueError):
+            self.s.sandboxes.destroy_orphan(app, sb["machine"], True)               # a known sandbox: from its card
+        with self.assertRaises(ValueError):
+            self.s.sandboxes.destroy_orphan(app, "", True)                          # the app in use
+        with self.assertRaises(ValueError):
+            self.s.sandboxes.destroy_orphan("someone-else", "", True)               # not an Agent Manager app
+        self.assertEqual(self.s.sandboxes.destroy_orphan(app, "orphan-1", True), {"destroyed": "orphan-1"})
+        self.assertEqual([m["id"] for m in self.s.sandboxes.orphan_contents("agmgd-spike-96416e")], [m["id"] for m in self.fly.machines])
+        self.assertEqual(self.s.sandboxes.destroy_orphan("agmgd-spike-96416e", "", True), {"destroyed": "agmgd-spike-96416e"})
+        self.assertIn(("apps", "destroy", "agmgd-spike-96416e", "--yes"), self.fly.calls)
+
+    def test_only_unused_brain_keys_are_revoked(self):
+        self.s.sandboxes.prepare()
+        self.s.create("Cloud agent", "claude", "", host="sandbox")    # takes cbrain1
+        keys = {k["id"]: k["used_by"] for k in self.s.brain_keys()}
+        self.assertTrue(keys["cbrain1"])
+        self.assertEqual(keys["cold-test"], "")
+        with self.assertRaises(ValueError):
+            self.s.revoke_brain_key("cbrain1", True)
+        with self.assertRaises(ValueError):
+            self.s.revoke_brain_key("cold-test", False)
+        self.assertEqual(self.s.revoke_brain_key("cold-test", True), {"revoked": "cold-test"})
+        self.assertEqual(self.brain.revoked, ["cold-test"])
 
     def test_the_brain_relay_answers_only_to_a_sandbox_secret(self):
         self.s.sandboxes.prepare()

@@ -257,6 +257,32 @@ class Sessions:
             return "working", t.pane_command
         return ("working" if busy and rec["tool"] != "shell" else "idle"), ""
 
+    # ---------------------------------------------------------------- the Brain keys Agent Manager made
+    def brain_keys(self) -> list[dict]:
+        """Each key with what uses it (a session, an archived one, a sandbox) or nothing: only unused keys are revocable."""
+        used = {}
+        for archived in (False, True):
+            for r in self.store.all(archived=archived):
+                if r.get("brain_client"):
+                    used[r["brain_client"]] = ("archived session" if archived else "session") + " « %s »" % r["name"]
+        for sb in self.sandboxes.all():
+            if sb.get("brain_client") and not sb["destroyed"]:
+                used.setdefault(sb["brain_client"], "sandbox %s" % sb["id"])
+        return [{**{k: c.get(k) for k in ("id", "name", "created_at", "last_seen", "calls")},
+                 "used_by": used.get(c["id"], "")} for c in self.brain.clients()]
+
+    def revoke_brain_key(self, cid: str, confirmed: bool) -> dict:
+        if not confirmed:
+            raise ValueError("revoking needs the owner's confirmation")
+        key = next((k for k in self.brain_keys() if k["id"] == cid), None)
+        if key is None:
+            raise ValueError("not a Brain key made by Agent Manager")
+        if key["used_by"]:
+            raise ValueError(f"this key is used by {key['used_by']}: remove that session or sandbox instead")
+        if not self.brain.revoke(cid):
+            raise ValueError("the Second Brain did not revoke it")
+        return {"revoked": cid}
+
     _last_enforce = 0.0
 
     def enforce_caps(self) -> None:

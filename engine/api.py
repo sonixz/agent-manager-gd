@@ -133,6 +133,16 @@ def make_handler(sessions: Sessions, token: str):
                         out = sbx.destroy(sbid, bool(self._body().get("confirmed", False)), sessions.brain)
                         sessions.tmux.kill(sessions.tmux_name(out["session_id"]))
                         return self._reply(200, {k: v for k, v in out.items() if k != "secret"})
+                if parts == ["brain", "keys"] and method == "GET":
+                    return self._reply(200, {"keys": sessions.brain_keys()})
+                if len(parts) == 4 and parts[:2] == ["brain", "keys"] and parts[3] == "revoke" and method == "POST":
+                    return self._reply(200, sessions.revoke_brain_key(parts[2], bool(self._body().get("confirmed", False))))
+                if len(parts) == 3 and parts[:2] == ["sandboxes", "orphans"] and method == "GET":
+                    return self._reply(200, {"machines": sessions.sandboxes.orphan_contents(parts[2])})
+                if parts == ["sandboxes", "orphans", "destroy"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.sandboxes.destroy_orphan(str(b.get("app", "")), str(b.get("machine", "")),
+                                                                               bool(b.get("confirmed", False))))
                 if parts == ["brain"] and method == "GET":
                     return self._reply(200, sessions.brain.status() if sessions.brain else {"connected": False, "reason": "off"})
                 if parts == ["summaries"] and method == "GET":

@@ -572,6 +572,26 @@ func _run() -> void:
 			for sb in ov.get("sandboxes", []):  # pause them: never destroyed by Agent Manager
 				await main.engine.call_api("POST", "/sandboxes/%s/stop" % sb["id"], {}, true, 120.0)
 			report.append("stopped (not destroyed): %d" % (ov.get("sandboxes", []) as Array).size())
+		"manage":
+			# read-only: the owner's Fly token copied in; nothing is prepared, so the leftover apps show as orphans
+			var data := OS.get_environment("AGMGD_HOME")
+			OS.execute("bash", ["-c", "mkdir -p %s/keys/api && cp ~/.local/share/agent-manager-gd/keys/api/fly.json %s/keys/api/ && chmod 600 %s/keys/api/fly.json" % [data, data, data]])
+			main.set_view("sandboxes")
+			await wait(2.0)
+			await main._load_sandboxes()
+			await wait(1.0)
+			for btn in main.sbx_box.find_children("*", "Button", true, false):
+				if btn.text == "Destroy…":
+					btn.pressed.emit()  # opens the confirmation only: never confirmed here
+					break
+			await wait(8.0)
+			await shot("46-orphans-destroy-confirm")
+			main.confirm_dialog.hide()
+			main.set_view("keys")
+			await wait(8.0)
+			await shot("47-brain-keys")
+			var k: Dictionary = await main.engine.call_api("GET", "/brain/keys", null, true, 30.0)
+			report.append("brain keys: %d" % (k.get("keys", []) as Array).size())
 		"finish":
 			main.set_view("setup")
 			await wait(3.0)

@@ -253,6 +253,50 @@ class Sandboxes:
         self._set(sbid, destroyed=1)
         return self.get(sbid)
 
+    # ---------------------------------------------------------------- orphans: the owner may destroy them, confirmed
+    def org(self) -> str:
+        """The organisation: the one prepared, or (not prepared yet) the token's first one, to list leftovers."""
+        if self.config("org") or not self.fly.available():
+            return self.config("org")
+        try:
+            orgs = self.fly.json("orgs", "list")
+        except (RuntimeError, ValueError, OSError):
+            return ""
+        return sorted(orgs.keys())[0] if isinstance(orgs, dict) and orgs else ""
+
+    def _orphan_app(self, app: str) -> None:
+        if not app.startswith("agmgd-"):
+            raise ValueError("only Agent Manager's own Fly apps (agmgd-…) are handled here")
+        apps = self.fly.json("apps", "list", "--org", self.org()) if self.org() else []
+        if not any((a.get("Name") or a.get("name")) == app for a in (apps if isinstance(apps, list) else [])):
+            raise ValueError(f"no app {app} in your organisation")
+
+    def orphan_contents(self, app: str) -> list[dict]:
+        """What an orphan app holds (its machines), shown before destroying it."""
+        self._orphan_app(app)
+        return [{"id": m["id"], "name": m.get("name", ""), "state": m.get("state", "")}
+                for m in self.fly.json("machine", "list", "--app", app)]
+
+    def destroy_orphan(self, app: str, machine: str, confirmed: bool) -> dict:
+        """Only on the owner's confirmed request: a machine this Agent Manager does not know, or a whole other
+        Agent Manager app (never the app in use, never a machine of a known sandbox)."""
+        if not confirmed:
+            raise ValueError("destroying needs the owner's confirmation")
+        self._orphan_app(app)
+        if machine and any(sb["machine"] == machine for sb in self.all()):
+            raise ValueError("this machine is a known sandbox: destroy it from its card (shows its unpushed work)")
+        if machine:
+            if not any(m["id"] == machine for m in self.fly.json("machine", "list", "--app", app)):
+                raise ValueError(f"no machine {machine} in {app}")
+            rc, out = self.fly.run("machine", "destroy", machine, "--app", app, "--force", timeout=300)
+        else:
+            if app == self.config("app") or any(sb["app"] == app and not sb["destroyed"] for sb in self.all()):
+                raise ValueError("this app holds sandboxes Agent Manager knows: destroy those from their cards")
+            rc, out = self.fly.run("apps", "destroy", app, "--yes", timeout=300)
+        if rc != 0:
+            raise ValueError(out[-200:])
+        return {"destroyed": machine or app}
+
     # ---------------------------------------------------------------- budget and caps (Loop 14): never destructive
     def budget(self) -> dict:
         return {"monthly_usd": float(self.config("budget_usd", "0") or 0),
@@ -353,7 +397,7 @@ class Sandboxes:
         orphans = [{"app": self.config("app"), "machine": mid, "name": m.get("name", ""), "state": m.get("state", "")}
                    for mid, m in live.items() if mid not in known]
         try:  # other Agent Manager apps of the organisation (another computer, an earlier test)
-            org = self.config("org")
+            org = self.org()
             apps = self.fly.json("apps", "list", "--org", org) if org else []
             for a in apps if isinstance(apps, list) else []:
                 name = a.get("Name") or a.get("name", "")
@@ -363,7 +407,7 @@ class Sandboxes:
             pass
         b = self.budget()
         spend = self.month_spend(live)
-        return {"sandboxes": rows, "orphans": orphans, "fly_reachable": reachable, **self.status(),
+        return {"sandboxes": rows, "orphans": orphans, "fly_reachable": reachable, **self.status(), "org": self.org(),
                 "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 4), "budget": b, "month_spend_usd": spend,
                 "budget_percent": round(100 * spend / b["monthly_usd"], 1) if b["monthly_usd"] > 0 else None,
                 "storage_note": f"stopped machines: ${STOPPED_GB_MONTH}/GB/month of root disk"}

@@ -61,6 +61,9 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   Codex or any MCP client outside the app. Such a tool may list sessions, read their screens and start new ones; it
   can never type into a session or approve anything.
 - **Setup check** (◐ → Setup check…): what is found, what is missing, and the command to run yourself.
+- **Second Brain keys** (◐ → Keys…, below your API keys): every Brain key Agent Manager made, with the session or
+  sandbox using it. Unused ones can be revoked (one, or all unused at once, confirmed); a key in use goes away with
+  its session or sandbox.
 - **Keys** (◐ → Keys…): paste your own API keys (OpenAI for the voice, Fly.io and Anthropic for cloud sandboxes).
   On Windows they are encrypted with DPAPI for your Windows user; they are never shown again or logged, and are read
   only when a feature needs them.
@@ -81,7 +84,8 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   sandbox's own secret; the Brain's keys never leave Windows). The manager shows each sandbox's machine, running time,
   estimated cost, and its connection (terminal, tunnel, latency, Brain reachable); Start, Stop (pause), Mark finished,
   **Destroy** — only by you, confirmed, after Agent Manager showed the work not pushed. Machines of your organisation
-  it does not know are listed, never touched. Agent Manager never destroys a sandbox on its own.
+  it does not know are listed, never touched unless you destroy them (« Destroy… », confirmed, after listing what an
+  app holds). Agent Manager never destroys a sandbox on its own.
   **Budget**: a monthly amount (this month's estimate shown against it, a warning past 80 %, no new sandbox at
   100 %), and two caps you can turn on that only *pause*: a sandbox idle for N minutes, or every sandbox once the
   budget is reached. « Stop everything » pauses all running sandboxes.

@@ -1471,13 +1471,32 @@ func _load_sandboxes() -> void:
 	var orph: Array = r.get("orphans", [])
 	if not orph.is_empty():
 		var ot := Label.new()
-		ot.text = "Not known by this Agent Manager (listed, never touched)"
+		ot.text = "Not known by this Agent Manager (never touched unless you destroy them)"
 		ot.add_theme_font_override("font", AmTheme.ui_font(650))
 		sbx_box.add_child(ot)
 		for o in orph:
-			var ol := _muted("• app %s %s %s   — destroy it from Fly's dashboard if you do not need it" % [o["app"], ("machine " + str(o["machine"])) if str(o["machine"]) != "" else "", ("(" + str(o["name"]) + ", " + str(o["state"]) + ")")])
+			var orow := HBoxContainer.new()
+			orow.add_theme_constant_override("separation", 10)
+			var ol := _muted("• app %s %s %s" % [o["app"], ("machine " + str(o["machine"])) if str(o["machine"]) != "" else "", ("(" + str(o["name"]) + ", " + str(o["state"]) + ")")])
 			ol.add_theme_font_size_override("font_size", 12)
-			sbx_box.add_child(ol)
+			orow.add_child(ol)
+			var oapp := str(o["app"])
+			var omac := str(o["machine"])
+			orow.add_child(_small("Destroy…", func() -> void:
+				var what := "the machine %s of %s" % [omac, oapp]
+				if omac == "":
+					var c := await engine.call_api("GET", "/sandboxes/orphans/" + oapp, null, true, 60.0)
+					if c.has("error"):
+						_toast(str(c["error"]))
+						return
+					var ms: Array = c.get("machines", [])
+					what = "the whole app %s and its %d machine(s)%s" % [oapp, ms.size(), (":\n" + "\n".join(ms.map(func(m): return "• %s %s (%s)" % [m["id"], m["name"], m["state"]]))) if not ms.is_empty() else ""]
+				_confirm("Destroy %s?\nNot known by this Agent Manager: its files are deleted for good, nothing is checked for unpushed work." % what, func() -> void:
+					_toast("Destroying…")
+					var res := await engine.call_api("POST", "/sandboxes/orphans/destroy", {"app": oapp, "machine": omac, "confirmed": true}, true, 300.0)
+					_toast(str(res["error"]) if res.has("error") else "Destroyed")
+					await _load_sandboxes())))
+			sbx_box.add_child(orow)
 
 
 func _budget_panel(r: Dictionary) -> Control:
@@ -1745,6 +1764,59 @@ func _load_keys() -> void:
 	keys_list.add_child(prot)
 	for k in r["keys"]:
 		keys_list.add_child(_key_card(k))
+	await _load_brain_keys()
+
+
+## The Second Brain keys Agent Manager made (one per session or sandbox): what uses each one; unused ones can be
+## revoked, one by one or all at once, always confirmed. A key in use goes away with its session or sandbox.
+func _load_brain_keys() -> void:
+	var r := await engine.call_api("GET", "/brain/keys", null, true, 30.0)
+	if keys_list == null or not is_instance_valid(keys_list):
+		return
+	var t := Label.new()
+	t.text = "Second Brain keys made by Agent Manager"
+	t.add_theme_font_size_override("font_size", 15)
+	t.add_theme_font_override("font", AmTheme.ui_font(650))
+	keys_list.add_child(t)
+	if r.has("error"):
+		keys_list.add_child(_muted(str(r["error"])))
+		return
+	var keys: Array = r.get("keys", [])
+	var unused: Array = keys.filter(func(k): return str(k["used_by"]) == "")
+	keys_list.add_child(_muted("%d keys · %d in use · %d unused. A key in use goes away when its session or sandbox is removed." % [keys.size(), keys.size() - unused.size(), unused.size()]))
+	if not unused.is_empty():
+		var all_btn := _small("Revoke the %d unused keys…" % unused.size(), func() -> void:
+			_confirm("Revoke %d Second Brain keys nothing uses any more?\n%s" % [unused.size(), "\n".join(unused.map(func(k): return "• %s (%s)" % [k["name"], k["id"]]))], func() -> void:
+				for k in unused:
+					await engine.call_api("POST", "/brain/keys/%s/revoke" % k["id"], {"confirmed": true}, true, 30.0)
+				_toast("Revoked")
+				await _load_keys()))
+		all_btn.size_flags_horizontal = SIZE_SHRINK_BEGIN
+		keys_list.add_child(all_btn)
+	for k in keys:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var used := str(k["used_by"])
+		var dot := Label.new()
+		dot.text = "●" if used != "" else "○"
+		dot.add_theme_color_override("font_color", AmTheme.col("MINT") if used != "" else AmTheme.col("FAINT"))
+		row.add_child(dot)
+		var n := Label.new()
+		n.text = str(k["name"]).trim_prefix("Agent Manager · ")
+		n.custom_minimum_size = Vector2(260, 0)
+		row.add_child(n)
+		var info := _muted(("used by " + used if used != "" else "unused") + "   ·   " + str(int(k.get("calls", 0) if k.get("calls") != null else 0)) + " calls" + ("   ·   last seen " + str(k["last_seen"]).substr(0, 16).replace("T", " ") if k.get("last_seen") else ""))
+		info.size_flags_horizontal = SIZE_EXPAND_FILL
+		row.add_child(info)
+		if used == "":
+			var cid := str(k["id"])
+			var kname := str(k["name"])
+			row.add_child(_small("Revoke…", func() -> void:
+				_confirm("Revoke the Second Brain key « %s »?\nWhatever still holds it can no longer read or propose." % kname, func() -> void:
+					var res := await engine.call_api("POST", "/brain/keys/%s/revoke" % cid, {"confirmed": true}, true, 30.0)
+					_toast(str(res["error"]) if res.has("error") else "Revoked")
+					await _load_keys())))
+		keys_list.add_child(row)
 
 
 func _key_card(k: Dictionary) -> Control:
