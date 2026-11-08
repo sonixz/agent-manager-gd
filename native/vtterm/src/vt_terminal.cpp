@@ -13,7 +13,9 @@
 #include <cstring>
 #include <vector>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include "vt_terminal_win.inc"
+#else
 #include <errno.h>
 #include <fcntl.h>
 #include <pty.h>
@@ -58,7 +60,9 @@ VtTerminal::VtTerminal() {
 }
 
 VtTerminal::~VtTerminal() {
-#ifndef _WIN32
+#ifdef _WIN32
+	_win_close();
+#else
 	if (pid > 0) {
 		kill(pid, SIGHUP);
 		waitpid(pid, nullptr, WNOHANG);
@@ -97,7 +101,11 @@ void VtTerminal::_notification(int what) {
 // ------------------------------------------------------------------ process
 bool VtTerminal::start(const String &program, const PackedStringArray &args, const String &cwd, const PackedStringArray &env) {
 #ifdef _WIN32
-	ERR_FAIL_V_MSG(false, "VtTerminal: the Windows pseudo-console (ConPTY) is the next step.");
+	if (win) return false;
+	win = win_start(program, args, cwd, env, cols, rows);
+	if (!win) return false;
+	pid = (int)win_pid(win);
+	return true;
 #else
 	if (pid > 0) return false;
 	struct winsize ws = {(unsigned short)rows, (unsigned short)cols, (unsigned short)(cols * cell_w), (unsigned short)(rows * cell_h)};
@@ -127,7 +135,23 @@ bool VtTerminal::start(const String &program, const PackedStringArray &args, con
 }
 
 void VtTerminal::_pump() {
-#ifndef _WIN32
+#ifdef _WIN32
+	if (!win) return;
+	std::string chunk;
+	bool ended = false;
+	int code = -1;
+	win_drain(win, chunk, ended, code);
+	if (!chunk.empty()) {
+		ghostty_terminal_vt_write(term, (const uint8_t *)chunk.data(), chunk.size());
+		needs_redraw = true;
+		emit_signal("output_received", (int64_t)chunk.size());
+	}
+	if (ended) {
+		_win_close();
+		pid = -1;
+		emit_signal("exited", code);
+	}
+#else
 	if (pty_fd < 0) return;
 	uint8_t buf[65536];
 	size_t total = 0;
@@ -175,7 +199,9 @@ void VtTerminal::_send(const uint8_t *data, size_t len) {
 	p.resize(len);
 	memcpy(p.ptrw(), data, len);
 	emit_signal("input_sent", p);
-#ifndef _WIN32
+#ifdef _WIN32
+	if (win) win_write(win, data, len);
+#else
 	if (pty_fd >= 0) {
 		size_t off = 0;
 		while (off < len) {
@@ -187,6 +213,13 @@ void VtTerminal::_send(const uint8_t *data, size_t len) {
 	}
 #endif
 }
+
+#ifdef _WIN32
+void VtTerminal::_win_close() {
+	if (win) win_close(win);
+	win = nullptr;
+}
+#endif
 
 void VtTerminal::_on_write_pty(const uint8_t *data, size_t len) { _send(data, len); }
 void VtTerminal::_on_bell() { emit_signal("bell"); }
@@ -237,6 +270,9 @@ void VtTerminal::_apply_size() {
 		struct winsize ws = {(unsigned short)rows, (unsigned short)cols, (unsigned short)(cols * cell_w), (unsigned short)(rows * cell_h)};
 		ioctl(pty_fd, TIOCSWINSZ, &ws);
 	}
+#endif
+#ifdef _WIN32
+	if (win) win_resize(win, cols, rows);
 #endif
 	emit_signal("grid_resized", cols, rows);
 	needs_redraw = true;
@@ -641,6 +677,24 @@ String VtTerminal::get_selection_text() const {
 	return out;
 }
 
+String VtTerminal::get_screen_text() const {
+	GhosttyFormatter f;
+	if (ghostty_formatter_terminal_new(nullptr, &f, term) != GHOSTTY_SUCCESS) return String();
+	GhosttyFormatterFormat emit = GHOSTTY_FORMATTER_FORMAT_PLAIN;
+	ghostty_formatter_set(f, GHOSTTY_FORMATTER_OPT_EMIT, &emit);
+	bool trim = true;
+	ghostty_formatter_set(f, GHOSTTY_FORMATTER_OPT_TRIM, &trim);
+	uint8_t *buf = nullptr;
+	size_t len = 0;
+	String out;
+	if (ghostty_formatter_format_alloc(f, nullptr, &buf, &len) == GHOSTTY_SUCCESS) {
+		out = String::utf8((const char *)buf, len);
+		ghostty_free(nullptr, buf, len);
+	}
+	ghostty_formatter_free(f);
+	return out;
+}
+
 bool VtTerminal::_mouse_report(const Ref<InputEvent> &event) {
 	ghostty_mouse_encoder_set_from_terminal(mouse, term);
 	GhosttyMouseTrackingMode mode = GHOSTTY_MOUSE_TRACKING_NONE;
@@ -707,6 +761,7 @@ void VtTerminal::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("write_input", "data"), &VtTerminal::write_input);
 	ClassDB::bind_method(D_METHOD("paste_text", "text"), &VtTerminal::paste_text);
 	ClassDB::bind_method(D_METHOD("get_selection_text"), &VtTerminal::get_selection_text);
+	ClassDB::bind_method(D_METHOD("get_screen_text"), &VtTerminal::get_screen_text);
 	ClassDB::bind_method(D_METHOD("is_running"), &VtTerminal::is_running);
 	ClassDB::bind_method(D_METHOD("get_cols"), &VtTerminal::get_cols);
 	ClassDB::bind_method(D_METHOD("get_rows"), &VtTerminal::get_rows);

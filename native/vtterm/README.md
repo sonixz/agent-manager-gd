@@ -12,6 +12,10 @@ Build (Linux/WSL, user folders, no admin rights):
 4. Here: `scons GODOT_CPP=~/src/godot-cpp GHOSTTY=~/src/ghostty/zig-out target=template_debug`, then copy
    `libghostty-vt.so.1` next to the built library (`prototype/terminal-ghostty/addons/vtterm/bin/`).
 
+Windows (cross-built from WSL): `zig build -Demit-lib-vt -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu --prefix zig-out-win`
+for `ghostty-vt.dll`; then `scons platform=windows use_mingw=yes mingw_prefix=<folder with x86_64-w64-mingw32-gcc/g++/ar/ranlib/gcc-ar
+wrappers calling `zig cc`/`zig c++ -target x86_64-windows-gnu`>` and copy `ghostty-vt.dll` next to the built DLL.
+
 API: `start(program, args, cwd, env)`, `feed(bytes)`, `write_input(bytes)`, `paste_text(text)`,
-`get_selection_text()`; properties `font`, `font_size`, `palette` (16 colours), `foreground`, `background`;
+`get_selection_text()`, `get_screen_text()`; properties `font`, `font_size`, `palette` (16 colours), `foreground`, `background`;
 signals `exited`, `output_received`, `input_sent`, `grid_resized`, `bell`, `title_changed`.

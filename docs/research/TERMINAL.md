@@ -119,3 +119,30 @@ Bench: `prototype/terminal-ghostty/` (same tests as round 1).
 Still to do before calling it impeccable everywhere: the Windows pseudo-console (ConPTY) and a Windows build,
 a real-GPU measurement on the owner's PC (opens a window: only when asked), real dead keys and IME composition on
 Windows, double/triple-click word and line selection, OSC 52 clipboard and hyperlinks.
+
+## Round 2c: native Windows through ConPTY (2026-11-08)
+
+libghostty-vt cross-built for Windows with Zig (`-Dtarget=x86_64-windows-gnu` → `ghostty-vt.dll`); godot-cpp and
+VtTerminal built with Zig acting as a MinGW compiler (small wrappers in the user's folder). The DLLs import only
+Windows system libraries (KERNEL32, the universal C runtime). The Windows backend (`native/vtterm/src/vt_terminal_win.inc`):
+CreatePseudoConsole, a reader thread, ResizePseudoConsole, exit codes.
+
+Checked with Windows Godot 4.7.2 in headless mode (no window), `prototype/terminal-ghostty/wintest.gd`: **8/8**.
+
+| Check | Result |
+|---|---|
+| cmd prints UTF-8 through ConPTY | pass: « héllo ç — 😀 ok » |
+| PowerShell sees the terminal width; accents | pass: `width=71 é ç « »` (71 = the terminal's columns) |
+| Typed accents reach an interactive cmd and come back | pass |
+| **wsl.exe → tmux** starts (the path for persistent sessions) | pass |
+| tmux in WSL: accents, emoji, width | pass: « depuis WSL é ç 😀 », `cols=71` |
+| Resize reaches tmux through ConPTY | pass: `cols=42` after shrinking |
+| Exit code | pass: 3 |
+
+Two Windows traps found and fixed: a child inherited the parent's redirected standard handles and wrote to Godot's
+own console instead of the pseudo-console (fix: `STARTF_USESTDHANDLES` with null handles); clang drops godot-cpp's
+engine class registration for classes not used in a certain way, so passing a `FontFile` failed (fix: register the
+font classes explicitly).
+
+**Verdict, Loop 2: GO on Linux/WSL and Windows.** Left for the owner's PC (opens a window, only when asked):
+drawing speed on a real GPU, real dead keys and IME composition, a look at the rendering at the screen's DPI.

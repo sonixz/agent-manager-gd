@@ -19,3 +19,9 @@ native/vtterm: a C++ GDExtension (VtTerminal) on libghostty-vt (Ghostty e035beb9
 input encoders. The grid passes on WSL: accents and AltGr, colour emoji, every text style, continuous box drawing,
 31/31 keys (Shift+Tab, Shift+Enter), mouse reports, bracketed paste, resize, themes; idle 131 fps and four terminals
 with one streaming at 52 fps on software rendering (godot-xterm: 43 and 12.5). Native Windows (ConPTY) is next.
+
+## Loop 2c: the terminal on native Windows (2026-11-08)
+
+VtTerminal gets a ConPTY backend; libghostty-vt, godot-cpp and the extension are cross-built for Windows with Zig.
+Headless checks with Windows Godot pass 8/8: UTF-8 from cmd and PowerShell, typed accents, wsl.exe → tmux with
+accents, emoji and width, resize through ConPTY, exit codes. Fixed: inherited standard handles, font class bindings.

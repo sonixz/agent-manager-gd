@@ -33,5 +33,6 @@ Thumbs.db
 
 # Built binaries (VtTerminal extension and libghostty-vt): rebuilt with native/vtterm, never committed
 /prototype/terminal-ghostty/addons/vtterm/bin/
+/native/vtterm/src/*.o
 /native/vtterm/src/*.os
 /native/vtterm/.sconsign.dblite

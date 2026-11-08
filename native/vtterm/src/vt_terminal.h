@@ -33,6 +33,7 @@ public:
 	void write_input(const PackedByteArray &data);   // bytes to the program
 	void paste_text(const String &text);             // bracketed when the program asked for it
 	String get_selection_text() const;
+	String get_screen_text() const;  // the visible screen as plain text (tests, summaries)
 	bool is_running() const { return pid > 0; }
 	int get_cols() const { return cols; }
 	int get_rows() const { return rows; }
@@ -68,6 +69,10 @@ private:
 
 	int pty_fd = -1;
 	int pid = -1;
+#ifdef _WIN32
+	void *win = nullptr;  // ConPTY handles and the reader thread (vt_terminal_win.inc)
+	void _win_close();
+#endif
 	int cols = 80, rows = 24;
 	float cell_w = 9, cell_h = 18, ascent = 14;
 	bool needs_redraw = true;
