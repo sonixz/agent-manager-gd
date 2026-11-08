@@ -74,7 +74,7 @@ class EngineTest(unittest.TestCase):
     def test_named_keys_only(self):
         s = self.sessions.create("k", "shell", self.tmp)
         self.sessions.send(s["id"], "read -r x; echo got:$x", enter=True)
-        time.sleep(0.3)
+        time.sleep(0.8)
         self.sessions.send(s["id"], "yes", enter=False)
         self.sessions.keys(s["id"], ["Enter"])
         self.assertTrue(self.wait_for(s["id"], "got:yes"))
@@ -155,7 +155,7 @@ class EngineTest(unittest.TestCase):
     def test_codex_notify_and_terminal_activity(self):
         s = self.sessions.create("x", "shell", self.tmp)
         rec = {**self.sessions.store.get(s["id"]), "tool": "codex"}
-        time.sleep(ACTIVE + 0.2)
+        time.sleep(ACTIVE + 1.2)  # tmux's window_activity has a one-second resolution
         self.assertEqual(self.sessions.describe(rec)["activity"], "idle")
         self.run_hook(s["id"], "codex", {"type": "agent-turn-complete", "thread-id": "t-9", "last-assistant-message": "Fini."})
         d = self.sessions.describe(rec)
