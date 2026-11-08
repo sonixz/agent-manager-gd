@@ -4,9 +4,9 @@ Chaque loop se termine par une revue du propriétaire (captures, rapport en fran
 
 | Loop | But | Fini quand |
 |---|---|---|
-| **1** | Vision, plan, recherches (marché, terminal) | Ce dossier `docs/` existe et le propriétaire l'a lu |
-| **2** | **Prototype du terminal, « oui ou non »** | Un candidat passe toute la grille de `docs/research/TERMINAL.md`, mesurée, avec captures ; sinon on s'arrête ou on change d'approche |
-| 3 | Moteur Python + sessions tmux persistantes | Lancer, fermer l'appli, rouvrir : les sessions sont là, avec leur terminal |
+| **1** ✅ | Vision, plan, recherches (marché, terminal) | Ce dossier `docs/` existe et le propriétaire l'a lu |
+| **2** ✅ | **Prototype du terminal, « oui ou non »** | Un candidat passe toute la grille de `docs/research/TERMINAL.md`, mesurée, avec captures ; sinon on s'arrête ou on change d'approche |
+| 3 ✅ | Moteur Python + sessions tmux persistantes | Lancer, fermer l'appli, rouvrir : les sessions sont là, avec leur terminal |
 | 4 | Arbre de projets, états en direct, prompt rapide | On voit qui travaille / attend / a fini, on répond sans entrer |
 | 5 | Ressusciter, redémarrer, fork, worktrees | Une session morte revit sur sa conversation ; un fork a sa branche |
 | 6 | **Brain branché d'office** | Chaque session a le MCP du Brain avec sa clé ; la frise du Brain montre l'agent |

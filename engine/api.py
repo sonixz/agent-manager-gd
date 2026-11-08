@@ -1,0 +1,129 @@
+"""Local API on 127.0.0.1 with a bearer token (standard library HTTP server). JSON in, JSON out."""
+from __future__ import annotations
+
+import hmac
+import json
+import os
+import secrets
+import socket
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+from .sessions import TOOLS, Sessions
+
+VERSION = "0.1.0"
+
+
+def load_token(home: str) -> str:
+    path = os.path.join(home, "runtime", "api_token")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if not os.path.exists(path):
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(secrets.token_urlsafe(32))
+    with open(path, encoding="utf-8") as f:
+        return f.read().strip()
+
+
+def make_handler(sessions: Sessions, token: str):
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "agmgd/" + VERSION
+
+        def log_message(self, fmt, *args):  # no request logs (paths only, never the token)
+            pass
+
+        def _reply(self, code: int, body) -> None:
+            data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _authorised(self) -> bool:
+            got = self.headers.get("Authorization", "")
+            return hmac.compare_digest(got, "Bearer " + token)
+
+        def _body(self) -> dict:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 1_000_000:
+                raise ValueError("request too large")
+            raw = self.rfile.read(n) if n else b"{}"
+            data = json.loads(raw.decode("utf-8") or "{}")
+            if not isinstance(data, dict):
+                raise ValueError("a JSON object")
+            return data
+
+        def _route(self, method: str) -> None:
+            url = urlparse(self.path)
+            parts = [p for p in url.path.split("/") if p]
+            if parts == ["health"]:
+                return self._reply(200, {"ok": True, "version": VERSION, "tmux": sessions.tmux.version()})
+            if not self._authorised():
+                return self._reply(401, {"error": "unauthorised"})
+            try:
+                if parts == ["tools"] and method == "GET":
+                    return self._reply(200, {k: v["label"] for k, v in TOOLS.items()})
+                if parts == ["sessions"] and method == "GET":
+                    return self._reply(200, {"sessions": sessions.list()})
+                if parts == ["sessions"] and method == "POST":
+                    b = self._body()
+                    return self._reply(201, sessions.create(str(b.get("name", "")), str(b.get("tool", "shell")),
+                                                            str(b.get("cwd", "~")), str(b.get("group", "")),
+                                                            int(b.get("width", 160)), int(b.get("height", 48))))
+                if len(parts) >= 2 and parts[0] == "sessions":
+                    sid = parts[1]
+                    action = parts[2] if len(parts) > 2 else ""
+                    if method == "GET" and action == "":
+                        return self._reply(200, sessions.get(sid))
+                    if method == "GET" and action == "attach":
+                        return self._reply(200, {"command": sessions.attach_command(sid)})
+                    if method == "GET" and action == "preview":
+                        q = parse_qs(url.query)
+                        return self._reply(200, {"text": sessions.preview(sid, int(q.get("lines", ["30"])[0]))})
+                    if method == "POST" and action == "send":
+                        b = self._body()
+                        sessions.send(sid, str(b.get("text", "")), bool(b.get("enter", True)))
+                        return self._reply(200, {"ok": True})
+                    if method == "POST" and action == "restart":
+                        return self._reply(200, sessions.restart(sid))
+                    if method == "POST" and action == "stop":
+                        return self._reply(200, sessions.stop(sid))
+                    if method == "POST" and action == "rename":
+                        return self._reply(200, sessions.rename(sid, str(self._body().get("name", ""))))
+                    if method == "DELETE" and action == "":
+                        sessions.remove(sid)
+                        return self._reply(200, {"ok": True})
+                return self._reply(404, {"error": "not found"})
+            except KeyError:
+                return self._reply(404, {"error": "no such session"})
+            except (ValueError, json.JSONDecodeError) as e:
+                return self._reply(400, {"error": str(e)})
+            except RuntimeError as e:
+                return self._reply(500, {"error": str(e)})
+
+        def do_GET(self):
+            self._route("GET")
+
+        def do_POST(self):
+            self._route("POST")
+
+        def do_DELETE(self):
+            self._route("DELETE")
+
+    return Handler
+
+
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+def serve(sessions: Sessions, token: str, port: int) -> Server:
+    srv = Server(("127.0.0.1", port), make_handler(sessions, token))
+    return srv
+
+
+def port_free(port: int) -> bool:
+    with socket.socket() as s:
+        return s.connect_ex(("127.0.0.1", port)) != 0

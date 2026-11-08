@@ -36,3 +36,6 @@ Thumbs.db
 /native/vtterm/src/*.o
 /native/vtterm/src/*.os
 /native/vtterm/.sconsign.dblite
+
+# App binaries, built by tools/build_native.sh
+/app/addons/vtterm/bin/

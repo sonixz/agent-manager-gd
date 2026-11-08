@@ -25,3 +25,14 @@ with one streaming at 52 fps on software rendering (godot-xterm: 43 and 12.5). N
 VtTerminal gets a ConPTY backend; libghostty-vt, godot-cpp and the extension are cross-built for Windows with Zig.
 Headless checks with Windows Godot pass 8/8: UTF-8 from cmd and PowerShell, typed accents, wsl.exe → tmux with
 accents, emoji and width, resize through ConPTY, exit codes. Fixed: inherited standard handles, font class bindings.
+
+## Loop 3: the engine and persistent sessions (2026-11-08)
+
+engine/ (Python, standard library only): a private tmux server (`tmux -L agmgd`, sessions `am_<id>`, panes kept
+when a program ends), session records in SQLite, a local API on 127.0.0.1 with a bearer token (file 0600, never
+logged). States: running, exited (last screen kept), missing (after a reboot; restart brings it back).
+app/ (Godot 4.7): the session list, the selected session's live VtTerminal attached to tmux, New session (Claude
+Code, Codex, shell; Windows paths become WSL paths), Restart, Stop, Remove. Closing the app leaves the sessions
+running; reopening attaches again with their screens. Checked end to end on Linux (virtual display, captures in
+docs/screens/loop3) and with Windows Godot headless through ConPTY and wsl.exe (engine started by a login shell so
+the user's claude is on PATH). 9 engine tests.

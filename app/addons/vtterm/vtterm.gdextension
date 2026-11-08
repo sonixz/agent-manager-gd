@@ -1,0 +1,15 @@
+[configuration]
+entry_symbol = "vtterm_init"
+compatibility_minimum = "4.7"
+
+[libraries]
+linux.debug.x86_64 = "res://addons/vtterm/bin/libvtterm.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://addons/vtterm/bin/libvtterm.linux.template_release.x86_64.so"
+windows.debug.x86_64 = "res://addons/vtterm/bin/libvtterm.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/vtterm/bin/libvtterm.windows.template_release.x86_64.dll"
+
+[dependencies]
+linux.debug.x86_64 = {"res://addons/vtterm/bin/libghostty-vt.so.1": ""}
+linux.release.x86_64 = {"res://addons/vtterm/bin/libghostty-vt.so.1": ""}
+windows.debug.x86_64 = {"res://addons/vtterm/bin/ghostty-vt.dll": ""}
+windows.release.x86_64 = {"res://addons/vtterm/bin/ghostty-vt.dll": ""}
