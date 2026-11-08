@@ -188,3 +188,13 @@ tool; a session without a readable log says so. No money amount: the logs carry 
 would mislead. The Usage view: totals per tool, tokens per day (one series, thin bars, details on hover), a table
 per session. Captured with a real log of this computer. The Fly.io cost part waits for the sandboxes (Loops 12–13).
 Tests: 47.
+
+## Loop 12: Fly.io sandbox go/no-go — GO (2026-11-08)
+
+With the owner's org token (Keys, DPAPI) and his « agent-manager » organisation. flyctl v0.5.5 from the official
+release (checksums checked). A machine from our own image (sandbox/Dockerfile: tmux, git, sshd on 2222, Node, Claude
+Code, Codex; built by Fly's remote builder into the org's private registry) is ready in ≈ 30 s in Toronto (Montréal
+is closed to new machines); the terminal attaches in 0.6 s with 45 ms key-to-echo; a reverse SSH tunnel makes the
+sandbox's 127.0.0.1:8765 reach this computer (the Brain's path); the sandbox's tmux opens in Agent Manager. Fly's own
+SSH (port 22) gives no usable pseudo-terminal to a program, hence our sshd on 2222 behind `flyctl proxy`. Cost ≈ $0.004;
+the machines are stopped, not destroyed. Details: docs/research/SANDBOX-SPIKE.md.
