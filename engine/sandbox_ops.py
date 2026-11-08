@@ -41,6 +41,43 @@ def ssh_run(sbx, sbid: str, command: str, timeout: int = 60) -> tuple[int, str]:
             proxy.kill()
 
 
+def health(sbx, sbid: str, mcp_expected: bool) -> dict:
+    """Loop 16: one SSH round trip for everything the card shows: tunnel and Brain, the agent's MCP configuration,
+    the repository's branch, uncommitted files and commits not pushed. Cached in sbx.health."""
+    rep = connection(sbx, sbid)
+    rep.update({"mcp": None, "branch": "", "dirty": None, "unpushed": None, "checked": time.time()})
+    if rep["tunnel"] == "up":
+        sb = sbx.get(sbid)
+        wd = sb["workdir"]
+        cmd = (f"test -s /root/.agmgd/mcp.json && grep -q second-brain /root/.agmgd/mcp.json && echo MCP-CONF; echo ---; "
+               f"cd {wd} 2>/dev/null && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && "
+               f"git rev-parse --abbrev-ref HEAD && git status --porcelain | wc -l && "
+               f"(git rev-list --count @{{u}}..HEAD 2>/dev/null || git rev-list --count HEAD --not --remotes)")
+        rc, out = ssh_run(sbx, sbid, cmd, 30)
+        if rc in (0, 1):
+            head, _, git = out.partition("---")
+            rep["mcp"] = ("MCP-CONF" in head and bool(rep["brain"])) if mcp_expected else None
+            lines = [x.strip() for x in git.strip().splitlines() if x.strip()]
+            if len(lines) >= 3:
+                rep["branch"], rep["dirty"], rep["unpushed"] = lines[0], int(lines[1]), int(lines[2])
+    sbx.health[sbid] = rep
+    return rep
+
+
+def monitor(sessions, every: float = 60.0) -> None:
+    """Background loop (engine only): checks each running sandbox whose terminal is open, about once a minute."""
+    while True:
+        time.sleep(every)
+        try:
+            for sb in sessions.sandboxes.all():
+                if sb["destroyed"] or not attach_running(sb["id"]):
+                    continue
+                rec = sessions.store.get(sb["session_id"]) or {}
+                health(sessions.sandboxes, sb["id"], bool(rec.get("brain_client")))
+        except Exception:
+            pass
+
+
 def connection(sbx, sbid: str) -> dict:
     """Machine state, tunnel (the session's SSH with its reverse port), latency, the Brain reachable from inside."""
     sb = sbx.get(sbid)

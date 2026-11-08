@@ -133,8 +133,9 @@ def make_handler(sessions: Sessions, token: str):
                         from .sandbox_ops import ssh_run
                         return self._reply(200, sbx.unpushed(sbid, lambda i, c: ssh_run(sbx, i, c)))
                     if act == "connection" and method == "GET":
-                        from .sandbox_ops import connection
-                        return self._reply(200, connection(sbx, sbid))
+                        from .sandbox_ops import health
+                        rec = sessions.store.get(sbx.get(sbid)["session_id"]) or {}
+                        return self._reply(200, health(sbx, sbid, bool(rec.get("brain_client"))))
                     if act == "destroy" and method == "POST":
                         out = sbx.destroy(sbid, bool(self._body().get("confirmed", False)), sessions.brain)
                         sessions.tmux.kill(sessions.tmux_name(out["session_id"]))

@@ -44,7 +44,22 @@ CREATE TABLE IF NOT EXISTS sandboxes (
     created REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sandbox_config (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+-- Loop 16: every period a machine ran, copied from Fly's machine history (kept after the machine is destroyed)
+CREATE TABLE IF NOT EXISTS sandbox_runs (sandbox TEXT NOT NULL, size TEXT NOT NULL, start REAL NOT NULL, stop REAL,
+    PRIMARY KEY (sandbox, start));
 """
+# What our image holds (sandbox/Dockerfile): shown before the owner deploys it
+IMAGE_CONTENTS = [
+    ("Ubuntu 24.04", "the base system"),
+    ("tmux", "the session keeps running when the terminal closes"),
+    ("git + OpenSSH", "clones your connected repository with its own deploy key"),
+    ("SSH server, port 2222", "keys only, no password; one key per sandbox"),
+    ("Node.js + Python 3", "for the agents and your tools"),
+    ("Claude Code", "latest version at build time; uses your Anthropic key from Keys"),
+    ("Codex", "latest version at build time; uses your OpenAI key from Keys"),
+]
+HOURS_PER_MONTH = 730
+IMAGE_GB = 1.0  # a machine's root disk, roughly our image: what a stopped (paused) machine is billed for
 
 
 class Fly:
@@ -71,13 +86,49 @@ class Fly:
         return json.loads(out[start:])
 
 
+class DemoFly:
+    """Captures only (AGMGD_DEMO_FLY=<json file>): machines, apps and health read from a file, every command a no-op.
+    Never used unless that variable is set; nothing reaches Fly.io."""
+
+    def __init__(self, path: str):
+        self.path = path
+
+    @property
+    def data(self) -> dict:  # read on every call: the capture script writes it after the engine started
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def available(self) -> bool:
+        return True
+
+    def env(self) -> dict:
+        return dict(os.environ)
+
+    def run(self, *args, timeout=0, cwd=None, inp=None):
+        return 0, "demo"
+
+    def json(self, *args):
+        if args[:2] == ("machine", "list"):
+            return self.data.get("machines", [])
+        if args[:2] == ("apps", "list"):
+            return self.data.get("apps", [])
+        if args[:2] == ("orgs", "list"):
+            return {"agent-manager": "Agent Manager"}
+        return []
+
+
 class Sandboxes:
     def __init__(self, db_path: str, home: str, keys, fly: Fly | None = None):
         self.db_path = db_path
         self.home = home
         self.keys = keys
-        self.fly = fly or Fly(lambda: keys.get("fly"))
+        demo = os.environ.get("AGMGD_DEMO_FLY", "")
+        self.fly = fly or (DemoFly(demo) if demo else Fly(lambda: keys.get("fly")))
         self.key_dir = os.path.join(home, "keys", "sandbox")
+        self.health: dict[str, dict] = {}  # Loop 16: the last check of each running sandbox (sandbox_ops.monitor)
         with closing(self._db()) as db, db:
             db.executescript(SCHEMA)
 
@@ -100,7 +151,8 @@ class Sandboxes:
 
     def status(self) -> dict:
         ready = bool(self.config("image"))
-        return {"flyctl": os.path.exists(FLYCTL), "token": bool(self.keys.describe("fly")["set"]),
+        demo = isinstance(self.fly, DemoFly)
+        return {"flyctl": demo or os.path.exists(FLYCTL), "token": demo or bool(self.keys.describe("fly")["set"]),
                 "org": self.config("org"), "app": self.config("app"), "image": self.config("image"), "ready": ready,
                 "region": self.config("region", "yyz"), "prices": PRICE_SOURCE, "job": dict(self._job)}
 
@@ -150,6 +202,7 @@ class Sandboxes:
         if rc != 0:
             raise ValueError("the image did not build: " + out[-300:])
         self.set_config("image", f"registry.fly.io/{app}:v1")
+        self.set_config("image_built", str(time.time()))
         return self.status()
 
     # ---------------------------------------------------------------- records
@@ -252,6 +305,90 @@ class Sandboxes:
         shutil.rmtree(os.path.dirname(self.key_path(sbid)), ignore_errors=True)
         self._set(sbid, destroyed=1)
         return self.get(sbid)
+
+    # ---------------------------------------------------------------- Loop 16: image, estimates, measured costs
+    def image_info(self) -> dict:
+        built = float(self.config("image_built", "0") or 0)
+        return {"name": "Agent Manager sandbox image", "recipe": "sandbox/Dockerfile", "contents": [list(c) for c in IMAGE_CONTENTS],
+                "ready": bool(self.config("image")), "built": built, "image": self.config("image"),
+                "build_note": "Fly builds it in your organisation's private registry, about 2 minutes, once"}
+
+    def estimate(self, size: str = "shared-cpu-1x-1024") -> dict:
+        """Before deploying: what a sandbox costs while it runs, and while it is paused (published prices)."""
+        month = PRICES.get(size, 6.70)
+        hour = month / HOURS_PER_MONTH
+        return {"size": size, "per_hour": round(hour, 4), "per_day_on": round(hour * 24, 3), "per_month_on": month,
+                "paused_per_month": round(STOPPED_GB_MONTH * IMAGE_GB, 2), "source": PRICE_SOURCE}
+
+    @staticmethod
+    def intervals(m: dict) -> list[tuple[float, float | None]]:
+        """The periods a machine ran, from its event history (stop None: still running)."""
+        evs = sorted(m.get("events") or [], key=lambda e: e.get("timestamp", 0))
+        out, since = [], None
+        for e in evs:
+            t = float(e.get("timestamp", 0)) / 1000.0
+            kind = str(e.get("type", ""))
+            if kind in ("start", "launch") and since is None:
+                since = t
+            elif kind in ("stop", "exit", "destroy") and since is not None:
+                out.append((since, t))
+                since = None
+        if since is not None and m.get("state") == "started":
+            out.append((since, None))
+        return out
+
+    def sync_runs(self, live: dict) -> None:
+        """Copies each known machine's run periods into sandbox_runs (they survive the machine)."""
+        with closing(self._db()) as db, db:
+            for sb in self.all():
+                m = live.get(sb["machine"])
+                if not m:
+                    continue
+                for start, stop in self.intervals(m):
+                    db.execute("INSERT INTO sandbox_runs (sandbox, size, start, stop) VALUES (?, ?, ?, ?) "
+                               "ON CONFLICT(sandbox, start) DO UPDATE SET stop = excluded.stop", (sb["id"], sb["size"], start, stop))
+                # a period recorded as running whose machine is now stopped: close it at the last event
+                if m.get("state") != "started":
+                    last = max([float(e.get("timestamp", 0)) / 1000.0 for e in (m.get("events") or [])] or [time.time()])
+                    db.execute("UPDATE sandbox_runs SET stop = ? WHERE sandbox = ? AND stop IS NULL", (last, sb["id"]))
+
+    def runs(self) -> list[dict]:
+        with closing(self._db()) as db:
+            return [dict(r) for r in db.execute("SELECT * FROM sandbox_runs ORDER BY start")]
+
+    def cost_series(self, days: int = 30, now: float | None = None) -> dict:
+        """Measured cost per day (all sandboxes), this month's running total, and per sandbox today / this month.
+        Measured = the running time in Fly's own machine history × the published price (not Fly's invoice)."""
+        now = now or time.time()
+        lt = time.localtime(now)
+        today0 = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+        month0 = time.mktime((lt.tm_year, lt.tm_mon, 1, 0, 0, 0, 0, 0, -1))
+        starts = [today0 - 86400 * i for i in range(days - 1, -1, -1)]
+        day_cost = [0.0] * days
+        per = {}
+        for r in self.runs():
+            a, b = r["start"], r["stop"] or now
+            rate = PRICES.get(r["size"], 6.70) / (HOURS_PER_MONTH * 3600)
+            for i, d0 in enumerate(starts):
+                d1 = d0 + 86400
+                ov = min(b, d1) - max(a, d0)
+                if ov > 0:
+                    day_cost[i] += ov * rate
+            p = per.setdefault(r["sandbox"], {"today": 0.0, "month": 0.0, "total": 0.0, "running_since": None})
+            p["today"] += max(0.0, min(b, now) - max(a, today0)) * rate
+            p["month"] += max(0.0, min(b, now) - max(a, month0)) * rate
+            p["total"] += max(0.0, b - a) * rate
+            if r["stop"] is None:
+                p["running_since"] = a
+        cum, run = [], 0.0
+        for d0, c in zip(starts, day_cost):
+            run = run + c if d0 >= month0 else 0.0
+            cum.append(round(run, 4))
+        return {"days": [time.strftime("%Y-%m-%d", time.localtime(d)) for d in starts],
+                "day_cost": [round(c, 4) for c in day_cost], "month_cumulative": cum,
+                "today": round(sum(v["today"] for v in per.values()), 4), "month": round(sum(v["month"] for v in per.values()), 4),
+                "per_sandbox": {k: {kk: (round(vv, 4) if isinstance(vv, float) and kk != "running_since" else vv) for kk, vv in v.items()} for k, v in per.items()},
+                "measured_note": "measured: running time from Fly's machine history × published price; Fly's invoice is on its dashboard"}
 
     # ---------------------------------------------------------------- orphans: the owner may destroy them, confirmed
     def org(self) -> str:
@@ -405,9 +542,22 @@ class Sandboxes:
                     orphans.append({"app": name, "machine": "", "name": "(another Agent Manager app)", "state": a.get("Status", "")})
         except (RuntimeError, ValueError, OSError):
             pass
+        if reachable:
+            self.sync_runs(live)
+        series = self.cost_series()
+        for row in rows:
+            ps = series["per_sandbox"].get(row["id"], {})
+            row["cost_today"] = ps.get("today", 0.0)
+            row["cost_month"] = ps.get("month", 0.0)
+            row["running_since"] = ps.get("running_since") if row["state"] == "started" else None
+            row["health"] = self.health.get(row["id"])
+            if row["health"] is None and isinstance(self.fly, DemoFly):
+                demo_h = self.fly.data.get("health", {}).get(row["id"])
+                row["health"] = {**demo_h, "checked": time.time() - 20} if demo_h else None
         b = self.budget()
         spend = self.month_spend(live)
         return {"sandboxes": rows, "orphans": orphans, "fly_reachable": reachable, **self.status(), "org": self.org(),
                 "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 4), "budget": b, "month_spend_usd": spend,
                 "budget_percent": round(100 * spend / b["monthly_usd"], 1) if b["monthly_usd"] > 0 else None,
-                "storage_note": f"stopped machines: ${STOPPED_GB_MONTH}/GB/month of root disk"}
+                "storage_note": f"stopped machines: ${STOPPED_GB_MONTH}/GB/month of root disk",
+                "image_info": self.image_info(), "estimate": self.estimate(), "costs": series}

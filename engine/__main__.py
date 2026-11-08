@@ -37,6 +37,9 @@ def main(argv: list[str] | None = None) -> int:
     print("Second Brain: " + ("connected" if brain.enabled and brain.status()["connected"] else "not connected"), flush=True)
     sessions.port = a.port
     srv = serve(sessions, load_token(h), a.port)
+    import threading
+    from .sandbox_ops import monitor
+    threading.Thread(target=monitor, args=(sessions,), daemon=True).start()  # Loop 16: sandbox health, once a minute
     print(f"engine ready on 127.0.0.1:{a.port} (data: {h})", flush=True)
     try:
         srv.serve_forever()

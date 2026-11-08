@@ -1,0 +1,5 @@
+engine connected: true
+demo: ["/tmp/agmgd-shots-4mvd/demo-fly.json\n"]
+capture 48-sandboxes-control
+capture 49-sandboxes-costs-cards
+capture 50-deploy-agentic

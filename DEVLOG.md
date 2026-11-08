@@ -269,3 +269,23 @@ check, a Claude Code session on it that read the Second Brain over MCP). Destroy
 found a bug: the generic /sandboxes/<id>/<action> route answered before the orphan routes (« no such session »). Fixed
 by ordering the routes; a new test calls the owner routes over HTTP (it fails without the fix). The two leftover apps
 (6 stopped machines from Loops 12–13) were then destroyed at the owner's request; none is left. Tests: 56.
+
+## Loop 16: the Sandboxes tab as a control room (2026-11-08)
+
+Asked by the owner after his first look: the tab said too little. Now, in three steps and live cards:
+- **1 · The image**: what it holds (Ubuntu 24.04, tmux, git + OpenSSH, our SSH server on 2222 with keys only, Node,
+  Python, Claude Code, Codex), « Use this image → Deploy it », then ready with its build date and « Rebuild » for newer
+  agents.
+- **2 · Deploy**: the estimate first (published price: per hour running, per day if left on, per month paused), then
+  « Deploy + open a shell » or « Deploy + agentic coding session » (the New session dialog, set for the cloud).
+- **3 · Costs**: today, this month, the budget, and a chart drawn in Godot (cost per day as bars, the month's running
+  total as a line, the budget dashed when it is in reach; hover a day for its numbers). Measured costs: the running
+  periods from Fly's own machine history, copied into `sandbox_runs` so they outlive the machine, × the published
+  price. flyctl has no billing command: Fly's invoice stays on its dashboard, and the screen says so.
+- **Cards**: a live « on for 1h 25m » counter, chips (machine, terminal, SSH tunnel with latency, MCP Second Brain
+  ready), the branch, files not committed and commits not pushed, the agent's state, today / month / total cost. The
+  engine checks running sandboxes with an open terminal about once a minute (one SSH round trip); « Check now » too.
+- **Rule**: a sandbox always has its session on the left: archiving or wrapping up a session whose sandbox exists is
+  refused until the sandbox is destroyed.
+- Captures use a demo Fly (`AGMGD_DEMO_FLY`, `tools/demo_sandboxes.py`): nothing reached Fly.io for them. The health
+  checks over SSH were not run against a real sandbox in this loop: the owner's sandbox test is next. Tests: 58.

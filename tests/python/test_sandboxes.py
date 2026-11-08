@@ -191,6 +191,37 @@ class SandboxesTest(unittest.TestCase):
         self.assertEqual(self.s.revoke_brain_key("cold-test", True), {"revoked": "cold-test"})
         self.assertEqual(self.brain.revoked, ["cold-test"])
 
+    def test_a_sandbox_never_hides_behind_an_archived_session(self):
+        self.s.sandboxes.prepare()
+        d = self.s.create("Cloud agent", "claude", "", host="sandbox")
+        with self.assertRaises(ValueError):
+            self.s.archive(d["id"])
+        with self.assertRaises(ValueError):
+            self.s.wrap_up(d["id"])
+        sb = self.s.sandboxes.by_session(d["id"])
+        self.s.sandboxes.destroy(sb["id"], True)
+        self.assertEqual(self.s.archive(d["id"])["state"], "archived")
+
+    def test_measured_costs_survive_the_machine_and_estimates_come_first(self):
+        est = self.s.sandboxes.estimate()
+        self.assertAlmostEqual(est["per_hour"], round(6.70 / 730, 4))
+        self.assertGreater(est["paused_per_month"], 0)
+        self.assertTrue(self.s.sandboxes.image_info()["contents"])
+        self.s.sandboxes.prepare()
+        d = self.s.create("Cloud work", "shell", "", host="sandbox")
+        sb = self.s.sandboxes.by_session(d["id"])
+        now = 1_000_000 + 7_200 + 1_800                         # the fake machine: ran 1 h, stopped 1 h, running again 30 min
+        m = next(m for m in self.fly.machines if m["id"] == sb["machine"])
+        self.assertEqual(self.s.sandboxes.intervals(m), [(1000.0, 4600.0), (8200.0, None)])
+        self.s.sandboxes.sync_runs({sb["machine"]: m})
+        self.s.sandboxes.destroy(sb["id"], True)                  # the history stays
+        runs = self.s.sandboxes.runs()
+        self.assertEqual(len(runs), 2)
+        series = self.s.sandboxes.cost_series(days=3, now=now)
+        self.assertEqual(len(series["day_cost"]), 3)
+        self.assertGreater(series["per_sandbox"][sb["id"]]["total"], 0)
+        self.assertIsNotNone(series["per_sandbox"][sb["id"]]["running_since"])
+
     def test_the_owner_routes_answer_over_http(self):
         """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
         tok = load_token(self.tmp)

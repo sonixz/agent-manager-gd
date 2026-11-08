@@ -572,6 +572,31 @@ func _run() -> void:
 			for sb in ov.get("sandboxes", []):  # pause them: never destroyed by Agent Manager
 				await main.engine.call_api("POST", "/sandboxes/%s/stop" % sb["id"], {}, true, 120.0)
 			report.append("stopped (not destroyed): %d" % (ov.get("sandboxes", []) as Array).size())
+		"control":
+			# Loop 16 captures: a demo Fly (AGMGD_DEMO_FLY, set by the shot script), two sessions with their sandboxes
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Site redesign", "tool": "claude", "cwd": "~", "group": "GD Project", "brain": false})
+			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "shell", "cwd": "~", "group": "GD Project"})
+			var out := []
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), OS.get_environment("AGMGD_HOME"), str(a["id"]), str(b["id"])], out)
+			report.append("demo: " + str(out))
+			await main.refresh()
+			main.set_view("sandboxes")
+			await wait(3.0)
+			await main._load_sandboxes()
+			await wait(2.5)
+			await shot("48-sandboxes-control")
+			var sc: ScrollContainer = main.sbx_box.get_parent()
+			sc.scroll_vertical = 520
+			await wait(1.0)
+			for c in main.sbx_box.find_children("*", "CostChart", true, false):
+				c.hover = 22
+				c.queue_redraw()
+			await wait(0.5)
+			await shot("49-sandboxes-costs-cards")
+			sc.scroll_vertical = 0
+			main._open_new("sandbox", "claude")
+			await wait(2.0)
+			await shot("50-deploy-agentic")
 		"manage":
 			# read-only: the owner's Fly token copied in; nothing is prepared, so the leftover apps show as orphans
 			var data := OS.get_environment("AGMGD_HOME")

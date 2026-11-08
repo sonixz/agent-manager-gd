@@ -545,7 +545,7 @@ func _check_brief() -> void:
 	f_brief.text = "Brief it with the latest summary of this folder (%s, a short first message)" % _date(float(list[0]["created"]))
 
 
-func _open_new() -> void:
+func _open_new(where := "", tool := "") -> void:
 	f_name.text = ""
 	f_cwd.editable = true
 	f_repo.clear()
@@ -573,6 +573,12 @@ func _open_new() -> void:
 	for i in f_group.item_count:
 		if str(f_group.get_item_metadata(i)) == cur:
 			f_group.select(i)
+	for i in f_where.item_count:  # Loop 16: « Deploy » from the Sandboxes tab opens it ready for the cloud
+		if where != "" and str(f_where.get_item_metadata(i)) == where:
+			f_where.select(i)
+	for i in f_tool.item_count:
+		if tool != "" and str(f_tool.get_item_metadata(i)) == tool:
+			f_tool.select(i)
 	new_dialog.popup_centered()
 	f_name.grab_focus()
 
@@ -1412,12 +1418,23 @@ func _sandboxes_view() -> Control:
 	return scroll
 
 
+var sbx_live: Array = []  # [Label, running_since] pairs ticking every second
+var sbx_tick: Timer
+
+
 func _load_sandboxes() -> void:
-	var r := await engine.call_api("GET", "/sandboxes")
+	var r := await engine.call_api("GET", "/sandboxes", null, true, 60.0)
 	if sbx_box == null or not is_instance_valid(sbx_box):
 		return
 	for c in sbx_box.get_children():
 		c.queue_free()
+	sbx_live.clear()
+	if sbx_tick == null:
+		sbx_tick = Timer.new()
+		sbx_tick.wait_time = 1.0
+		add_child(sbx_tick)
+		sbx_tick.timeout.connect(_sbx_second)
+		sbx_tick.start()
 	var title := Label.new()
 	title.text = "Cloud sandboxes"
 	title.add_theme_font_size_override("font_size", 18)
@@ -1426,115 +1443,228 @@ func _load_sandboxes() -> void:
 	if r.has("error"):
 		sbx_box.add_child(_muted(str(r["error"])))
 		return
-	var head := _muted("Fly.io · organisation %s · app %s · region %s · %s   ·   Agent Manager never destroys a sandbox on its own." % [
-		r.get("org", "—") if str(r.get("org", "")) != "" else "—", r.get("app", "—") if str(r.get("app", "")) != "" else "—",
-		r.get("region", "yyz"), "image ready" if r.get("ready", false) else "not prepared"])
-	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var head := _wrap("Fly.io · organisation %s · region %s · one sandbox per agent session, always listed on the left · Agent Manager never destroys a sandbox on its own." % [
+		r.get("org", "—") if str(r.get("org", "")) != "" else "—", r.get("region", "yyz")])
+	head.add_theme_font_size_override("font_size", 12)
 	sbx_box.add_child(head)
-	var job: Dictionary = r.get("job", {})
-	if str(job.get("state", "")) == "preparing":
-		sbx_box.add_child(_muted("⏳ Preparing: " + str(job.get("message", ""))))
-		get_tree().create_timer(5.0).timeout.connect(func() -> void:
-			if view == "sandboxes":
-				_load_sandboxes())
-	elif str(job.get("state", "")) == "error":
-		var er := _muted("Preparing failed: " + str(job.get("message", "")))
-		er.add_theme_color_override("font_color", AmTheme.col("ERROR"))
-		er.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sbx_box.add_child(er)
-	if not r.get("ready", false) and str(job.get("state", "")) != "preparing":
-		var prep := Button.new()
-		prep.text = "Prepare cloud sandboxes (once: an app and our image in your organisation)"
-		prep.disabled = not (r.get("token", false) and r.get("flyctl", false))
-		prep.tooltip_text = "" if not prep.disabled else "Paste the Fly.io token in Keys first"
-		prep.pressed.connect(func() -> void:
-			_toast("Preparing: Fly builds our image (about 2 minutes)…")
-			await engine.call_api("POST", "/sandboxes/prepare", {})
-			await _load_sandboxes())
-		sbx_box.add_child(prep)
-	var tot := Label.new()
-	tot.text = "Estimated cost so far: $%.4f   (%s)" % [float(r.get("total_cost_usd", 0)), r.get("prices", "")]
-	tot.add_theme_color_override("font_color", AmTheme.col("MUTED"))
-	tot.add_theme_font_size_override("font_size", 12)
-	sbx_box.add_child(tot)
-	sbx_box.add_child(_budget_panel(r))
-	var finished: Array = (r.get("sandboxes", []) as Array).filter(func(x): return int(x["finished"]) == 1 and int(x["destroyed"]) == 0)
+	if not (r.get("token", false) and r.get("flyctl", false)):
+		var need := _wrap("First paste your Fly.io token in Keys (◐ → Keys…).")
+		need.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		sbx_box.add_child(need)
+	sbx_box.add_child(_sbx_image_step(r))
+	sbx_box.add_child(_sbx_deploy_step(r))
+	sbx_box.add_child(_sbx_costs(r))
+	var rows: Array = r.get("sandboxes", [])
+	var alive: Array = rows.filter(func(x): return int(x["destroyed"]) == 0)
+	if not alive.is_empty():
+		sbx_box.add_child(_section_label("Your sandboxes (%d)" % alive.size()))
+	for sb in alive:
+		sbx_box.add_child(_sandbox_card(sb, r))
+	var finished: Array = alive.filter(func(x): return int(x["finished"]) == 1)
 	if not finished.is_empty():
-		sbx_box.add_child(_small("Destroy the finished ones (%d)…" % finished.size(), func() -> void:
+		var fb := _small("Destroy the finished ones (%d)…" % finished.size(), func() -> void:
 			_confirm("Destroy %d finished sandbox(es): %s?\nTheir machines, files and keys are deleted for good." % [finished.size(), ", ".join(finished.map(func(x): return str(x["id"])))], func() -> void:
 				for x in finished:
-					await engine.call_api("POST", "/sandboxes/%s/destroy" % x["id"], {"confirmed": true})
+					await engine.call_api("POST", "/sandboxes/%s/destroy" % x["id"], {"confirmed": true}, true, 120.0)
 				await refresh()
-				await _load_sandboxes())))
-	for sb in r.get("sandboxes", []):
-		sbx_box.add_child(_sandbox_card(sb))
+				await _load_sandboxes()))
+		fb.size_flags_horizontal = SIZE_SHRINK_BEGIN
+		sbx_box.add_child(fb)
+	_sbx_orphans(r)
+	# keep the view current while it is shown
+	get_tree().create_timer(30.0).timeout.connect(func() -> void:
+		if view == "sandboxes" and is_instance_valid(sbx_box):
+			_load_sandboxes())
+
+
+func _sbx_second() -> void:
+	if view != "sandboxes":
+		return
+	for pair in sbx_live:
+		var l: Label = pair[0]
+		if is_instance_valid(l):
+			l.text = "on for " + _span(Time.get_unix_time_from_system() - float(pair[1]))
+
+
+static func _span(sec: float) -> String:
+	var s := int(maxf(0.0, sec))
+	if s < 60:
+		return "%ds" % s
+	if s >= 86400:
+		return "%dd %02dh" % [s / 86400, (s % 86400) / 3600]
+	if s >= 3600:
+		return "%dh %02dm" % [s / 3600, (s % 3600) / 60]
+	return "%dm %02ds" % [s / 60, s % 60]
+
+
+func _section_label(t: String) -> Label:
+	var l := Label.new()
+	l.text = t
+	l.add_theme_font_size_override("font_size", 15)
+	l.add_theme_font_override("font", AmTheme.ui_font(650))
+	return l
+
+
+func _step_panel(step: String, title: String, done: bool) -> Array:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, AmTheme.col("MINT") if done else AmTheme.col("BORDER"), 1, 14))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	card.add_child(v)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	var num := Label.new()
+	num.text = "✓" if done else step
+	num.add_theme_color_override("font_color", AmTheme.col("MINT") if done else AmTheme.col("FAINT"))
+	num.add_theme_font_override("font", AmTheme.ui_font(650))
+	h.add_child(num)
+	var t := Label.new()
+	t.text = title
+	t.add_theme_font_override("font", AmTheme.ui_font(650))
+	t.add_theme_font_size_override("font_size", 15)
+	h.add_child(t)
+	v.add_child(h)
+	return [card, v, h]
+
+
+func _sbx_image_step(r: Dictionary) -> Control:
+	var info: Dictionary = r.get("image_info", {})
+	var ready := bool(info.get("ready", false))
+	var job: Dictionary = r.get("job", {})
+	var parts := _step_panel("1", "The image: what each sandbox starts from", ready)
+	var v: VBoxContainer = parts[1]
+	var h: HBoxContainer = parts[2]
+	var st := _muted(("ready · built " + _date(float(info.get("built", 0)))) if ready and float(info.get("built", 0)) > 0 else ("ready" if ready else "not deployed yet"))
+	st.size_flags_horizontal = SIZE_EXPAND_FILL
+	h.add_child(st)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 18)
+	grid.add_theme_constant_override("v_separation", 4)
+	for c in info.get("contents", []):
+		var k := Label.new()
+		k.text = "• " + str(c[0])
+		k.add_theme_font_size_override("font_size", 13)
+		grid.add_child(k)
+		var d := _muted(str(c[1]))
+		d.add_theme_font_size_override("font_size", 13)
+		grid.add_child(d)
+	v.add_child(grid)
+	v.add_child(_muted("We provide it: %s, built by Fly in your organisation's private registry (about 2 minutes, once)." % str(info.get("recipe", "sandbox/Dockerfile"))))
+	if str(job.get("state", "")) == "preparing":
+		v.add_child(_muted("⏳ " + str(job.get("message", "building…"))))
+	elif str(job.get("state", "")) == "error":
+		var er := _wrap("The build failed: " + str(job.get("message", "")))
+		er.add_theme_color_override("font_color", AmTheme.col("ERROR"))
+		v.add_child(er)
+	if str(job.get("state", "")) != "preparing":
+		var btn := _small("Rebuild (newer Claude Code and Codex)" if ready else "Use this image → Deploy it", func() -> void:
+			_toast("Fly builds the image (about 2 minutes)…")
+			await engine.call_api("POST", "/sandboxes/prepare", {})
+			await _load_sandboxes())
+		btn.disabled = not (r.get("token", false) and r.get("flyctl", false))
+		btn.size_flags_horizontal = SIZE_SHRINK_BEGIN
+		v.add_child(btn)
+	return parts[0]
+
+
+func _sbx_deploy_step(r: Dictionary) -> Control:
+	var e: Dictionary = r.get("estimate", {})
+	var ready := bool(r.get("ready", false))
+	var parts := _step_panel("2", "Deploy a sandbox for an agent", false)
+	var v: VBoxContainer = parts[1]
+	var est := _wrap("Estimated, before you deploy (%s, %s): ≈ %s an hour while it runs · ≈ %s a day if left on · ≈ %s a month paused (its disk only)." % [
+		str(e.get("size", "")), str(e.get("source", "")), CostChart.money(float(e.get("per_hour", 0))), CostChart.money(float(e.get("per_day_on", 0))), CostChart.money(float(e.get("paused_per_month", 0)))])
+	v.add_child(est)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var a := _small("☁ Deploy + open a shell", func() -> void: _open_new("sandbox", "shell"))
+	var b := _small("☁ Deploy + agentic coding session", func() -> void: _open_new("sandbox", "claude"))
+	for x in [a, b]:
+		x.disabled = not ready
+		x.tooltip_text = "" if ready else "Deploy the image first (step 1)"
+		row.add_child(x)
+	v.add_child(row)
+	v.add_child(_muted("Each sandbox belongs to its session: it is on the left with ☁, and goes away only when you destroy it."))
+	return parts[0]
+
+
+func _sbx_costs(r: Dictionary) -> Control:
+	var costs: Dictionary = r.get("costs", {})
+	var b: Dictionary = r.get("budget", {})
+	var limit := float(b.get("monthly_usd", 0))
+	var parts := _step_panel("3", "Costs", false)
+	var v: VBoxContainer = parts[1]
+	(parts[2] as HBoxContainer).get_child(0).text = "$"
+	var nums := HBoxContainer.new()
+	nums.add_theme_constant_override("separation", 28)
+	var month := float(costs.get("month", 0))
+	for kv in [["Today", float(costs.get("today", 0))], ["This month", month], ["Budget", limit]]:
+		var col := VBoxContainer.new()
+		var big := Label.new()
+		big.text = CostChart.money(kv[1]) if not (kv[0] == "Budget" and limit <= 0) else "none"
+		big.add_theme_font_size_override("font_size", 22)
+		big.add_theme_font_override("font", AmTheme.ui_font(650))
+		if kv[0] == "This month" and limit > 0:
+			big.add_theme_color_override("font_color", AmTheme.col("ERROR") if month >= limit else (AmTheme.col("WARN") if month >= 0.8 * limit else AmTheme.col("TEXT")))
+		col.add_child(big)
+		col.add_child(_muted(kv[0] + ((" · %d %%" % int(100 * month / limit)) if kv[0] == "This month" and limit > 0 else "")))
+		nums.add_child(col)
+	v.add_child(nums)
+	var chart := CostChart.new()
+	chart.set_data(costs, limit)
+	v.add_child(chart)
+	var key := _muted("Bars: cost per day · line: this month's running total%s. %s." % [(" · dashed: your budget" if month >= 0.25 * limit else " · your budget is far above, so it is not drawn") if limit > 0 else "", str(costs.get("measured_note", ""))])
+	key.add_theme_font_size_override("font_size", 12)
+	key.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(key)
+	v.add_child(_budget_panel(r))
+	return parts[0]
+
+
+func _sbx_orphans(r: Dictionary) -> void:
 	var orph: Array = r.get("orphans", [])
-	if not orph.is_empty():
-		var ot := Label.new()
-		ot.text = "Not known by this Agent Manager (never touched unless you destroy them)"
-		ot.add_theme_font_override("font", AmTheme.ui_font(650))
-		sbx_box.add_child(ot)
-		for o in orph:
-			var orow := HBoxContainer.new()
-			orow.add_theme_constant_override("separation", 10)
-			var ol := _muted("• app %s %s %s" % [o["app"], ("machine " + str(o["machine"])) if str(o["machine"]) != "" else "", ("(" + str(o["name"]) + ", " + str(o["state"]) + ")")])
-			ol.add_theme_font_size_override("font_size", 12)
-			orow.add_child(ol)
-			var oapp := str(o["app"])
-			var omac := str(o["machine"])
-			orow.add_child(_small("Destroy…", func() -> void:
-				var what := "the machine %s of %s" % [omac, oapp]
-				if omac == "":
-					var c := await engine.call_api("GET", "/sandboxes/orphans/" + oapp, null, true, 60.0)
-					if c.has("error"):
-						_toast(str(c["error"]))
-						return
-					var ms: Array = c.get("machines", [])
-					what = "the whole app %s and its %d machine(s)%s" % [oapp, ms.size(), (":\n" + "\n".join(ms.map(func(m): return "• %s %s (%s)" % [m["id"], m["name"], m["state"]]))) if not ms.is_empty() else ""]
-				_confirm("Destroy %s?\nNot known by this Agent Manager: its files are deleted for good, nothing is checked for unpushed work." % what, func() -> void:
-					_toast("Destroying…")
-					var res := await engine.call_api("POST", "/sandboxes/orphans/destroy", {"app": oapp, "machine": omac, "confirmed": true}, true, 300.0)
-					_toast(str(res["error"]) if res.has("error") else "Destroyed")
-					await _load_sandboxes())))
-			sbx_box.add_child(orow)
+	if orph.is_empty():
+		return
+	sbx_box.add_child(_section_label("Not known by this Agent Manager (never touched unless you destroy them)"))
+	for o in orph:
+		var orow := HBoxContainer.new()
+		orow.add_theme_constant_override("separation", 10)
+		var ol := _muted("• app %s %s %s" % [o["app"], ("machine " + str(o["machine"])) if str(o["machine"]) != "" else "", ("(" + str(o["name"]) + ", " + str(o["state"]) + ")")])
+		ol.add_theme_font_size_override("font_size", 12)
+		orow.add_child(ol)
+		var oapp := str(o["app"])
+		var omac := str(o["machine"])
+		orow.add_child(_small("Destroy…", func() -> void:
+			var what := "the machine %s of %s" % [omac, oapp]
+			if omac == "":
+				var c := await engine.call_api("GET", "/sandboxes/orphans/" + oapp, null, true, 60.0)
+				if c.has("error"):
+					_toast(str(c["error"]))
+					return
+				var ms: Array = c.get("machines", [])
+				what = "the whole app %s and its %d machine(s)%s" % [oapp, ms.size(), (":\n" + "\n".join(ms.map(func(m): return "• %s %s (%s)" % [m["id"], m["name"], m["state"]]))) if not ms.is_empty() else ""]
+			_confirm("Destroy %s?\nNot known by this Agent Manager: its files are deleted for good, nothing is checked for unpushed work." % what, func() -> void:
+				_toast("Destroying…")
+				var res := await engine.call_api("POST", "/sandboxes/orphans/destroy", {"app": oapp, "machine": omac, "confirmed": true}, true, 300.0)
+				_toast(str(res["error"]) if res.has("error") else "Destroyed")
+				await _load_sandboxes())))
+		sbx_box.add_child(orow)
 
 
 func _budget_panel(r: Dictionary) -> Control:
-	# Loop 14: a monthly budget (warning at 80 %, no new sandbox at 100 %), optional caps that only pause, "Stop everything"
+	# a monthly budget (warning at 80 %, no new sandbox at 100 %), optional caps that only pause, "Stop everything"
 	var b: Dictionary = r.get("budget", {})
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	var spend := float(r.get("month_spend_usd", 0))
-	var limit := float(b.get("monthly_usd", 0))
-	var line := Label.new()
-	line.add_theme_font_override("font", AmTheme.ui_font(650))
-	if limit > 0:
-		var pct := float(r.get("budget_percent", 0))
-		line.text = "This month: $%.2f of $%.2f (%d %%)" % [spend, limit, int(pct)]
-		if pct >= 100:
-			line.text += "   — budget reached: no new sandbox this month"
-			line.add_theme_color_override("font_color", AmTheme.col("ERROR"))
-		elif pct >= 80:
-			line.text += "   — over 80 %"
-			line.add_theme_color_override("font_color", AmTheme.col("WARN"))
-		box.add_child(line)
-		var bar := ProgressBar.new()
-		bar.max_value = 100
-		bar.value = minf(pct, 100)
-		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(0, 6)
-		box.add_child(bar)
-	else:
-		line.text = "This month: $%.2f   (no budget set)" % spend
-		box.add_child(line)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.add_child(_muted("Monthly budget $"))
 	var amt := SpinBox.new()
 	amt.max_value = 10000
 	amt.step = 1
-	amt.value = limit
-	amt.tooltip_text = "0 = no budget"
+	amt.value = float(b.get("monthly_usd", 0))
+	amt.tooltip_text = "0 = no budget. At 80 % a warning, at 100 % no new sandbox this month"
 	row.add_child(amt)
 	row.add_child(_muted("Pause a sandbox idle for"))
 	var idle := SpinBox.new()
@@ -1545,7 +1675,7 @@ func _budget_panel(r: Dictionary) -> Control:
 	idle.tooltip_text = "0 = never (pause only, never destroy)"
 	row.add_child(idle)
 	var over := CheckBox.new()
-	over.text = "Pause everything when the budget is reached"
+	over.text = "Pause everything at the budget"
 	over.button_pressed = bool(b.get("stop_over_budget", false))
 	row.add_child(over)
 	row.add_child(_small("Save", func() -> void:
@@ -1555,26 +1685,41 @@ func _budget_panel(r: Dictionary) -> Control:
 	box.add_child(row)
 	var running: Array = (r.get("sandboxes", []) as Array).filter(func(x): return str(x["state"]) == "started")
 	if not running.is_empty():
-		box.add_child(_small("⏸ Stop everything (%d running)" % running.size(), func() -> void:
+		var stop := _small("Stop everything (%d running)" % running.size(), func() -> void:
 			_confirm("Pause the %d running sandbox(es)? Nothing is destroyed: start them again anytime." % running.size(), func() -> void:
 				_toast("Pausing every sandbox…")
 				await engine.call_api("POST", "/sandboxes/stop-all", {}, true, 300.0)
-				await _load_sandboxes())))
-	box.add_child(_muted(str(r.get("storage_note", ""))))
+				await _load_sandboxes()))
+		stop.size_flags_horizontal = SIZE_SHRINK_BEGIN
+		box.add_child(stop)
 	return box
 
 
-func _sandbox_card(sb: Dictionary) -> Control:
+func _chip(text: String, state) -> Label:
+	# state: true (good), false (bad), "warn" (on purpose, e.g. paused), null (not known / not used)
+	var l := Label.new()
+	l.text = ("● " if state != null else "○ ") + text
+	l.add_theme_font_size_override("font_size", 12)
+	var c := AmTheme.col("FAINT")
+	if state is bool:
+		c = AmTheme.col("MINT") if state else AmTheme.col("ERROR")
+	elif state is String and state == "warn":
+		c = AmTheme.col("WARN")
+	l.add_theme_color_override("font_color", c)
+	return l
+
+
+func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 	var sbid := str(sb["id"])
 	var st := str(sb["state"])
-	var col: Color = {"started": AmTheme.col("MINT"), "stopped": AmTheme.col("WARN"), "destroyed": AmTheme.col("FAINT")}.get(st, AmTheme.col("ERROR"))
+	var col: Color = {"started": AmTheme.col("MINT"), "stopped": AmTheme.col("WARN")}.get(st, AmTheme.col("ERROR"))
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, Color(col, 0.6), 1, 14))
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 6)
+	v.add_theme_constant_override("separation", 7)
 	card.add_child(v)
 	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 10)
+	top.add_theme_constant_override("separation", 12)
 	v.add_child(top)
 	var sess := _session(str(sb["session_id"]))
 	var n := Label.new()
@@ -1583,49 +1728,78 @@ func _sandbox_card(sb: Dictionary) -> Control:
 	n.add_theme_font_override("font", AmTheme.ui_font(650))
 	top.add_child(n)
 	var chip := Label.new()
-	chip.text = "● " + st + ("  · finished, ready to destroy" if int(sb["finished"]) == 1 and st != "destroyed" else "")
+	chip.text = {"started": "● running", "stopped": "● paused"}.get(st, "● " + st) + ("  · finished, ready to destroy" if int(sb["finished"]) == 1 else "")
 	chip.add_theme_color_override("font_color", col)
 	chip.add_theme_font_size_override("font_size", 12)
-	chip.size_flags_horizontal = SIZE_EXPAND_FILL
 	top.add_child(chip)
-	var secs := int(sb["running_seconds"])
-	var meta := _muted("sandbox %s · machine %s · %s · %s · ran %dh%02dm · ≈ $%.4f · made %s" % [sbid, sb["machine"], sb["region"], sb["size"], secs / 3600, (secs % 3600) / 60, float(sb["cost_usd"]), _date(float(sb["created"]))])
-	meta.add_theme_font_size_override("font_size", 12)
-	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	v.add_child(meta)
-	var conn := _muted("Connection: not checked yet")
-	conn.add_theme_font_size_override("font_size", 12)
-	v.add_child(conn)
-	if st != "destroyed":
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		v.add_child(row)
-		row.add_child(_small("Open", func() -> void: select(str(sb["session_id"]))))
-		row.add_child(_small("Check connection", func() -> void:
-			conn.text = "Connection: checking…"
-			var c := await engine.call_api("GET", "/sandboxes/%s/connection" % sbid, null, true, 90.0)
-			conn.text = "Connection: machine %s · terminal %s · tunnel %s%s · Second Brain %s" % [c.get("machine", "?"), "open" if c.get("terminal", false) else "closed", c.get("tunnel", "?"), ("  (%d ms)" % int(c["latency_ms"])) if c.get("latency_ms") != null else "", {true: "reachable", false: "not reachable"}.get(c.get("brain"), "—")]))
-		if st == "stopped":
-			row.add_child(_small("Start", func() -> void:
-				await engine.call_api("POST", "/sandboxes/%s/start" % sbid, {}, true, 120.0)
-				await _load_sandboxes()))
-		elif st == "started":
-			row.add_child(_small("Stop (pause)", func() -> void:
-				await engine.call_api("POST", "/sandboxes/%s/stop" % sbid, {}, true, 120.0)
-				await _load_sandboxes()))
-		row.add_child(_small("Not finished" if int(sb["finished"]) == 1 else "Mark finished", func() -> void:
-			await engine.call_api("POST", "/sandboxes/%s/finish" % sbid, {"finished": int(sb["finished"]) == 0})
+	var live := Label.new()
+	live.add_theme_font_override("font", AmTheme.ui_font(650))
+	live.add_theme_font_size_override("font_size", 13)
+	live.size_flags_horizontal = SIZE_EXPAND_FILL
+	live.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	if sb.get("running_since") != null:
+		live.text = "on for " + _span(Time.get_unix_time_from_system() - float(sb["running_since"]))
+		sbx_live.append([live, float(sb["running_since"])])
+	else:
+		live.text = "paused" if st == "stopped" else ""
+	top.add_child(live)
+	# health: what the monitor saw last (about once a minute while the terminal is open)
+	var hl: Dictionary = sb.get("health") if sb.get("health") is Dictionary else {}
+	var chips := HBoxContainer.new()
+	chips.add_theme_constant_override("separation", 16)
+	chips.add_child(_chip("machine " + {"started": "running", "stopped": "paused"}.get(st, st), true if st == "started" else ("warn" if st == "stopped" else false)))
+	chips.add_child(_chip("terminal " + ("open" if hl.get("terminal", false) else "closed"), hl.get("terminal") if not hl.is_empty() else null))
+	var tun := str(hl.get("tunnel", ""))
+	chips.add_child(_chip("SSH tunnel " + (tun if tun != "" else "not checked") + (("  %d ms" % int(hl["latency_ms"])) if hl.get("latency_ms") != null else ""), (tun == "up") if tun != "" else null))
+	var uses_brain := bool(sess.get("brain", false))
+	chips.add_child(_chip("MCP Second Brain " + ("ready" if hl.get("mcp") == true else ("not ready" if hl.get("mcp") == false else ("not used" if not uses_brain else "not checked"))), hl.get("mcp") if uses_brain else null))
+	if hl.has("checked"):
+		chips.add_child(_muted("checked " + _span(Time.get_unix_time_from_system() - float(hl["checked"])) + " ago"))
+	v.add_child(chips)
+	# what is happening inside
+	var what := HBoxContainer.new()
+	what.add_theme_constant_override("separation", 18)
+	var repo_name := str(sess.get("repo_name", ""))
+	what.add_child(_muted("⎇ " + (repo_name + " · " if repo_name != "" else "") + (str(hl.get("branch", "")) if str(hl.get("branch", "")) != "" else "am/" + sbid)))
+	if hl.get("dirty") != null:
+		what.add_child(_muted("%d file(s) not committed · %d commit(s) not pushed" % [int(hl["dirty"]), int(hl["unpushed"])]))
+	what.add_child(_muted(str(sess.get("tool_label", sess.get("tool", ""))) + " · " + str(sess.get("activity", sess.get("state", "")))))
+	v.add_child(what)
+	var money := _muted("cost today %s · this month %s · since it was made %s · %s %s · machine %s" % [
+		CostChart.money(float(sb.get("cost_today", 0))), CostChart.money(float(sb.get("cost_month", 0))), CostChart.money(float(sb.get("cost_usd", 0))),
+		str(sb["region"]), str(sb["size"]), str(sb["machine"])])
+	money.add_theme_font_size_override("font_size", 12)
+	money.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(money)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	v.add_child(row)
+	row.add_child(_small("Open", func() -> void: select(str(sb["session_id"]))))
+	row.add_child(_small("Check now", func() -> void:
+		_toast("Checking the sandbox…")
+		await engine.call_api("GET", "/sandboxes/%s/connection" % sbid, null, true, 90.0)
+		await _load_sandboxes()))
+	if st == "stopped":
+		row.add_child(_small("Start", func() -> void:
+			await engine.call_api("POST", "/sandboxes/%s/start" % sbid, {}, true, 120.0)
 			await _load_sandboxes()))
-		row.add_child(_small("Destroy…", func() -> void:
-			_toast("Checking for work not pushed…")
-			var u := await engine.call_api("GET", "/sandboxes/%s/unpushed" % sbid, null, true, 120.0)
-			var rep := str(u.get("report", u.get("error", "")))
-			var warn := "Nothing unsaved found." if u.get("clean", false) else ("Work that would be LOST:\n" + rep.left(900) if u.get("checked", false) else "Could not check the sandbox (%s): its work may be lost." % rep.left(200))
-			_confirm("Destroy the sandbox of « %s »? Its machine, files and key are deleted for good.\n\n%s" % [sess.get("name", sbid), warn], func() -> void:
-				var d := await engine.call_api("POST", "/sandboxes/%s/destroy" % sbid, {"confirmed": true}, true, 120.0)
-				_toast(str(d.get("error", "Sandbox destroyed")))
-				await refresh()
-				await _load_sandboxes())))
+	elif st == "started":
+		row.add_child(_small("Stop (pause)", func() -> void:
+			await engine.call_api("POST", "/sandboxes/%s/stop" % sbid, {}, true, 120.0)
+			await _load_sandboxes()))
+	row.add_child(_small("Not finished" if int(sb["finished"]) == 1 else "Mark finished", func() -> void:
+		await engine.call_api("POST", "/sandboxes/%s/finish" % sbid, {"finished": int(sb["finished"]) == 0})
+		await _load_sandboxes()))
+	row.add_child(_small("Destroy…", func() -> void:
+		_toast("Checking for work not pushed…")
+		var u := await engine.call_api("GET", "/sandboxes/%s/unpushed" % sbid, null, true, 120.0)
+		var rep := str(u.get("report", u.get("error", "")))
+		var warn := "Nothing unsaved found." if u.get("clean", false) else ("Work that would be LOST:\n" + rep.left(900) if u.get("checked", false) else "Could not check the sandbox (%s): its work may be lost." % rep.left(200))
+		_confirm("Destroy the sandbox of « %s »? Its machine, files and key are deleted for good.\n\n%s" % [sess.get("name", sbid), warn], func() -> void:
+			var d := await engine.call_api("POST", "/sandboxes/%s/destroy" % sbid, {"confirmed": true}, true, 120.0)
+			_toast(str(d.get("error", "Sandbox destroyed")))
+			await refresh()
+			await _load_sandboxes())))
 	return card
 
 

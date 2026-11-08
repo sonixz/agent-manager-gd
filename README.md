@@ -86,7 +86,10 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   **Destroy** — only by you, confirmed, after Agent Manager showed the work not pushed. Machines of your organisation
   it does not know are listed, never touched unless you destroy them (« Destroy… », confirmed, after listing what an
   app holds). Agent Manager never destroys a sandbox on its own.
-  **Budget**: a monthly amount (this month's estimate shown against it, a warning past 80 %, no new sandbox at
+  The tab works in steps: the image (what it holds, deploy it once, rebuild), deploy a sandbox (the estimate first,
+  then a shell or an agentic coding session), costs (today, this month, a chart; measured from Fly's machine history),
+  and a live card per sandbox (time on, tunnel, MCP, branch, unpushed work, cost). A sandbox always keeps its session
+  in the list. **Budget**: a monthly amount (this month's estimate shown against it, a warning past 80 %, no new sandbox at
   100 %), and two caps you can turn on that only *pause*: a sandbox idle for N minutes, or every sandbox once the
   budget is reached. « Stop everything » pauses all running sandboxes.
 - **Connected repositories** (⎇ Repos): add a repository's SSH address; Agent Manager makes a deploy key for it only,

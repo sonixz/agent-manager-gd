@@ -19,6 +19,7 @@ Chaque loop se termine par une revue du propriétaire (captures, rapport en fran
 | 13 ✅ | Sandboxes complètes : gestionnaire de sandboxes, tunnels, connexions, supervision avec le Brain | idem |
 | 14 ✅ | Coûts : Fly.io et agents, budgets | idem |
 | 15 ✅ | Finition et installeur | idem |
+| 16 ✅ | L'onglet Sandboxes, poste de contrôle : image expliquée, déployer, coûts estimés puis mesurés, graphique, santé en direct | idem |
 
 ## Loops 4 à 10 en détail (structuré le 2026-11-08)
 
@@ -167,3 +168,13 @@ Détails : `docs/brief/SANDBOX.md`. Mêmes règles qu'avant (tests, captures, ra
   (WSL, python3, tmux, flyctl si sandboxes) avec des messages clairs et rien de téléchargé en silence ; raccourcis
   configurables ; le MCP d'Agent Manager proposé aussi aux outils extérieurs (bouton « Brancher »).
 
+### Loop 16 · L'onglet Sandboxes comme poste de contrôle (demandé par le propriétaire, 2026-11-08)
+- 1 · L'image : ce qu'elle contient (Ubuntu 24.04, tmux, git, SSH 2222 par clés, Node, Python, Claude Code, Codex),
+  « Use this image → Deploy it », puis prête avec sa date et « Rebuild ».
+- 2 · Déployer : l'estimation d'abord (prix publié : à l'heure, par jour si laissée allumée, en pause), puis
+  « Deploy + open a shell » ou « Deploy + agentic coding session ».
+- 3 · Coûts : aujourd'hui, ce mois, le budget ; un graphique (coût par jour, total du mois, budget) ; coûts mesurés
+  depuis l'historique des machines de Fly × le prix publié, gardés après la destruction.
+- Chaque carte : compteur « on for … » en direct, pastilles machine / terminal / tunnel SSH (latence) / MCP Second
+  Brain, la branche, les fichiers non commités et les commits non poussés, l'état de l'agent, ses coûts.
+- Règle : une sandbox a toujours sa session à gauche ; archiver ou « wrap up » est refusé tant qu'elle existe.

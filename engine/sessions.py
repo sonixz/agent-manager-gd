@@ -363,7 +363,7 @@ class Sessions:
     def remove(self, sid: str) -> None:
         rec = self.store.get(sid) or {}
         if self.sandboxes.by_session(sid):
-            raise ValueError("this session has a cloud sandbox: destroy it first in Sandboxes (or archive the session)")
+            raise ValueError("this session has a cloud sandbox: destroy it first in Sandboxes")
         if self.brain and rec.get("brain_client"):
             self.brain.revoke(rec["brain_client"])  # its key stops working at once
         self.tmux.kill(self.tmux_name(sid))
@@ -458,6 +458,7 @@ class Sessions:
         """Asks the agent to write its own summary (and propose it to the Second Brain with its own key); when it is
         done, the summary is kept with the session (History) and the session is archived."""
         d = self.get(sid)
+        self._no_hidden_sandbox(sid)
         if d["tool"] == "shell":
             raise ValueError("a shell has no conversation to summarise")
         if d["state"] != "running":
@@ -492,9 +493,16 @@ class Sessions:
                 self._wrapping.pop(sid, None)
         return finished
 
+    def _no_hidden_sandbox(self, sid: str) -> None:
+        """Loop 16: a sandbox always has its session in the list; archiving it would hide a running cost."""
+        if self.sandboxes.by_session(sid):
+            raise ValueError("this session has a cloud sandbox: destroy the sandbox first (it shows the work not pushed), "
+                             "then archive or wrap up")
+
     def archive(self, sid: str) -> dict:
         """Out of the way but never forgotten: the record and every conversation id stay (History)."""
         self.get(sid)
+        self._no_hidden_sandbox(sid)
         self.tmux.kill(self.tmux_name(sid))
         self.store.update(sid, archived=1, archived_at=time.time())
         return self.get(sid)
