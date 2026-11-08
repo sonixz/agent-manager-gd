@@ -17,7 +17,7 @@ Chaque loop se termine par une revue du propriétaire (captures, rapport en fran
 | 11 ✅ | La voix : commandes et état parlé | idem |
 | 12 ✅ | Sandbox Fly.io, « oui ou non » (GO) | idem |
 | 13 ✅ | Sandboxes complètes : gestionnaire de sandboxes, tunnels, connexions, supervision avec le Brain | idem |
-| 14 | Coûts : Fly.io et agents, budgets | idem |
+| 14 ✅ | Coûts : Fly.io et agents, budgets | idem |
 | 15 | Finition et installeur | idem |
 
 ## Loops 4 à 10 en détail (structuré le 2026-11-08)

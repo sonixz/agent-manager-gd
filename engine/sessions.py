@@ -257,8 +257,30 @@ class Sessions:
             return "working", t.pane_command
         return ("working" if busy and rec["tool"] != "shell" else "idle"), ""
 
+    _last_enforce = 0.0
+
+    def enforce_caps(self) -> None:
+        """At most every minute: the owner's optional sandbox caps (pause only), from the terminals' idle time."""
+        if time.time() - self._last_enforce < 60 or not self.sandboxes.all():
+            return
+        self._last_enforce = time.time()
+        b = self.sandboxes.budget()
+        if not (b["stop_idle_minutes"] or b["stop_over_budget"]):
+            return
+        live = self.tmux.sessions()
+        idle = {}
+        for sb in self.sandboxes.all():
+            t = live.get(self.tmux_name(sb["session_id"]))
+            if t and t.activity:
+                idle[sb["id"]] = time.time() - t.activity
+        try:
+            self.sandboxes.enforce(idle)
+        except Exception:
+            pass
+
     def list(self) -> list[dict]:
         self.check_wrapups()
+        self.enforce_caps()
         live = self.tmux.sessions()
         return [self.describe(r, live) for r in self.store.all()]
 

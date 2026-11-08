@@ -1392,6 +1392,7 @@ func _load_sandboxes() -> void:
 	tot.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 	tot.add_theme_font_size_override("font_size", 12)
 	sbx_box.add_child(tot)
+	sbx_box.add_child(_budget_panel(r))
 	var finished: Array = (r.get("sandboxes", []) as Array).filter(func(x): return int(x["finished"]) == 1 and int(x["destroyed"]) == 0)
 	if not finished.is_empty():
 		sbx_box.add_child(_small("Destroy the finished ones (%d)…" % finished.size(), func() -> void:
@@ -1412,6 +1413,71 @@ func _load_sandboxes() -> void:
 			var ol := _muted("• app %s %s %s   — destroy it from Fly's dashboard if you do not need it" % [o["app"], ("machine " + str(o["machine"])) if str(o["machine"]) != "" else "", ("(" + str(o["name"]) + ", " + str(o["state"]) + ")")])
 			ol.add_theme_font_size_override("font_size", 12)
 			sbx_box.add_child(ol)
+
+
+func _budget_panel(r: Dictionary) -> Control:
+	# Loop 14: a monthly budget (warning at 80 %, no new sandbox at 100 %), optional caps that only pause, "Stop everything"
+	var b: Dictionary = r.get("budget", {})
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var spend := float(r.get("month_spend_usd", 0))
+	var limit := float(b.get("monthly_usd", 0))
+	var line := Label.new()
+	line.add_theme_font_override("font", AmTheme.ui_font(650))
+	if limit > 0:
+		var pct := float(r.get("budget_percent", 0))
+		line.text = "This month: $%.2f of $%.2f (%d %%)" % [spend, limit, int(pct)]
+		if pct >= 100:
+			line.text += "   — budget reached: no new sandbox this month"
+			line.add_theme_color_override("font_color", AmTheme.col("ERROR"))
+		elif pct >= 80:
+			line.text += "   — over 80 %"
+			line.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		box.add_child(line)
+		var bar := ProgressBar.new()
+		bar.max_value = 100
+		bar.value = minf(pct, 100)
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(0, 6)
+		box.add_child(bar)
+	else:
+		line.text = "This month: $%.2f   (no budget set)" % spend
+		box.add_child(line)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(_muted("Monthly budget $"))
+	var amt := SpinBox.new()
+	amt.max_value = 10000
+	amt.step = 1
+	amt.value = limit
+	amt.tooltip_text = "0 = no budget"
+	row.add_child(amt)
+	row.add_child(_muted("Pause a sandbox idle for"))
+	var idle := SpinBox.new()
+	idle.max_value = 1440
+	idle.step = 5
+	idle.value = int(b.get("stop_idle_minutes", 0))
+	idle.suffix = "min"
+	idle.tooltip_text = "0 = never (pause only, never destroy)"
+	row.add_child(idle)
+	var over := CheckBox.new()
+	over.text = "Pause everything when the budget is reached"
+	over.button_pressed = bool(b.get("stop_over_budget", false))
+	row.add_child(over)
+	row.add_child(_small("Save", func() -> void:
+		var res := await engine.call_api("POST", "/sandboxes/budget", {"monthly_usd": amt.value, "stop_idle_minutes": int(idle.value), "stop_over_budget": over.button_pressed})
+		_toast(str(res["error"]) if res.has("error") else "Budget saved")
+		await _load_sandboxes()))
+	box.add_child(row)
+	var running: Array = (r.get("sandboxes", []) as Array).filter(func(x): return str(x["state"]) == "started")
+	if not running.is_empty():
+		box.add_child(_small("⏸ Stop everything (%d running)" % running.size(), func() -> void:
+			_confirm("Pause the %d running sandbox(es)? Nothing is destroyed: start them again anytime." % running.size(), func() -> void:
+				_toast("Pausing every sandbox…")
+				await engine.call_api("POST", "/sandboxes/stop-all", {}, true, 300.0)
+				await _load_sandboxes())))
+	box.add_child(_muted(str(r.get("storage_note", ""))))
+	return box
 
 
 func _sandbox_card(sb: Dictionary) -> Control:

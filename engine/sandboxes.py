@@ -187,6 +187,7 @@ class Sandboxes:
         st = self.status()
         if not st["ready"]:
             raise ValueError("cloud sandboxes are not prepared yet (Sandboxes → Prepare)")
+        self.guard_new()
         sbid = secrets.token_hex(4)
         os.makedirs(os.path.dirname(self.key_path(sbid)), mode=0o700, exist_ok=True)
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"agent-manager-gd:sandbox-{sbid}",
@@ -252,6 +253,65 @@ class Sandboxes:
         self._set(sbid, destroyed=1)
         return self.get(sbid)
 
+    # ---------------------------------------------------------------- budget and caps (Loop 14): never destructive
+    def budget(self) -> dict:
+        return {"monthly_usd": float(self.config("budget_usd", "0") or 0),
+                "stop_idle_minutes": int(self.config("stop_idle_minutes", "0") or 0),
+                "stop_over_budget": self.config("stop_over_budget", "0") == "1"}
+
+    def set_budget(self, monthly_usd: float, stop_idle_minutes: int, stop_over_budget: bool) -> dict:
+        if monthly_usd < 0 or monthly_usd > 100000 or stop_idle_minutes < 0 or stop_idle_minutes > 100000:
+            raise ValueError("a budget and minutes of 0 or more (0 = off)")
+        self.set_config("budget_usd", str(monthly_usd))
+        self.set_config("stop_idle_minutes", str(int(stop_idle_minutes)))
+        self.set_config("stop_over_budget", "1" if stop_over_budget else "0")
+        return self.budget()
+
+    def month_spend(self, live: dict | None = None) -> float:
+        """Estimated spend of this month's sandboxes (running time × published price)."""
+        if live is None:
+            try:
+                live = {m["id"]: m for m in self.machines()}
+            except (RuntimeError, ValueError, OSError):
+                live = {}
+        start = time.mktime(time.strptime(time.strftime("%Y-%m-01"), "%Y-%m-%d"))
+        total = 0.0
+        for sb in self.all():
+            m = live.get(sb["machine"])
+            if m and sb["created"] >= start:
+                total += self.cost(sb["size"], self.running_seconds(m))
+        return round(total, 4)
+
+    def guard_new(self) -> None:
+        b = self.budget()
+        if b["monthly_usd"] > 0 and self.month_spend() >= b["monthly_usd"]:
+            raise ValueError(f"the monthly sandbox budget (${b['monthly_usd']:.2f}) is reached: no new sandbox this month "
+                             "(raise it in Sandboxes → Budget)")
+
+    def stop_all(self) -> list[str]:
+        """Pauses every started sandbox (nothing is destroyed)."""
+        stopped = []
+        for m in self.machines():
+            if m.get("state") == "started" and any(sb["machine"] == m["id"] and not sb["destroyed"] for sb in self.all()):
+                self.fly.run("machine", "stop", m["id"], "--app", self.config("app"), timeout=300)
+                stopped.append(m["id"])
+        return stopped
+
+    def enforce(self, idle_seconds: dict) -> list[str]:
+        """The owner's optional caps: pause a sandbox idle too long, or all of them over budget. Never destroys.
+        idle_seconds: sandbox id -> seconds since its terminal last showed activity."""
+        b = self.budget()
+        paused = []
+        if b["stop_over_budget"] and b["monthly_usd"] > 0 and self.month_spend() >= b["monthly_usd"]:
+            return self.stop_all()
+        if b["stop_idle_minutes"] > 0:
+            started = {m["id"] for m in self.machines() if m.get("state") == "started"}
+            for sb in self.all():
+                if sb["machine"] in started and idle_seconds.get(sb["id"], 0) >= b["stop_idle_minutes"] * 60:
+                    self.fly.run("machine", "stop", sb["machine"], "--app", sb["app"], timeout=300)
+                    paused.append(sb["machine"])
+        return paused
+
     # ---------------------------------------------------------------- the manager's view
     @staticmethod
     def running_seconds(m: dict, now: float | None = None) -> float:
@@ -301,5 +361,9 @@ class Sandboxes:
                     orphans.append({"app": name, "machine": "", "name": "(another Agent Manager app)", "state": a.get("Status", "")})
         except (RuntimeError, ValueError, OSError):
             pass
+        b = self.budget()
+        spend = self.month_spend(live)
         return {"sandboxes": rows, "orphans": orphans, "fly_reachable": reachable, **self.status(),
-                "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 4)}
+                "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 4), "budget": b, "month_spend_usd": spend,
+                "budget_percent": round(100 * spend / b["monthly_usd"], 1) if b["monthly_usd"] > 0 else None,
+                "storage_note": f"stopped machines: ${STOPPED_GB_MONTH}/GB/month of root disk"}

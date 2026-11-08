@@ -218,3 +218,14 @@ Claude sandbox, a wrong secret refused, orphans listed, machines stopped (not de
 prepare failed on a new app (fly.toml), and the app gave up after 10 s while a sandbox takes ~20 s to start
 (timeouts per call now). The test that failed now and then was caught: a shell's first prompt can come late under
 load. Tests: 51.
+
+## Loop 14, Fly.io part: budget and caps that only pause (2026-11-08)
+
+engine/sandboxes.py: a monthly budget (sandbox_config), this month's estimated spend (running time from the machines'
+events × the published price), new sandboxes refused once it is reached, « Stop everything » (pauses every started
+sandbox), and two optional caps the owner turns on: pause a sandbox whose terminal has been idle N minutes, or pause
+all of them when the budget is reached. The engine checks them at most once a minute. Nothing in this path can
+destroy: a test checks no destroy call is ever made. API: POST /sandboxes/budget, POST /sandboxes/stop-all. The ☁
+Sandboxes view gets the budget line (amber past 80 %, red at 100 %), its settings and the Stop everything button
+(confirmed). Capture on the owner's real (stopped) Fly app, read-only: docs/screens/loop14/42-sandbox-budget.png.
+Tests: 52.

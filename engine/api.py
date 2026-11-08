@@ -104,6 +104,12 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, usage.report(sessions.store.history()))
                 if parts == ["sandboxes"] and method == "GET":
                     return self._reply(200, sessions.sandboxes.overview())
+                if parts == ["sandboxes", "budget"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.sandboxes.set_budget(float(b.get("monthly_usd", 0)), int(b.get("stop_idle_minutes", 0)),
+                                                                          bool(b.get("stop_over_budget", False))))
+                if parts == ["sandboxes", "stop-all"] and method == "POST":
+                    return self._reply(200, {"stopped": sessions.sandboxes.stop_all()})
                 if parts == ["sandboxes", "prepare"] and method == "POST":
                     b = self._body()
                     return self._reply(200, sessions.sandboxes.prepare_async(str(b.get("org", "")), str(b.get("region", "yyz"))))

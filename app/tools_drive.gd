@@ -572,6 +572,18 @@ func _run() -> void:
 			for sb in ov.get("sandboxes", []):  # pause them: never destroyed by Agent Manager
 				await main.engine.call_api("POST", "/sandboxes/%s/stop" % sb["id"], {}, true, 120.0)
 			report.append("stopped (not destroyed): %d" % (ov.get("sandboxes", []) as Array).size())
+		"budget":
+			# read-only on Fly: the existing (stopped) app is listed, nothing is created or started
+			var data := OS.get_environment("AGMGD_HOME")
+			OS.execute("bash", ["-c", "mkdir -p %s/keys/api && cp ~/.local/share/agent-manager-gd/keys/api/fly.json %s/keys/api/ && chmod 600 %s/keys/api/fly.json" % [data, data, data]])
+			OS.execute("python3", ["-c", "import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute('CREATE TABLE IF NOT EXISTS sandbox_config (k TEXT PRIMARY KEY, v TEXT NOT NULL)'); [db.execute('INSERT OR REPLACE INTO sandbox_config VALUES (?,?)', kv) for kv in [('app', sys.argv[2]), ('org', 'agent-manager'), ('image', 'registry.fly.io/'+sys.argv[2]+':latest')]]; db.commit()", data.path_join("data/sessions.sqlite3"), OS.get_environment("DRIVE_FLY_APP")])
+			var bset: Dictionary = await main.engine.call_api("POST", "/sandboxes/budget", {"monthly_usd": 5, "stop_idle_minutes": 30, "stop_over_budget": false})
+			report.append("budget: " + JSON.stringify(bset))
+			main.set_view("sandboxes")
+			await wait(2.0)
+			await main._load_sandboxes()
+			await wait(2.0)
+			await shot("42-sandbox-budget")
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())

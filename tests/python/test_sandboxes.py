@@ -136,6 +136,24 @@ class SandboxesTest(unittest.TestCase):
         self.assertFalse(os.path.exists(self.s.sandboxes.key_path(sb["id"])))
         self.s.remove(d["id"])                                            # now it can go
 
+    def test_budget_refuses_new_sandboxes_and_caps_only_pause(self):
+        self.s.sandboxes.prepare()
+        d = self.s.create("Cloud work", "shell", "", host="sandbox")
+        sb = self.s.sandboxes.by_session(d["id"])
+        # the fake machine ran 1 h (then runs again): with a tiny budget, it is reached
+        self.s.sandboxes.set_budget(0.001, 0, False)
+        ov = self.s.sandboxes.overview()
+        self.assertGreaterEqual(ov["budget_percent"], 100)
+        with self.assertRaises(ValueError):
+            self.s.create("Another", "shell", "", host="sandbox")
+        self.s.sandboxes.set_budget(0.001, 30, True)
+        stopped = self.s.sandboxes.enforce({sb["id"]: 3600})
+        self.assertEqual(stopped, [sb["machine"]])
+        self.assertTrue(any(c[:3] == ("machine", "stop", sb["machine"]) for c in self.fly.calls))
+        self.assertFalse(any(c[:2] == ("machine", "destroy") for c in self.fly.calls))      # caps never destroy
+        self.s.sandboxes.set_budget(0, 10, False)
+        self.assertEqual(self.s.sandboxes.enforce({sb["id"]: 60}), [])                          # not idle long enough
+
     def test_the_brain_relay_answers_only_to_a_sandbox_secret(self):
         self.s.sandboxes.prepare()
         d = self.s.create("Cloud work", "claude", "", host="sandbox")

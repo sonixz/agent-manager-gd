@@ -70,6 +70,9 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   estimated cost, and its connection (terminal, tunnel, latency, Brain reachable); Start, Stop (pause), Mark finished,
   **Destroy** — only by you, confirmed, after Agent Manager showed the work not pushed. Machines of your organisation
   it does not know are listed, never touched. Agent Manager never destroys a sandbox on its own.
+  **Budget**: a monthly amount (this month's estimate shown against it, a warning past 80 %, no new sandbox at
+  100 %), and two caps you can turn on that only *pause*: a sandbox idle for N minutes, or every sandbox once the
+  budget is reached. « Stop everything » pauses all running sandboxes.
 - **Connected repositories** (⎇ Repos): add a repository's SSH address; Agent Manager makes a deploy key for it only,
   shows the public key to add on GitHub (*Deploy keys*, with write access), checks it, and sessions started on that
   repository use that key only. Rotate or disconnect any time. Details: `docs/REPOSITORIES.md`.
