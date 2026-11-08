@@ -289,3 +289,16 @@ Asked by the owner after his first look: the tab said too little. Now, in three 
   refused until the sandbox is destroyed.
 - Captures use a demo Fly (`AGMGD_DEMO_FLY`, `tools/demo_sandboxes.py`): nothing reached Fly.io for them. The health
   checks over SSH were not run against a real sandbox in this loop: the owner's sandbox test is next. Tests: 58.
+
+## Loop 16b: copying from a terminal, sign-in links included (2026-11-08)
+
+Owner test: Claude Code in a sandbox showed its sign-in link and the owner could not copy it. Two causes: tmux in the
+sandbox breaks a long line with real line breaks (a hand copy gave a broken link), and Claude Code's « c to copy »
+uses OSC 52, which neither tmux layer passed on and our terminal did not handle. Fixed:
+- VtTerminal accepts clipboard writes from programs (libghostty-vt's clipboard_write: text only, standard clipboard;
+  programs still cannot read the clipboard).
+- Both tmux layers pass OSC 52 on (`set-clipboard on`, `terminal-features *:clipboard`): the local server when a
+  session starts, the sandbox's through /root/.tmux.conf written at each attach.
+- A copy rejoins rows that reach the right edge (VtTerminal.unwrap_full_rows): a long URL comes out whole.
+Checked on Linux in the real app: a shell inside tmux sends an OSC 52 copy, the text (accents included) lands in the
+clipboard. To unblock the owner meanwhile, the joined link was put on his Windows clipboard. Tests: 58.

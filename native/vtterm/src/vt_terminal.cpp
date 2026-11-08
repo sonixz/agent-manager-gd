@@ -33,6 +33,24 @@ static void cb_write_pty(GhosttyTerminal, void *ud, const uint8_t *data, size_t 
 }
 static void cb_bell(GhosttyTerminal, void *ud) { static_cast<VtTerminal *>(ud)->_on_bell(); }
 static void cb_title(GhosttyTerminal, void *ud) { static_cast<VtTerminal *>(ud)->_on_title(); }
+// A program asks to put text on the clipboard (OSC 52: Claude Code's « c to copy », tmux, vim…). Writes only: a
+// program can never read the clipboard (no clipboard_read callback). Text is all we take; anything else is refused.
+static void cb_clipboard_write(GhosttyTerminal, void *, const GhosttyClipboardWrite *w) {
+	GhosttyClipboardWriteReply reply = GHOSTTY_INIT_SIZED(GhosttyClipboardWriteReply);
+	reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+	if (w->location == GHOSTTY_CLIPBOARD_LOCATION_STANDARD) {
+		for (size_t i = 0; i < w->contents_len; i++) {
+			const GhosttyClipboardContent &c = w->contents[i];
+			String mime = String::utf8((const char *)c.mime.ptr, (int)c.mime.len);
+			if (mime.begins_with("text/plain") || mime.is_empty()) {
+				DisplayServer::get_singleton()->clipboard_set(String::utf8((const char *)c.data.ptr, (int)c.data.len));
+				reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+				break;
+			}
+		}
+	}
+	w->reply(w, &reply);
+}
 
 static const uint32_t XTERM16[16] = {0x1d1f21, 0xcc6666, 0xb5bd68, 0xf0c674, 0x81a2be, 0xb294bb, 0x8abeb7, 0xc5c8c6,
 	0x666666, 0xd54e53, 0xb9ca4a, 0xe7c547, 0x7aa6da, 0xc397d8, 0x70c0b1, 0xeaeaea};
@@ -46,6 +64,7 @@ VtTerminal::VtTerminal() {
 	ghostty_terminal_set(term, GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void *)cb_write_pty);
 	ghostty_terminal_set(term, GHOSTTY_TERMINAL_OPT_BELL, (const void *)cb_bell);
 	ghostty_terminal_set(term, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void *)cb_title);
+	ghostty_terminal_set(term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void *)cb_clipboard_write);
 	uint64_t max_lines = 10000;
 	ghostty_terminal_set(term, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &max_lines);
 	ghostty_render_state_new(nullptr, &rstate);
@@ -674,6 +693,20 @@ String VtTerminal::get_selection_text() const {
 		ghostty_free(nullptr, buf, len);
 	}
 	ghostty_formatter_free(f);
+	return unwrap_full_rows(out, cols);
+}
+
+// A copied line that reaches the right edge continues on the next one: join them (a long URL comes out whole).
+String VtTerminal::unwrap_full_rows(const String &text, int width) {
+	PackedStringArray lines = text.split("\n");
+	String out;
+	for (int i = 0; i < lines.size(); i++) {
+		out += lines[i];
+		if (i < lines.size() - 1) {
+			bool full = width > 0 && lines[i].length() >= width && !lines[i].ends_with(" ");
+			if (!full) out += "\n";
+		}
+	}
 	return out;
 }
 
@@ -761,6 +794,7 @@ void VtTerminal::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("write_input", "data"), &VtTerminal::write_input);
 	ClassDB::bind_method(D_METHOD("paste_text", "text"), &VtTerminal::paste_text);
 	ClassDB::bind_method(D_METHOD("get_selection_text"), &VtTerminal::get_selection_text);
+	ClassDB::bind_static_method("VtTerminal", D_METHOD("unwrap_full_rows", "text", "width"), &VtTerminal::unwrap_full_rows);
 	ClassDB::bind_method(D_METHOD("get_screen_text"), &VtTerminal::get_screen_text);
 	ClassDB::bind_method(D_METHOD("is_running"), &VtTerminal::is_running);
 	ClassDB::bind_method(D_METHOD("get_cols"), &VtTerminal::get_cols);

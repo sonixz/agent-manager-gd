@@ -53,6 +53,9 @@ class Tmux:
         if command:
             args.append(" ".join(_shell_quote(c) for c in command))
         self.run(*args)
+        # a program's « copy to clipboard » (OSC 52) reaches Agent Manager's terminal through tmux
+        self.run("set-option", "-s", "set-clipboard", "on")
+        self.run("set-option", "-s", "terminal-features[90]", "*:clipboard")
         # keep the pane when the program ends, so a finished agent's last screen stays readable (and revivable)
         self.run("set-option", "-t", name, "remain-on-exit", "on")
 

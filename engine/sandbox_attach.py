@@ -15,6 +15,7 @@ from engine.keys import Keys                      # noqa: E402
 from engine.sandboxes import FLYCTL, Fly, Sandboxes  # noqa: E402
 from engine.store import Store                    # noqa: E402
 
+TMUX_CLIPBOARD = ["set -s set-clipboard on", "set -s terminal-features[90] *:clipboard"]
 AGENT_CMD = {"claude": "claude --mcp-config /root/.agmgd/mcp.json", "codex": "codex", "shell": "bash -l"}
 
 
@@ -65,6 +66,9 @@ def main() -> int:
         say("the sandbox does not answer (yet): Agent Manager will retry")
         proxy.kill()
         return 1
+    # tmux in the sandbox passes a program's « copy to clipboard » (OSC 52) on to Agent Manager's terminal
+    subprocess.run(base + ["root@127.0.0.1", "printf '%s\\n' " + " ".join(f"'{line}'" for line in TMUX_CLIPBOARD)
+                           + " > /root/.tmux.conf; tmux source-file /root/.tmux.conf 2>/dev/null; true"], capture_output=True, timeout=60)
     if subprocess.run(base + ["root@127.0.0.1", "test -e /root/.agmgd/ready"], capture_output=True).returncode != 0:
         say("first start: setting up the sandbox…")
         setup(sbs, sb, rec, keys, base, store)

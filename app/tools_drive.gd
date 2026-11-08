@@ -572,6 +572,18 @@ func _run() -> void:
 			for sb in ov.get("sandboxes", []):  # pause them: never destroyed by Agent Manager
 				await main.engine.call_api("POST", "/sandboxes/%s/stop" % sb["id"], {}, true, 120.0)
 			report.append("stopped (not destroyed): %d" % (ov.get("sandboxes", []) as Array).size())
+		"clipboard":
+			# a program copies through OSC 52 (as Claude Code's « c to copy » does), inside tmux: it reaches the clipboard
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Copy test", "tool": "shell", "cwd": "~"})
+			await main.refresh()
+			main.select(str(a["id"]))
+			await wait(3.0)
+			DisplayServer.clipboard_set("before")
+			await main.engine.call_api("POST", "/sessions/%s/send" % a["id"], {"text": "printf '\\033]52;c;%s\\a' $(printf 'https://example.com/a-very-long-sign-in-link?state=déjà' | base64 -w0)"})
+			await wait(3.0)
+			report.append("osc52 clipboard: " + DisplayServer.clipboard_get())
+			report.append("unwrap: " + VtTerminal.unwrap_full_rows("https://ex.com/aaaa\nbbbb/cc\nnext line", 19).replace("\n", "⏎"))
+			report.append("unwrap keeps short lines: " + VtTerminal.unwrap_full_rows("short\nline", 19).replace("\n", "⏎"))
 		"control":
 			# Loop 16 captures: a demo Fly (AGMGD_DEMO_FLY, set by the shot script), two sessions with their sandboxes
 			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Site redesign", "tool": "claude", "cwd": "~", "group": "GD Project", "brain": false})

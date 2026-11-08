@@ -33,6 +33,7 @@ public:
 	void write_input(const PackedByteArray &data);   // bytes to the program
 	void paste_text(const String &text);             // bracketed when the program asked for it
 	String get_selection_text() const;
+	static String unwrap_full_rows(const String &text, int width);  // join rows that reach the right edge
 	String get_screen_text() const;  // the visible screen as plain text (tests, summaries)
 	bool is_running() const { return pid > 0; }
 	int get_cols() const { return cols; }
