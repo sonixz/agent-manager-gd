@@ -313,6 +313,22 @@ func _run() -> void:
 			for x in main.sessions.duplicate():  # removing revokes the test sessions' Brain keys (never the owner's)
 				await main.engine.call_api("DELETE", "/sessions/%s" % x["id"])
 			report.append("test sessions removed, their Brain keys revoked")
+		"agents":
+			var home := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
+			var lead: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Lead agent", "tool": "shell", "cwd": home, "group": "Agent Manager"})
+			# what an agent's start_session does through Agent Manager's MCP server
+			var h1: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Helper · tests", "tool": "shell", "cwd": home, "group": "Agent Manager", "parent": lead["id"]})
+			var h2: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Helper · docs", "tool": "shell", "cwd": home, "group": "Agent Manager", "parent": lead["id"]})
+			await main.engine.call_api("POST", "/sessions/%s/send" % h1["id"], {"text": "python3 -m unittest discover -s tests/python -t . 2>&1 | tail -3"})
+			await wait(1.0)
+			await main.refresh()
+			main.grid_ids = [str(lead["id"]), str(h1["id"]), str(h2["id"])]
+			main.selected = str(lead["id"])
+			main.set_view("grid")
+			await wait(20.0)
+			await main.refresh()
+			await shot("21-agents-children")
+			report.append("children: %s" % ", ".join(main.sessions.filter(func(x): return str(x.get("parent", "")) != "").map(func(x): return "%s<-%s" % [x["name"], x["parent_name"]])))
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())

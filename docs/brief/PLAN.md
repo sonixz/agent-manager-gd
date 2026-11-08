@@ -9,7 +9,7 @@ Chaque loop se termine par une revue du propriétaire (captures, rapport en fran
 | 3 ✅ | Moteur Python + sessions tmux persistantes | Lancer, fermer l'appli, rouvrir : les sessions sont là, avec leur terminal |
 | 4 ✅ | Vivre avec plusieurs sessions | voir le détail plus bas |
 | 5 ✅ | Reprendre et ramifier | voir le détail plus bas |
-| 6 | Le Brain branché d'office | voir le détail plus bas |
+| 6 ✅ | Le Brain branché d'office | voir le détail plus bas |
 | 7 | Le contexte qui survit | voir le détail plus bas |
 | 8 | Revue de diff avec commentaires | voir le détail plus bas |
 | 9 | Coûts par agent | voir le détail plus bas |

@@ -36,6 +36,10 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   searches the Brain, and what it proposes waits for your OK in the Brain). The key is passed at launch only
   (`--mcp-config` / `-c mcp_servers…`) through the Brain's own relay; a fork gets its own key; removing a session
   revokes it. The Brain's timeline shows which session proposed what. `AGMGD_BRAIN=off` turns it off.
+- **Agents pilot agents**: every agent session is also offered Agent Manager's own MCP server (`agent-manager`):
+  `list_sessions`, `session_status`, `read_screen` for any session; `start_session` makes a child session (shown
+  « ↳ parent » on its card), `send_to_session` and `wait_for_session` work on its own children only. No tool presses
+  keys for another session, so an agent never approves on someone else's behalf.
 - **Git branch per session**: tick « In its own git branch » when creating a session: it works in
   `<repository>-worktrees/<name>` on branch `am/<name>`. **Finish its git branch…** shows what is ahead and
   uncommitted, can merge it into the repository's current branch (a conflicting merge is undone) and removes the

@@ -418,6 +418,11 @@ func refresh() -> void:
 	sessions = []
 	for g in tree:
 		sessions.append_array(g["sessions"])
+	var names := {}
+	for x in sessions:
+		names[str(x["id"])] = str(x["name"])
+	for x in sessions:  # a session started by an agent shows who started it
+		x["parent_name"] = names.get(str(x.get("parent", "")), "")
 	var changed := _watch_transitions()
 	var sig := JSON.stringify(tree) + selected + AmTheme.current
 	if sig != tree_sig and not get_viewport().gui_is_dragging():

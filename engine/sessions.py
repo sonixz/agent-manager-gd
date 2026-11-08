@@ -32,6 +32,7 @@ def host_path(path: str) -> str:
 
 
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hook.py")
+AGENTS_MCP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_agents.py")
 CLAUDE_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop",
                  "SubagentStop", "PreCompact", "SessionEnd"]
 SHELLS = {"bash", "zsh", "fish", "sh", "dash", "pwsh", "nu"}
@@ -79,25 +80,32 @@ class Sessions:
         return list(TOOLS[rec["tool"]]["command"])
 
     # ---------------------------------------------------------------- the Second Brain (Loop 6)
+    def _servers(self, rec: dict) -> dict:
+        """The MCP servers an agent session gets: Agent Manager itself (6C) and, when shared, the Second Brain."""
+        out = {"agent-manager": {"command": sys.executable or "python3", "args": [AGENTS_MCP]}}
+        spec = self._brain_spec(rec)
+        if spec:
+            out["second-brain"] = spec
+        return out
+
     def _brain_spec(self, rec: dict) -> dict | None:
         cid = (self.store.get(rec["id"]) or {}).get("brain_client", "") if rec.get("id") else ""
         return self.brain.server_spec(cid) if (self.brain and cid) else None
 
     def _claude_mcp(self, rec: dict) -> list[str]:
-        spec = self._brain_spec(rec)
-        if not spec:
-            return []
-        path = os.path.join(self.home, "sessions", rec["id"], "mcp.json")
+        folder = os.path.join(self.home, "sessions", rec["id"])
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, "mcp.json")
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"mcpServers": {"second-brain": {"type": "stdio", **spec}}}, f)
+            json.dump({"mcpServers": {k: {"type": "stdio", **v} for k, v in self._servers(rec).items()}}, f)
         return ["--mcp-config", path]
 
     def _codex_mcp(self, rec: dict) -> list[str]:
-        spec = self._brain_spec(rec)
-        if not spec:
-            return []
-        return ["-c", "mcp_servers.second-brain.command=" + json.dumps(spec["command"]),
-                "-c", "mcp_servers.second-brain.args=" + json.dumps(spec["args"])]
+        out = []
+        for k, v in self._servers(rec).items():
+            out += ["-c", f"mcp_servers.{k}.command=" + json.dumps(v["command"]),
+                    "-c", f"mcp_servers.{k}.args=" + json.dumps(v["args"])]
+        return out
 
     def _connect_brain(self, rec: dict) -> None:
         if self.brain and rec["tool"] in ("claude", "codex"):
@@ -105,8 +113,10 @@ class Sessions:
             if cid:
                 self.store.update(rec["id"], brain_client=cid)
 
+    port = 8790  # the engine's API port, for the agents' MCP server (set by __main__)
+
     def session_env(self, sid: str) -> dict:
-        return {"AGMGD_SESSION": sid, "AGMGD_HOME": self.home}
+        return {"AGMGD_SESSION": sid, "AGMGD_HOME": self.home, "AGMGD_PORT": str(self.port)}
 
     _branches: dict = {}
 
@@ -138,7 +148,7 @@ class Sessions:
         return PREFIX + sid
 
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
-               worktree: bool = False, brain: bool = True) -> dict:
+               worktree: bool = False, brain: bool = True, parent: str = "") -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
@@ -150,7 +160,9 @@ class Sessions:
         if worktree:
             wt, base = self._add_worktree(cwd, name)
             cwd = wt
-        rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base)
+        if parent and not self.store.get(parent):
+            raise ValueError("unknown parent session")
+        rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent)
         if brain:
             self._connect_brain(rec)
         try:

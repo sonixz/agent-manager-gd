@@ -111,3 +111,13 @@ session revokes its key. Live check against the owner's running Brain: a key cre
 Brain's 13 tools (propose_item included), refused once revoked; an app session started Claude Code which launched the
 relay. 25 engine tests (4 with a fake Brain recording the calls). The Brain timeline per agent (6B) is the Brain's
 existing feature: the client name carries the session name.
+
+## Loop 6C: agents pilot agents (2026-11-08)
+
+engine/mcp_agents.py, a small stdio MCP server offered to every Claude Code / Codex session next to the Second Brain
+(`--mcp-config`, `-c mcp_servers.agent-manager.*`). It talks to the engine's API with the engine token; the session id,
+data folder and port come from the session's environment (AGMGD_PORT added). Tools: list_sessions, session_status,
+read_screen (any session), start_session (a child: parent link, the parent's folder and group by default),
+send_to_session and wait_for_session (children only). No key-pressing tool: an agent cannot approve for another.
+Cards show « ↳ parent ». Tests: 28 (a lead starts a child, writes to it, waits and reads « déjà-fini »; writing to a
+session it did not start is refused).

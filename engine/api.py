@@ -103,7 +103,8 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(201, sessions.create(str(b.get("name", "")), str(b.get("tool", "shell")),
                                                             str(b.get("cwd", "~")), str(b.get("group", "")),
                                                             int(b.get("width", 160)), int(b.get("height", 48)),
-                                                            bool(b.get("worktree", False)), bool(b.get("brain", True))))
+                                                            bool(b.get("worktree", False)), bool(b.get("brain", True)),
+                                                            str(b.get("parent", ""))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
