@@ -10,7 +10,7 @@ import urllib.request
 from urllib.error import HTTPError
 
 from engine.api import load_token, serve
-from engine.sessions import Sessions
+from engine.sessions import ACTIVE_SECONDS as ACTIVE, Sessions
 from engine.store import Store
 from engine.tmux import Tmux
 
@@ -20,7 +20,7 @@ class EngineTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="agmgd-test-")
         self.tmux = Tmux("agmgd-test", tmpdir=self.tmp)
-        self.sessions = Sessions(Store(os.path.join(self.tmp, "s.sqlite3")), self.tmux)
+        self.sessions = Sessions(Store(os.path.join(self.tmp, "s.sqlite3")), self.tmux, self.tmp)
 
     def tearDown(self):
         self.tmux.kill_server()
@@ -39,7 +39,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(s["state"], "running")
         self.assertTrue(s["tmux"].startswith("am_"))
         # a new engine (the app reopened) sees the same session alive
-        again = Sessions(Store(os.path.join(self.tmp, "s.sqlite3")), Tmux("agmgd-test", tmpdir=self.tmp))
+        again = Sessions(Store(os.path.join(self.tmp, "s.sqlite3")), Tmux("agmgd-test", tmpdir=self.tmp), self.tmp)
         self.assertEqual([x["state"] for x in again.list()], ["running"])
         self.assertEqual(again.list()[0]["name"], "Shell é")
 
@@ -103,7 +103,7 @@ class EngineTest(unittest.TestCase):
         self.sessions.store.order_groups(["TTS", "Brain"])
         self.sessions.store.fold_group("Brain", True)
         # a new engine (the app reopened) sees the same tree
-        again = Sessions(Store(os.path.join(self.tmp, "s.sqlite3")), Tmux("agmgd-test", tmpdir=self.tmp))
+        again = Sessions(Store(os.path.join(self.tmp, "s.sqlite3")), Tmux("agmgd-test", tmpdir=self.tmp), self.tmp)
         tree = again.tree()["groups"]
         self.assertEqual([g["name"] for g in tree], ["", "TTS", "Brain"])
         self.assertEqual([s["name"] for s in tree[1]["sessions"]], ["c", "loose"])
@@ -115,6 +115,71 @@ class EngineTest(unittest.TestCase):
         names = [s["name"] for s in self.sessions.tree()["groups"][0]["sessions"]]
         self.assertEqual(names, ["c", "loose"])
         self.assertEqual(len(self.sessions.list()), 4)
+
+    def run_hook(self, sid, tool, payload):
+        import subprocess, sys
+        from engine.sessions import HOOK
+        env = {**os.environ, "AGMGD_SESSION": sid, "AGMGD_HOME": self.tmp}
+        args = [sys.executable, HOOK, tool] + ([json.dumps(payload)] if tool == "codex" else [])
+        out = subprocess.run(args, input=json.dumps(payload) if tool == "claude" else "", capture_output=True,
+                             text=True, env=env, timeout=10)
+        self.assertEqual((out.returncode, out.stdout), (0, ""))  # silent, never fails
+
+    def test_claude_hooks_drive_the_live_state(self):
+        s = self.sessions.create("c", "shell", self.tmp)
+        self.sessions.store.update(s["id"])  # no-op
+        rec = {**self.sessions.store.get(s["id"]), "tool": "claude"}
+        steps = [({"hook_event_name": "SessionStart", "session_id": "conv-1"}, "idle"),
+                 ({"hook_event_name": "UserPromptSubmit", "prompt": "x"}, "working"),
+                 ({"hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"}, "approval"),
+                 ({"hook_event_name": "PreToolUse", "tool_name": "Bash"}, "working"),
+                 ({"hook_event_name": "Stop"}, "done"),
+                 ({"hook_event_name": "Notification", "message": "Claude is waiting for your input"}, "waiting")]
+        for payload, want in steps:
+            self.run_hook(s["id"], "claude", payload)
+            live = self.tmux.sessions()
+            got = self.sessions.describe(rec, live)
+            self.assertEqual(got["activity"], want, payload)
+        self.assertEqual(got["conversation"], "conv-1")  # kept for resuming (Loop 5)
+
+    def test_codex_notify_and_terminal_activity(self):
+        s = self.sessions.create("x", "shell", self.tmp)
+        rec = {**self.sessions.store.get(s["id"]), "tool": "codex"}
+        time.sleep(ACTIVE + 0.2)
+        self.assertEqual(self.sessions.describe(rec)["activity"], "idle")
+        self.run_hook(s["id"], "codex", {"type": "agent-turn-complete", "thread-id": "t-9", "last-assistant-message": "Fini."})
+        d = self.sessions.describe(rec)
+        self.assertEqual((d["activity"], d["message"], d["conversation"]), ("done", "Fini.", "t-9"))
+
+    def test_a_shell_running_a_program_is_working(self):
+        s = self.sessions.create("sh", "shell", self.tmp)
+        self.sessions.send(s["id"], "sleep 3")
+        end = time.time() + 3
+        while self.sessions.get(s["id"])["activity"] != "working" and time.time() < end:
+            time.sleep(0.1)
+        self.assertEqual(self.sessions.get(s["id"])["activity"], "working")
+
+    def test_claude_is_launched_with_its_own_hooks_only(self):
+        rec = {"id": "abcd1234", "tool": "claude"}
+        cmd = self.sessions.command_for(rec)
+        self.assertEqual(cmd[:2], ["claude", "--settings"])
+        with open(cmd[2], encoding="utf-8") as f:
+            hooks = json.load(f)["hooks"]
+        self.assertIn("Stop", hooks)
+        self.assertTrue(cmd[2].startswith(self.tmp))  # in our data folder, never ~/.claude
+        codex = self.sessions.command_for({"id": "x", "tool": "codex"})
+        self.assertTrue(codex[2].startswith("notify=["))
+
+    @unittest.skipUnless(os.environ.get("AGMGD_TEST_CLAUDE_DIR"), "set AGMGD_TEST_CLAUDE_DIR to a folder Claude Code trusts")
+    def test_real_claude_reports_session_start(self):
+        """Starts the real Claude Code (no prompt, no cost): its SessionStart hook must reach the engine."""
+        s = self.sessions.create("real", "claude", os.environ["AGMGD_TEST_CLAUDE_DIR"])
+        end = time.time() + 30
+        while not self.sessions.get(s["id"])["conversation"] and time.time() < end:
+            time.sleep(0.3)
+        d = self.sessions.get(s["id"])
+        self.assertEqual(d["activity"], "idle")
+        self.assertTrue(d["conversation"])
 
     def test_the_api_needs_its_token(self):
         token = load_token(self.tmp)

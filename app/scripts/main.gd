@@ -11,7 +11,13 @@ const C_MUTED := Color("8b98a8")
 const C_ACCENT := Color("7dd3a8")
 const C_WARN := Color("f2c66d")
 const C_ERROR := Color("f47c7c")
+const C_INFO := Color("79b8ff")
 const STATE_COLOR := {"running": C_ACCENT, "exited": C_WARN, "missing": C_ERROR}
+## What a session is doing (engine "activity"): colour and words.
+const ACTIVITY := {
+	"working": [C_INFO, "working"], "approval": [Color("ff9e64"), "waits for your OK"],
+	"waiting": [C_WARN, "waits for an answer"], "done": [C_ACCENT, "done"], "idle": [Color("6b7686"), "ready"],
+	"exited": [Color("b08a5a"), "ended"], "missing": [C_ERROR, "gone · Restart brings it back"]}
 const ANSI := ["1c232c", "f47c7c", "7dd3a8", "f2c66d", "79b8ff", "d2a8ff", "56d4dd", "c9d1d9",
 	"4b5563", "ff9b9b", "a6f0c6", "ffe08a", "a5d0ff", "e2c5ff", "8ee8ee", "f0f6fc"]
 
@@ -283,7 +289,8 @@ func _session_row(s: Dictionary, gname: String, index: int) -> Button:
 	row.toggle_mode = true
 	row.button_pressed = id == selected
 	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	row.text = "     %s\n     %s · %s" % [s["name"], s["tool_label"], s["state"]]
+	var act: Array = ACTIVITY.get(str(s.get("activity", s["state"])), [C_MUTED, str(s["state"])])
+	row.text = "     %s\n     %s · %s" % [s["name"], s["tool_label"], act[1]]
 	row.add_theme_color_override("font_color", C_TEXT)
 	row.custom_minimum_size = Vector2(0, 52)
 	row.tooltip_text = str(s["cwd"])
@@ -305,11 +312,17 @@ func _session_row(s: Dictionary, gname: String, index: int) -> Button:
 			# dropped on the lower half: after this row
 			_move(str(d["id"]), gname, index + (1 if at.y > row.size.y / 2 else 0)))
 	var d := ColorRect.new()
-	d.color = STATE_COLOR.get(s["state"], C_MUTED) as Color
+	d.color = act[0]
 	d.size = Vector2(8, 8)
 	d.position = Vector2(14, 15)
 	d.mouse_filter = MOUSE_FILTER_IGNORE
 	row.add_child(d)
+	if str(s.get("activity", "")) == "working":  # a slow pulse while the agent works
+		var tw := d.create_tween().set_loops()
+		tw.tween_property(d, "modulate:a", 0.25, 0.6)
+		tw.tween_property(d, "modulate:a", 1.0, 0.6)
+	if str(s.get("activity", "")) in ["approval", "waiting"]:
+		row.add_theme_stylebox_override("normal", _box(C_PANEL_2, 8, act[0].darkened(0.2), 1, 10))
 	return row
 
 
@@ -435,8 +448,10 @@ func _session(id: String) -> Dictionary:
 func _render_header() -> void:
 	var s := _session(selected)
 	header_name.text = str(s.get("name", "")) + ("   " + str(s.get("cwd", "")) if s else "")
-	header_state.text = str(s.get("state", ""))
-	header_state.add_theme_color_override("font_color", STATE_COLOR.get(s.get("state", ""), C_MUTED))
+	var act: Array = ACTIVITY.get(str(s.get("activity", s.get("state", ""))), [C_MUTED, str(s.get("state", ""))])
+	var msg := str(s.get("message", ""))
+	header_state.text = str(act[1]) + (" · " + msg.left(70) if msg != "" and str(s.get("activity", "")) in ["approval", "waiting", "done"] else "")
+	header_state.add_theme_color_override("font_color", act[0])
 
 
 func select(id: String) -> void:

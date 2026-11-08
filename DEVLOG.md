@@ -44,3 +44,14 @@ sessions). The sidebar is a tree: fold a group with a click, drag a session onto
 drag a group header to reorder, right click for rename, move to group, restart, stop, remove; double click renames.
 The 2-second refresh no longer rebuilds the rows when nothing changed or during a drag. Checked with a real mouse
 drag on a virtual display: 10 sessions in 3 groups, order and folding survive reopening. 10 engine tests.
+
+## Loop 4B: live states (2026-11-08)
+
+Each session shows what it is doing: working, waits for your OK, waits for an answer, done, ready, ended, gone.
+Claude Code reports through its own hooks, passed only for that launch with `--settings <file in our data folder>`
+(never the user's settings); Codex through `-c notify=…`; engine/hook.py writes the state atomically, prints nothing
+and never fails the agent. Fallbacks: terminal activity (tmux window_activity), the running program for shells, and
+approval prompts in Codex's last lines. The session's conversation id is kept for resuming (Loop 5). Checked with the
+real Claude Code (its SessionStart hook reaches the engine, no prompt, no cost) and simulated events for the other
+states. Found and fixed: Godot 4.7's OS.execute/create_process re-split arguments containing double quotes, so the
+engine launch no longer quotes (wsl.exe --cd on Windows). 15 engine tests (1 real-Claude test, opt-in).

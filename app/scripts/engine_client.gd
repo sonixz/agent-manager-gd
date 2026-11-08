@@ -31,12 +31,19 @@ func host_command(argv: Array) -> Array:
 
 func connect_engine() -> bool:
 	if not await _health():
-		# A login shell (bash -l): the user's PATH, so their claude and codex are found. AGMGD_HOME and AGMGD_TMUX_SOCKET (tests, a second profile) are passed on explicitly: they do not cross into WSL.
+		# A login shell (bash -l): the user's PATH, so their claude and codex are found. AGMGD_HOME and
+		# AGMGD_TMUX_SOCKET (tests, a second profile) are passed on explicitly: they do not cross into WSL.
+		# No quotes in these arguments: Godot's OS.execute/create_process re-split arguments that contain them.
 		var env_prefix := ""
 		for k in ["AGMGD_HOME", "AGMGD_TMUX_SOCKET"]:
 			if OS.get_environment(k) != "":
-				env_prefix += "%s='%s' " % [k, OS.get_environment(k).replace("'", "")]
-		var cmd := host_command(["bash", "-lc", "cd \"$0\" && exec env %spython3 -m engine --port %d" % [env_prefix, port], engine_root()])
+				env_prefix += "%s=%s " % [k, OS.get_environment(k).replace(" ", "\\ ")]
+		var root := engine_root()
+		var cmd: Array
+		if on_windows:
+			cmd = ["wsl.exe", "--cd", root, "-e", "bash", "-lc", "exec env %spython3 -m engine --port %d" % [env_prefix, port]]
+		else:
+			cmd = ["bash", "-lc", "cd %s && exec env %spython3 -m engine --port %d" % [root.replace(" ", "\\ "), env_prefix, port]]
 		engine_pid = OS.create_process(cmd[0], cmd.slice(1))
 		for i in 50:
 			await get_tree().create_timer(0.2).timeout
@@ -53,7 +60,7 @@ func _load_token() -> bool:
 	if on_windows:
 		var out := []
 		var path := (home if home != "" else "$HOME/.local/share/agent-manager-gd") + "/" + rel
-		OS.execute("wsl.exe", ["-e", "bash", "-c", "cat \"" + path + "\""], out)
+		OS.execute("wsl.exe", ["-e", "bash", "-c", "cat " + path.replace(" ", "\\ ")], out)
 		token = "".join(out).strip_edges()
 	else:
 		if home == "":

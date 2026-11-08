@@ -20,6 +20,7 @@ class TmuxSession:
     pane_command: str
     width: int
     height: int
+    activity: float = 0.0
 
 
 class Tmux:
@@ -56,7 +57,8 @@ class Tmux:
         self.run("set-option", "-t", name, "remain-on-exit", "on")
 
     def sessions(self) -> dict[str, TmuxSession]:
-        fmt = "#{session_name}\t#{session_created}\t#{session_attached}\t#{pane_dead}\t#{pane_pid}\t#{pane_current_command}\t#{window_width}\t#{window_height}"
+        fmt = ("#{session_name}\t#{session_created}\t#{session_attached}\t#{pane_dead}\t#{pane_pid}\t"
+               "#{pane_current_command}\t#{window_width}\t#{window_height}\t#{window_activity}")
         try:
             out = self.run("list-panes", "-a", "-F", fmt, check=True)
         except RuntimeError:  # no server yet
@@ -67,7 +69,7 @@ class Tmux:
             if len(p) < 8 or not p[0].startswith(PREFIX) or p[0] in found:
                 continue
             found[p[0]] = TmuxSession(p[0], int(p[1] or 0), int(p[2] or 0), p[3] == "1", int(p[4] or 0), p[5],
-                                      int(p[6] or 0), int(p[7] or 0))
+                                      int(p[6] or 0), int(p[7] or 0), float(p[8] or 0) if len(p) > 8 else 0.0)
         return found
 
     def capture(self, name: str, lines: int = 40) -> str:

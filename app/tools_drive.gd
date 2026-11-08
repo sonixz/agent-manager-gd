@@ -115,6 +115,46 @@ func _run() -> void:
 			await wait(1.0)
 			await shot("05-tree")
 			report.append("tree: " + _tree_text())
+		"states":
+			var trusted := OS.get_environment("DRIVE_TRUSTED")
+			var home := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
+			await main.engine.call_api("POST", "/groups", {"name": "Second Brain"})
+			await main.engine.call_api("POST", "/groups", {"name": "Agent Manager"})
+			var made := {}
+			for it in [["Themes", "claude", "Second Brain"], ["MCP fixes", "claude", "Second Brain"], ["Docs", "claude", "Second Brain"],
+					["Terminal", "claude", "Agent Manager"], ["Build", "shell", "Agent Manager"], ["Scratch", "shell", ""]]:
+				var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": it[0], "tool": it[1], "cwd": trusted if it[1] == "claude" else home, "group": it[2]})
+				made[it[0]] = str(r.get("id", ""))
+			var c0 := Time.get_ticks_msec()  # Claude Code starts; its SessionStart hook says « ready »
+			while Time.get_ticks_msec() - c0 < 40000:
+				await wait(1.0)
+				await main.refresh()
+				var started: int = main.sessions.filter(func(x): return x["tool"] == "claude" and str(x["conversation"]) != "").size()
+				if started == 4:
+					break
+			report.append("claude sessions started (hook seen): %d" % main.sessions.filter(func(x): return x["tool"] == "claude" and str(x["conversation"]) != "").size())
+			var hook := ProjectSettings.globalize_path("res://").path_join("../engine/hook.py").simplify_path()
+			var data := OS.get_environment("AGMGD_HOME")
+			for ev in [["Themes", {"hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"}],
+					["MCP fixes", {"hook_event_name": "UserPromptSubmit", "prompt": "x"}],
+					["Docs", {"hook_event_name": "Stop"}],
+					["Terminal", {"hook_event_name": "Notification", "message": "Claude is waiting for your input"}]]:
+				var outp := []
+				var payload_file := data.path_join("payload.json")
+				var pf := FileAccess.open(payload_file, FileAccess.WRITE)
+				pf.store_string(JSON.stringify(ev[1]))
+				pf.close()
+				# no quotes in OS.execute arguments (Godot re-splits them): the payload goes through a file on stdin
+				var code := OS.execute("bash", ["-c", "AGMGD_SESSION=%s AGMGD_HOME=%s python3 %s claude < %s" % [made[ev[0]], data, hook, payload_file]], outp, true)
+				report.append("inject %s -> %d %s %s" % [ev[0], code, "".join(outp).strip_edges(), FileAccess.get_file_as_string(data.path_join("state/%s.json" % made[ev[0]])).left(60)])
+			await main.engine.call_api("POST", "/sessions/%s/send" % made["Build"], {"text": "sleep 60"})
+			await wait(2.5)
+			await main.refresh()
+			main.select(made["Themes"])
+			await wait(2.0)
+			await main.refresh()
+			await shot("07-states")
+			report.append("states: " + ", ".join(main.sessions.map(func(x): return "%s=%s" % [x["name"], x["activity"]])))
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())
