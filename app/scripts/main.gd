@@ -51,6 +51,9 @@ var f_worktree: CheckBox
 var f_brain: CheckBox
 var f_brief: CheckBox
 var dictation: Dictation
+var voice_mode := "dictate"     # F8 dictate, F9 command
+var spoken := false
+var last_spoken := ""
 var voice_overlay: PanelContainer
 var voice_label: Label
 var voice_meter: ProgressBar
@@ -101,6 +104,7 @@ func _ready() -> void:
 	cfg.load(SETTINGS)
 	AmTheme.apply(str(cfg.get_value("ui", "theme", OS.get_environment("AGMGD_THEME") if OS.get_environment("AGMGD_THEME") != "" else "focus")))
 	view = str(cfg.get_value("ui", "view", "focus"))
+	spoken = bool(cfg.get_value("ui", "spoken", false))
 	theme = AmTheme.build()
 	font = TermFont.make()
 	_build()
@@ -131,8 +135,9 @@ func _notification(what: int) -> void:
 # ------------------------------------------------------------------ shortcuts
 func _input(e: InputEvent) -> void:
 	# F8: hold to dictate into the active session (works even when the terminal has the focus)
-	if e is InputEventKey and e.keycode == KEY_F8 and not e.echo:
+	if e is InputEventKey and e.keycode in [KEY_F8, KEY_F9] and not e.echo:
 		if e.pressed:
+			voice_mode = "dictate" if e.keycode == KEY_F8 else "command"
 			_voice_start()
 		else:
 			_voice_stop()
@@ -533,6 +538,7 @@ func _watch_transitions() -> Array:
 		var before := str(last_activity.get(id, ""))
 		if before != "" and act != before:
 			changed.append(id)
+			_speak_transition(x, act)
 			if act in ["approval", "waiting"]:
 				_toast("%s %s" % [x["name"], activity_of(x)[1]])
 				if not get_window().has_focus():
@@ -1195,13 +1201,16 @@ func _build_voice_overlay(area: Control) -> void:
 
 
 func _voice_start() -> void:
-	if dictation.recording or selected == "" or not terms.has(selected):
+	if dictation.recording or (voice_mode == "dictate" and (selected == "" or not terms.has(selected))):
 		return
 	if not dictation.available():
 		_toast("No microphone found")
 		return
 	dictation.start()
-	voice_label.text = "🎙  Listening to you for « %s »…  release F8 to write it" % _session(selected).get("name", "")
+	if voice_mode == "command":
+		voice_label.text = "🎙  A command…  (« approve Themes », « go to Docs », « who is waiting? »)  release F9"
+	else:
+		voice_label.text = "🎙  Listening to you for « %s »…  release F8 to write it" % _session(selected).get("name", "")
 	voice_overlay.visible = true
 	voice_overlay.reset_size()
 
@@ -1222,7 +1231,10 @@ func _voice_stop() -> void:
 		if str(r["error"]).contains("Keys"):
 			set_view("keys")
 		return
-	on_transcribed(target, str(r.get("text", "")), float(r.get("cost_usd", 0)))
+	if voice_mode == "command":
+		await run_voice_command(str(r.get("text", "")))
+	else:
+		on_transcribed(target, str(r.get("text", "")), float(r.get("cost_usd", 0)))
 
 
 ## The dictated text goes into the session's prompt as a paste: never with Enter. The owner reads, then sends.
@@ -1232,6 +1244,72 @@ func on_transcribed(id: String, text: String, cost: float) -> void:
 	terms[id].paste_text(text.strip_edges())
 	terms[id].grab_focus()
 	_toast("Dictated into %s: read it, then Enter%s" % [_session(id).get("name", ""), ("   (≈ $%.4f)" % cost) if cost > 0 else ""])
+
+
+# ------------------------------------------------------------------ voice commands and spoken status (Loop 11)
+## Runs what was said. Actions that touch an agent always ask first (a visible confirmation).
+func run_voice_command(text: String) -> void:
+	if text.strip_edges() == "":
+		return
+	var c := await engine.call_api("POST", "/voice/command", {"text": text})
+	var it := str(c.get("intent", "unknown"))
+	var id := str(c.get("id", ""))
+	var nm := str(c.get("name", ""))
+	match it:
+		"approve":
+			_confirm("Approve « %s »?   (heard: « %s »)" % [nm, text], func() -> void: _keys(id, ["Enter"]))
+		"refuse":
+			_confirm("Refuse for « %s »?   (heard: « %s »)" % [nm, text], func() -> void: _keys(id, ["Escape"]))
+		"wrap_up":
+			_confirm("Wrap up « %s »: its summary, then archive?   (heard: « %s »)" % [nm, text], func() -> void: _wrap_up(id))
+		"go_to":
+			await select(id)
+		"view":
+			set_view(str(c["view"]))
+		"waiting":
+			var w := sessions.filter(func(x): return str(x.get("activity", "")) in ["approval", "waiting"])
+			var line := "Nobody is waiting for you." if w.is_empty() else ", ".join(w.map(func(x): return "%s %s" % [x["name"], activity_of(x)[1]]))
+			_toast(line)
+			_speak(_spoken_waiting(w), true)
+		"new_session":
+			await _open_new()
+			f_name.text = str(c.get("name", "")).capitalize()
+		_:
+			_toast("Heard « %s »: %s" % [text, c.get("reason", "not a command")])
+
+
+func _speak(text: String, force := false) -> void:
+	if not (spoken or force) or text == "":
+		return
+	last_spoken = text
+	if OS.get_name() == "Linux" and not FileAccess.file_exists("/usr/bin/speech-dispatcher"):
+		return  # no speech service on this Linux: the toast is enough
+	var voices := DisplayServer.tts_get_voices_for_language("fr")
+	if voices.is_empty():
+		voices = DisplayServer.tts_get_voices_for_language("en")
+	if voices.is_empty():
+		return  # no system voice: the toast says it already
+	DisplayServer.tts_stop()
+	DisplayServer.tts_speak(text, voices[0])
+
+
+func _spoken_waiting(w: Array) -> String:
+	if w.is_empty():
+		return "Personne ne t'attend."
+	return ", ".join(w.map(func(x): return "%s %s" % [x["name"], "attend ton OK" if str(x["activity"]) == "approval" else "attend une réponse"])) + "."
+
+
+func _speak_transition(x: Dictionary, act: String) -> void:
+	match act:
+		"approval": _speak("%s attend ton OK." % x["name"])
+		"waiting": _speak("%s attend une réponse." % x["name"])
+		"done": _speak("%s a fini." % x["name"])
+
+
+func set_spoken(on: bool) -> void:
+	spoken = on
+	_save("spoken", on)
+	_toast("Spoken status " + ("on: short spoken notices when an agent waits or finishes" if on else "off"))
 
 
 # ------------------------------------------------------------------ keys (Loop 10)
@@ -1668,6 +1746,8 @@ func open_palette() -> void:
 	items.append({"label": "Repositories", "hint": "connected repositories and deploy keys", "run": set_view.bind("repos")})
 	items.append({"label": "Keys", "hint": "your API keys: OpenAI (voice), Fly.io, Anthropic", "run": set_view.bind("keys")})
 	items.append({"label": "Dictate (hold F8)", "hint": "speak into the active session; you press Enter", "run": func() -> void: _toast("Hold F8 and speak, release to write it into the prompt")})
+	items.append({"label": "Voice command (hold F9)", "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold F9 and say a command")})
+	items.append({"label": "Spoken status: " + ("turn off" if spoken else "turn on"), "hint": "short spoken notices", "run": func() -> void: set_spoken(not spoken)})
 	items.append({"label": "New session", "hint": "Ctrl+Shift+N", "run": _open_new})
 	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", func(n: String) -> void:
 		await engine.call_api("POST", "/groups", {"name": n})
@@ -1834,12 +1914,16 @@ func _build_menus() -> void:
 		theme_menu.add_item(AmTheme.LABELS[t])
 		theme_menu.set_item_metadata(theme_menu.item_count - 1, t)
 	theme_menu.add_separator()
+	theme_menu.add_item("Spoken status (on / off)")
+	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__spoken")
 	theme_menu.add_item("Keys…")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__keys")
 	theme_menu.index_pressed.connect(func(i: int) -> void:
 		var m := str(theme_menu.get_item_metadata(i))
 		if m == "__keys":
 			set_view("keys")
+		elif m == "__spoken":
+			set_spoken(not spoken)
 		else:
 			set_theme_name(m))
 	add_child(theme_menu)

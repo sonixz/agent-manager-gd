@@ -14,7 +14,7 @@ Chaque loop se termine par une revue du propriétaire (captures, rapport en fran
 | 8 ✅ | Revue de diff avec commentaires | voir « Loops 8 à 15 » plus bas |
 | 9 ✅ | Dépôts connectés et clés de déploiement | idem |
 | 10 ✅ | La voix : dictée vers les terminaux (+ écran Clés) | idem |
-| 11 | La voix : commandes et état parlé | idem |
+| 11 ✅ | La voix : commandes et état parlé | idem |
 | 12 | Sandbox Fly.io, « oui ou non » | idem |
 | 13 | Sandboxes complètes : gestionnaire de sandboxes, tunnels, connexions, supervision avec le Brain | idem |
 | 14 | Coûts : Fly.io et agents, budgets | idem |

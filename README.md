@@ -54,6 +54,11 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   only when a feature needs them.
 - **Dictation**: hold **F8** and speak; on release the text is written into the active session's prompt (as a paste,
   never with Enter): you read it and press Enter yourself. Transcription by OpenAI with your key (≈ $0.003/min, shown).
+- **Voice commands**: hold **F9** and say « approve Themes », « refuse Docs », « go to Cart refactor », « grid view »,
+  « who is waiting? », « wrap up Docs », « new session … » (French or English). Understood by plain rules, no model.
+  Approving, refusing and wrapping up always ask for a visible confirmation first.
+- **Spoken status** (◐ → Spoken status, off by default): short spoken notices with your system's own voice (free,
+  offline): « Themes attend ton OK », « Docs a fini ».
 - **Connected repositories** (⎇ Repos): add a repository's SSH address; Agent Manager makes a deploy key for it only,
   shows the public key to add on GitHub (*Deploy keys*, with write access), checks it, and sessions started on that
   repository use that key only. Rotate or disconnect any time. Details: `docs/REPOSITORIES.md`.

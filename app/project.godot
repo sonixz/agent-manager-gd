@@ -15,4 +15,6 @@ renderer/rendering_method="gl_compatibility"
 
 [audio]
 
+general/text_to_speech=true
+
 driver/enable_input=true

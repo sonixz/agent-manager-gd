@@ -168,3 +168,13 @@ dictation: the microphone on a silent bus with a capture effect, a 16 kHz mono W
 level meter; the text is pasted (bracketed) into the active session's prompt, never sent with Enter. Checked with a
 fake transcription: the dictated French text lands in a shell's prompt and is not executed; Windows headless still
 loads. Tests: 43. The real voice test needs the owner's OpenAI key and microphone (★).
+
+## Loop 11: voice commands and spoken status (2026-11-08)
+
+Hold F9 for a command (F8 stays dictation). engine/voice_commands.py understands the transcribed sentence by plain
+rules in French and English (approve, refuse, wrap up, go to, views, who is waiting, new session; a bare session name
+opens it; an unknown session is never guessed; « approve » alone targets the only session waiting for an OK). The app
+asks for a visible confirmation before approving, refusing or wrapping up. Spoken status uses the system's own voice
+through Godot's text-to-speech (free, offline; a French voice when there is one), off by default, toggled in ◐ or the
+palette; « who is waiting? » always answers aloud. Checked: the commands drive the app (grid view, open Build,
+confirmation for « approve Themes », an unknown sentence ignored), the spoken answer text. Tests: 46.
