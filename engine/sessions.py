@@ -248,6 +248,13 @@ class Sessions:
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
 
+    def _screen(self, rec: dict) -> str:
+        """The whole visible screen (no history): where Claude Code shows « esc to interrupt »."""
+        try:
+            return self.tmux.run("capture-pane", "-p", "-J", "-t", self.tmux_name(rec["id"]))
+        except Exception:
+            return ""
+
     def _tail(self, rec: dict, lines: int = 15) -> str:
         try:
             return "\n".join(self.tmux.capture(self.tmux_name(rec["id"]), lines).splitlines()[-lines:])
@@ -263,16 +270,18 @@ class Sessions:
             if rec["tool"] == "shell":
                 return ("working" if busy else "idle"), "in a cloud sandbox"
             tail = self._tail(rec) if t else ""
-            if CLAUDE_BUSY.search(tail):
+            if CLAUDE_BUSY.search(self._screen(rec) if t else ""):
                 return "working", "in a cloud sandbox"
             if APPROVAL_HINTS.search(tail):
                 return "approval", "in a cloud sandbox"
             return "idle", "in a cloud sandbox"
         if rec["tool"] == "claude" and hs.get("state"):
             st = hs["state"]
-            if st == "working" and t and not busy and now - max(t.activity or 0, hs.get("time", 0)) > STALE_WORKING_SECONDS \
-                    and not CLAUDE_BUSY.search(self._tail(rec)):
-                return "idle", "stopped (interrupted?)"  # e.g. Esc: Claude Code sends no Stop hook then
+            # the last hook said « working » a while ago and Claude Code does not show « esc to interrupt »: the turn
+            # ended without a Stop hook (Esc, an error). Screen redraws do not count: full-screen mode redraws by itself.
+            if st == "working" and t and now - hs.get("time", 0) > STALE_WORKING_SECONDS \
+                    and not CLAUDE_BUSY.search(self._screen(rec)):
+                return "idle", "stopped (interrupted?)"
             return ("idle" if st == "ended" else st), str(hs.get("message", ""))
         if rec["tool"] == "codex":
             if busy and not (hs.get("state") == "done" and hs.get("time", 0) >= t.activity - 0.5):

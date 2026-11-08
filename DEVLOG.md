@@ -329,3 +329,8 @@ project allows gpt-transcribe: a real one-second call now goes through (about $0
   copy: the sandbox's tmux now has `mouse on` and 50,000 lines of history (applied at the next attach).
 - **Voice**: with F9, a phrase that is not a command is written into the active session like a dictation (F8),
   instead of « not a command ». Tests: 62.
+- Same evening: the gd-project session flickered between « working » and « ready ». Claude Code in full-screen mode
+  redraws by itself, so « no output for 15 s » was rarely true. The rule now ignores redraws: a hook « working » older
+  than 15 s with no « esc to interrupt » on the whole visible screen (it was only the last 40 rows) means idle.
+- « Remove and forget » now asks first (it deleted at once); the agent's own conversation stays in Claude Code / Codex.
+  Tests: 62.

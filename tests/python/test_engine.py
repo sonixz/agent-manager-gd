@@ -84,8 +84,17 @@ class EngineTest(unittest.TestCase):
         t = SimpleNamespace(activity=old, pane_command="claude")
         state, msg = self.sessions.activity(rec, t, {"state": "working", "time": old})
         self.assertEqual(state, "idle")                                       # no « esc to interrupt », quiet for a minute
+        # the screen redraws (full-screen mode) but no « esc to interrupt »: still idle
         state, _ = self.sessions.activity(rec, SimpleNamespace(activity=time.time(), pane_command="claude"), {"state": "working", "time": old})
-        self.assertEqual(state, "working")                                    # output just now: still working
+        self.assertEqual(state, "idle")
+        # a fresh « working » from the hooks is trusted
+        state, _ = self.sessions.activity(rec, SimpleNamespace(activity=time.time(), pane_command="claude"), {"state": "working", "time": time.time()})
+        self.assertEqual(state, "working")
+        # an old « working » with Claude Code's busy sign on screen: still working (a long command)
+        self.sessions.send(s["id"], "echo 'Thinking… (esc to interrupt)'")
+        self.assertTrue(self.wait_for(s["id"], "esc to interrupt"))
+        state, _ = self.sessions.activity(rec, SimpleNamespace(activity=time.time(), pane_command="claude"), {"state": "working", "time": old})
+        self.assertEqual(state, "working")
 
     def test_attach_command_names_the_private_server(self):
         s = self.sessions.create("t", "shell", self.tmp)

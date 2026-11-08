@@ -2482,6 +2482,14 @@ func _stop() -> void:
 func _remove() -> void:
 	if selected == "":
 		return
+	var sid := selected
+	var nm := str(_session(sid).get("name", sid))
+	_confirm("Remove « %s » and forget it?\nIts terminal is closed and it leaves the list and History. The agent's own conversation stays in Claude Code / Codex (claude --resume)." % nm, func() -> void:
+		await _remove_now(sid))
+
+
+func _remove_now(sid: String) -> void:
+	selected = sid
 	await engine.call_api("DELETE", "/sessions/%s" % selected)
 	if terms.has(selected):
 		terms[selected].queue_free()
