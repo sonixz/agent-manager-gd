@@ -66,6 +66,33 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, {k: v["label"] for k, v in TOOLS.items()})
                 if parts == ["sessions"] and method == "GET":
                     return self._reply(200, {"sessions": sessions.list()})
+                if parts == ["tree"] and method == "GET":
+                    return self._reply(200, sessions.tree())
+                if parts == ["groups"] and method == "POST":
+                    name = str(self._body().get("name", "")).strip()
+                    if not name or len(name) > 60:
+                        raise ValueError("a group name of 1 to 60 characters")
+                    sessions.store.add_group(name)
+                    return self._reply(201, sessions.tree())
+                if parts == ["groups", "order"] and method == "POST":
+                    sessions.store.order_groups([str(n) for n in self._body().get("names", [])])
+                    return self._reply(200, sessions.tree())
+                if len(parts) == 3 and parts[0] == "groups" and method == "POST":
+                    g, act, b = parts[1], parts[2], self._body()
+                    from urllib.parse import unquote
+                    g = unquote(g)
+                    if act == "rename":
+                        new = str(b.get("name", "")).strip()
+                        if not new or len(new) > 60:
+                            raise ValueError("a group name of 1 to 60 characters")
+                        sessions.store.rename_group(g, new)
+                    elif act == "fold":
+                        sessions.store.fold_group(g, bool(b.get("folded", True)))
+                    elif act == "delete":
+                        sessions.store.delete_group(g)
+                    else:
+                        return self._reply(404, {"error": "not found"})
+                    return self._reply(200, sessions.tree())
                 if parts == ["sessions"] and method == "POST":
                     b = self._body()
                     return self._reply(201, sessions.create(str(b.get("name", "")), str(b.get("tool", "shell")),
@@ -89,6 +116,10 @@ def make_handler(sessions: Sessions, token: str):
                         return self._reply(200, sessions.restart(sid))
                     if method == "POST" and action == "stop":
                         return self._reply(200, sessions.stop(sid))
+                    if method == "POST" and action == "move":
+                        b = self._body()
+                        sessions.move(sid, str(b.get("group", "")), int(b.get("index", 0)))
+                        return self._reply(200, sessions.tree())
                     if method == "POST" and action == "rename":
                         return self._reply(200, sessions.rename(sid, str(self._body().get("name", ""))))
                     if method == "DELETE" and action == "":

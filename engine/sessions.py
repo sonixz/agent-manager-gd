@@ -102,6 +102,21 @@ class Sessions:
         self.tmux.kill(self.tmux_name(sid))
         self.store.delete(sid)
 
+    def tree(self) -> dict:
+        """Groups in order, each with its sessions in order; sessions without a group first."""
+        items = self.list()
+        groups = [{"name": "", "folded": False, "sessions": [s for s in items if not s["grp"]]}]
+        for g in self.store.groups():
+            groups.append({"name": g["name"], "folded": bool(g["folded"]),
+                           "sessions": [s for s in items if s["grp"] == g["name"]]})
+        return {"groups": groups}
+
+    def move(self, sid: str, grp: str, index: int) -> None:
+        self.get(sid)
+        if grp and not NAME_OK.match(grp):
+            raise ValueError("a group name of 1 to 60 characters")
+        self.store.move(sid, grp.strip(), index)
+
     def rename(self, sid: str, name: str) -> dict:
         if not NAME_OK.match(name or ""):
             raise ValueError("a name of 1 to 60 characters")

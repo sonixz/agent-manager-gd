@@ -18,6 +18,16 @@ const ANSI := ["1c232c", "f47c7c", "7dd3a8", "f2c66d", "79b8ff", "d2a8ff", "56d4
 var engine: EngineClient
 var font: Font
 var sessions: Array = []
+var tree: Array = []          # [{name, folded, sessions: [...]}], "" = no group
+var tree_sig := ""
+var row_menu: PopupMenu
+var group_menu: PopupMenu
+var move_menu: PopupMenu
+var menu_target := ""         # session id or group name under the menu
+var ask_dialog: ConfirmationDialog
+var ask_edit: LineEdit
+var ask_done: Callable
+var f_group: OptionButton
 var terms := {}          # session id -> VtTerminal
 var selected := ""
 var list_box: VBoxContainer
@@ -84,7 +94,18 @@ func _build() -> void:
 	var new_btn := Button.new()
 	new_btn.text = "+  New session"
 	new_btn.pressed.connect(_open_new)
-	sv.add_child(new_btn)
+	new_btn.size_flags_horizontal = SIZE_EXPAND_FILL
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
+	top.add_child(new_btn)
+	var grp_btn := Button.new()
+	grp_btn.text = "+ Group"
+	grp_btn.tooltip_text = "A new group in the project tree"
+	grp_btn.pressed.connect(func() -> void: _ask("New group", "", func(n: String) -> void:
+		await engine.call_api("POST", "/groups", {"name": n})
+		await refresh()))
+	top.add_child(grp_btn)
+	sv.add_child(top)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -135,6 +156,7 @@ func _build() -> void:
 	empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	term_host.add_child(empty_label)
 	_build_new_dialog()
+	_build_menus()
 
 
 func _build_new_dialog() -> void:
@@ -158,6 +180,9 @@ func _build_new_dialog() -> void:
 		f_tool.add_item(t[1])
 		f_tool.set_item_metadata(f_tool.item_count - 1, t[0])
 	g.add_child(f_tool)
+	g.add_child(_label("Group"))
+	f_group = OptionButton.new()
+	g.add_child(f_group)
 	g.add_child(_label("Folder"))
 	f_cwd = LineEdit.new()
 	f_cwd.text = "~"
@@ -168,45 +193,236 @@ func _build_new_dialog() -> void:
 
 func _open_new() -> void:
 	f_name.text = ""
+	f_group.clear()
+	f_group.add_item("(no group)")
+	f_group.set_item_metadata(0, "")
+	for g in tree:
+		if str(g["name"]) != "":
+			f_group.add_item(str(g["name"]))
+			f_group.set_item_metadata(f_group.item_count - 1, str(g["name"]))
+	var cur := str(_session(selected).get("grp", ""))
+	for i in f_group.item_count:
+		if str(f_group.get_item_metadata(i)) == cur:
+			f_group.select(i)
 	new_dialog.popup_centered()
 	f_name.grab_focus()
 
 
 # ------------------------------------------------------------------ sessions
 func refresh() -> void:
-	var r := await engine.call_api("GET", "/sessions")
+	var r := await engine.call_api("GET", "/tree")
 	if r.has("error"):
 		status_label.text = "Engine: " + str(r["error"])
 		return
-	sessions = r["sessions"]
-	_render_list()
+	tree = r["groups"]
+	sessions = []
+	for g in tree:
+		sessions.append_array(g["sessions"])
+	var sig := JSON.stringify(tree) + selected
+	# rebuilding the rows during a drag would drop it; an unchanged tree needs no rebuild
+	if sig != tree_sig and not get_viewport().gui_is_dragging():
+		tree_sig = sig
+		_render_list()
 	_render_header()
 
 
 func _render_list() -> void:
 	for c in list_box.get_children():
 		c.queue_free()
-	for s in sessions:
-		var row := Button.new()
-		row.toggle_mode = true
-		row.button_pressed = str(s["id"]) == selected
-		row.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		row.text = "     %s\n     %s · %s" % [s["name"], s["tool_label"], s["state"]]
-		row.add_theme_color_override("font_color", C_TEXT)
-		row.custom_minimum_size = Vector2(0, 52)
-		row.tooltip_text = str(s["cwd"])
-		var dot := STATE_COLOR.get(s["state"], C_MUTED) as Color
-		row.set_meta("id", s["id"])
-		row.pressed.connect(select.bind(str(s["id"])))
-		list_box.add_child(row)
-		# the coloured state dot
-		var d := ColorRect.new()
-		d.color = dot
-		d.size = Vector2(8, 8)
-		d.position = Vector2(14, 15)
-		d.mouse_filter = MOUSE_FILTER_IGNORE
-		row.add_child(d)
+	for g in tree:
+		var gname := str(g["name"])
+		if gname != "" or tree.size() == 1 or not (g["sessions"] as Array).is_empty():
+			if gname != "":
+				list_box.add_child(_group_header(g))
+		if bool(g["folded"]):
+			continue
+		var i := 0
+		for s in g["sessions"]:
+			list_box.add_child(_session_row(s, gname, i))
+			i += 1
+		if gname != "" and (g["sessions"] as Array).is_empty():
+			var hint := Label.new()
+			hint.text = "      drop a session here"
+			hint.add_theme_color_override("font_color", C_MUTED)
+			hint.add_theme_font_size_override("font_size", 12)
+			list_box.add_child(hint)
 	empty_label.visible = sessions.is_empty()
+
+
+func _group_header(g: Dictionary) -> Button:
+	var gname := str(g["name"])
+	var b := Button.new()
+	b.flat = true
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.text = "%s  %s   %d" % ["▸" if bool(g["folded"]) else "▾", gname.to_upper(), (g["sessions"] as Array).size()]
+	b.add_theme_color_override("font_color", C_ACCENT)
+	b.add_theme_color_override("font_hover_color", C_TEXT)
+	b.add_theme_font_size_override("font_size", 12)
+	b.tooltip_text = "Click to fold · drag to reorder · right click for more"
+	b.pressed.connect(func() -> void:
+		await engine.call_api("POST", "/groups/%s/fold" % gname.uri_encode(), {"folded": not bool(g["folded"])})
+		await refresh())
+	b.gui_input.connect(func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
+			menu_target = gname
+			group_menu.popup(Rect2i(Vector2i(get_global_mouse_position()), Vector2i.ZERO)))
+	b.set_drag_forwarding(
+		func(_at: Vector2) -> Variant:
+			var prev := Label.new()
+			prev.text = gname
+			b.set_drag_preview(prev)
+			return {"type": "group", "name": gname},
+		func(_at: Vector2, d: Variant) -> bool: return d is Dictionary and d.get("type") in ["group", "session"],
+		func(_at: Vector2, d: Variant) -> void: _drop_on_group(gname, d))
+	return b
+
+
+func _session_row(s: Dictionary, gname: String, index: int) -> Button:
+	var id := str(s["id"])
+	var row := Button.new()
+	row.toggle_mode = true
+	row.button_pressed = id == selected
+	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	row.text = "     %s\n     %s · %s" % [s["name"], s["tool_label"], s["state"]]
+	row.add_theme_color_override("font_color", C_TEXT)
+	row.custom_minimum_size = Vector2(0, 52)
+	row.tooltip_text = str(s["cwd"])
+	row.pressed.connect(select.bind(id))
+	row.gui_input.connect(func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
+			menu_target = id
+			row_menu.popup(Rect2i(Vector2i(get_global_mouse_position()), Vector2i.ZERO))
+		elif e is InputEventMouseButton and e.double_click and e.button_index == MOUSE_BUTTON_LEFT:
+			_rename_session(id))
+	row.set_drag_forwarding(
+		func(_at: Vector2) -> Variant:
+			var prev := Label.new()
+			prev.text = "  " + str(s["name"])
+			row.set_drag_preview(prev)
+			return {"type": "session", "id": id},
+		func(_at: Vector2, d: Variant) -> bool: return d is Dictionary and d.get("type") == "session" and d.get("id") != id,
+		func(at: Vector2, d: Variant) -> void:
+			# dropped on the lower half: after this row
+			_move(str(d["id"]), gname, index + (1 if at.y > row.size.y / 2 else 0)))
+	var d := ColorRect.new()
+	d.color = STATE_COLOR.get(s["state"], C_MUTED) as Color
+	d.size = Vector2(8, 8)
+	d.position = Vector2(14, 15)
+	d.mouse_filter = MOUSE_FILTER_IGNORE
+	row.add_child(d)
+	return row
+
+
+func _drop_on_group(gname: String, d: Dictionary) -> void:
+	if d["type"] == "session":
+		await _move(str(d["id"]), gname, 1 << 20)  # at the end of the group
+	elif d["type"] == "group" and str(d["name"]) != gname:
+		var names: Array = []
+		for g in tree:
+			if str(g["name"]) != "" and str(g["name"]) != str(d["name"]):
+				names.append(str(g["name"]))
+		names.insert(names.find(gname), str(d["name"]))  # before the group it was dropped on
+		await engine.call_api("POST", "/groups/order", {"names": names})
+		await refresh()
+
+
+func _move(id: String, gname: String, index: int) -> void:
+	# moving down inside the same group: the row itself leaves a gap above
+	var cur := _session(id)
+	if str(cur.get("grp", "")) == gname:
+		for g in tree:
+			if str(g["name"]) == gname:
+				var at := (g["sessions"] as Array).map(func(x): return str(x["id"])).find(id)
+				if at >= 0 and at < index:
+					index -= 1
+	var r := await engine.call_api("POST", "/sessions/%s/move" % id, {"group": gname, "index": index})
+	if r.has("error"):
+		status_label.text = str(r["error"])
+	await refresh()
+
+
+func _build_menus() -> void:
+	row_menu = PopupMenu.new()
+	row_menu.add_item("Rename…", 0)
+	row_menu.add_submenu_node_item("Move to group", _make_move_menu(), 1)
+	row_menu.add_separator()
+	row_menu.add_item("Restart", 2)
+	row_menu.add_item("Stop", 3)
+	row_menu.add_item("Remove", 4)
+	row_menu.id_pressed.connect(_on_row_menu)
+	add_child(row_menu)
+	group_menu = PopupMenu.new()
+	group_menu.add_item("Rename group…", 0)
+	group_menu.add_item("Delete group (its sessions stay)", 1)
+	group_menu.id_pressed.connect(func(mid: int) -> void:
+		var gname := menu_target
+		if mid == 0:
+			_ask("Rename group", gname, func(n: String) -> void:
+				var r := await engine.call_api("POST", "/groups/%s/rename" % gname.uri_encode(), {"name": n})
+				if r.has("error"):
+					status_label.text = str(r["error"])
+				await refresh())
+		elif mid == 1:
+			await engine.call_api("POST", "/groups/%s/delete" % gname.uri_encode(), {})
+			await refresh())
+	add_child(group_menu)
+	ask_dialog = ConfirmationDialog.new()
+	ask_edit = LineEdit.new()
+	ask_edit.custom_minimum_size = Vector2(320, 0)
+	ask_dialog.add_child(ask_edit)
+	ask_dialog.confirmed.connect(func() -> void:
+		var v := ask_edit.text.strip_edges()
+		if v != "" and ask_done.is_valid():
+			ask_done.call(v))
+	ask_edit.text_submitted.connect(func(_t: String) -> void:
+		ask_dialog.hide()
+		ask_dialog.confirmed.emit())
+	add_child(ask_dialog)
+
+
+func _on_row_menu(mid: int) -> void:
+	if mid == 0:
+		_rename_session(menu_target)
+		return
+	if mid in [2, 3, 4]:
+		selected = menu_target
+	if mid == 2:
+		_restart()
+	elif mid == 3:
+		_stop()
+	elif mid == 4:
+		_remove()
+
+
+func _make_move_menu() -> PopupMenu:
+	move_menu = PopupMenu.new()
+	move_menu.about_to_popup.connect(func() -> void:
+		move_menu.clear()
+		move_menu.add_item("(no group)")
+		move_menu.set_item_metadata(0, "")
+		for g in tree:
+			if str(g["name"]) != "":
+				move_menu.add_item(str(g["name"]))
+				move_menu.set_item_metadata(move_menu.item_count - 1, str(g["name"])))
+	move_menu.index_pressed.connect(func(i: int) -> void: _move(menu_target, str(move_menu.get_item_metadata(i)), 1 << 20))
+	return move_menu
+
+
+func _ask(title: String, value: String, done: Callable) -> void:
+	ask_dialog.title = title
+	ask_edit.text = value
+	ask_done = done
+	ask_dialog.popup_centered()
+	ask_edit.grab_focus()
+	ask_edit.select_all()
+
+
+func _rename_session(id: String) -> void:
+	_ask("Rename session", str(_session(id).get("name", "")), func(n: String) -> void:
+		var r := await engine.call_api("POST", "/sessions/%s/rename" % id, {"name": n})
+		if r.has("error"):
+			status_label.text = str(r["error"])
+		await refresh())
 
 
 func _session(id: String) -> Dictionary:
@@ -232,6 +448,7 @@ func select(id: String) -> void:
 	if terms.has(id):
 		terms[id].visible = true
 		terms[id].grab_focus()
+	tree_sig = ""
 	_render_list()
 	_render_header()
 
@@ -268,7 +485,7 @@ func _create() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected))
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges()})
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else ""})
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return

@@ -24,6 +24,61 @@ func wait(s: float) -> void:
 	await create_timer(s).timeout
 
 
+func _id(name: String) -> String:
+	for x in main.sessions:
+		if str(x["name"]) == name:
+			return str(x["id"])
+	return ""
+
+
+func _row(name: String) -> Control:
+	for c in main.list_box.get_children():
+		if c is Button and c.text.contains(name + "\n"):
+			return c
+	return null
+
+
+func _header(label: String) -> Control:
+	for c in main.list_box.get_children():
+		if c is Button and c.text.contains(label):
+			return c
+	return null
+
+
+func _drag(from: Vector2, to: Vector2) -> void:
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = from
+	press.global_position = from
+	press.button_mask = MOUSE_BUTTON_MASK_LEFT
+	Input.parse_input_event(press)
+	await process_frame
+	for i in range(1, 21):
+		var m := InputEventMouseMotion.new()
+		m.position = from.lerp(to, i / 20.0)
+		m.global_position = m.position
+		m.relative = (to - from) / 20.0
+		m.button_mask = MOUSE_BUTTON_MASK_LEFT
+		Input.parse_input_event(m)
+		await process_frame
+	var rel := InputEventMouseButton.new()
+	rel.button_index = MOUSE_BUTTON_LEFT
+	rel.pressed = false
+	rel.position = to
+	rel.global_position = to
+	Input.parse_input_event(rel)
+	await process_frame
+
+
+func _tree_text() -> String:
+	var parts: Array[String] = []
+	for g in main.tree:
+		parts.append("%s%s[%s]" % [g["name"] if g["name"] != "" else "(none)", " (folded)" if g["folded"] else "",
+			", ".join((g["sessions"] as Array).map(func(x): return str(x["name"])))])
+	return " ".join(parts)
+
+
 func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	main = load("res://main.tscn").instantiate()
@@ -34,6 +89,36 @@ func _run() -> void:
 	report.append("engine connected: %s" % (main.engine != null and main.engine.connected))
 	await wait(1.0)
 	match OS.get_environment("DRIVE_STEP"):
+		"tree":
+			var home := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
+			for g in ["Second Brain", "Ticket System", "Agent Manager"]:
+				await main.engine.call_api("POST", "/groups", {"name": g})
+			var plan := [["Themes", "Second Brain"], ["MCP fixes", "Second Brain"], ["Docs", "Second Brain"],
+				["Playtest 5", "Ticket System"], ["Open world", "Ticket System"], ["Terminal", "Agent Manager"],
+				["Engine", "Agent Manager"], ["Tree", "Agent Manager"], ["Scratch", ""], ["Notes", ""]]
+			for it in plan:
+				await main.engine.call_api("POST", "/sessions", {"name": it[0], "tool": "shell", "cwd": home, "group": it[1]})
+			await main.refresh()
+			await wait(0.5)
+			# a real mouse drag: "Docs" onto the "Agent Manager" header
+			var src := _row("Docs")
+			var dst := _header("AGENT MANAGER")
+			report.append("rows found: %s %s" % [src != null, dst != null])
+			if src and dst:
+				await _drag(src.get_global_rect().get_center(), dst.get_global_rect().get_center())
+			await wait(0.8)
+			await main._move(_id("Notes"), "Second Brain", 0)     # menu path: Notes to the top of Second Brain
+			await main.engine.call_api("POST", "/groups/Ticket%20System/fold", {"folded": true})
+			await main.refresh()
+			await wait(0.5)
+			main.select(_id("Terminal"))
+			await wait(1.0)
+			await shot("05-tree")
+			report.append("tree: " + _tree_text())
+		"tree-reopen":
+			await wait(1.5)
+			report.append("tree after reopening: " + _tree_text())
+			await shot("06-tree-reopened")
 		"create":
 			main.f_name.text = "Brain themes"
 			main.f_tool.select(0)

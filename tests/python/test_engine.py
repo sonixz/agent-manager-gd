@@ -93,6 +93,29 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.sessions.list(), [])
         self.assertNotIn(s["tmux"], self.tmux.sessions())
 
+    def test_the_project_tree_keeps_groups_order_and_folding(self):
+        a = self.sessions.create("a", "shell", self.tmp, grp="Brain")
+        b = self.sessions.create("b", "shell", self.tmp, grp="Brain")
+        c = self.sessions.create("c", "shell", self.tmp, grp="TTS")
+        loose = self.sessions.create("loose", "shell", self.tmp)
+        self.sessions.move(b["id"], "Brain", 0)              # reorder inside a group
+        self.sessions.move(loose["id"], "TTS", 1)            # into another group, after c
+        self.sessions.store.order_groups(["TTS", "Brain"])
+        self.sessions.store.fold_group("Brain", True)
+        # a new engine (the app reopened) sees the same tree
+        again = Sessions(Store(os.path.join(self.tmp, "s.sqlite3")), Tmux("agmgd-test", tmpdir=self.tmp))
+        tree = again.tree()["groups"]
+        self.assertEqual([g["name"] for g in tree], ["", "TTS", "Brain"])
+        self.assertEqual([s["name"] for s in tree[1]["sessions"]], ["c", "loose"])
+        self.assertEqual([s["name"] for s in tree[2]["sessions"]], ["b", "a"])
+        self.assertTrue(tree[2]["folded"])
+        self.sessions.store.rename_group("TTS", "Ticket System")
+        self.assertEqual(self.sessions.get(c["id"])["grp"], "Ticket System")
+        self.sessions.store.delete_group("Ticket System")    # sessions stay, ungrouped
+        names = [s["name"] for s in self.sessions.tree()["groups"][0]["sessions"]]
+        self.assertEqual(names, ["c", "loose"])
+        self.assertEqual(len(self.sessions.list()), 4)
+
     def test_the_api_needs_its_token(self):
         token = load_token(self.tmp)
         self.assertEqual(oct(os.stat(os.path.join(self.tmp, "runtime", "api_token")).st_mode & 0o777), "0o600")

@@ -36,3 +36,11 @@ Code, Codex, shell; Windows paths become WSL paths), Restart, Stop, Remove. Clos
 running; reopening attaches again with their screens. Checked end to end on Linux (virtual display, captures in
 docs/screens/loop3) and with Windows Godot headless through ConPTY and wsl.exe (engine started by a login shell so
 the user's claude is on PATH). 9 engine tests.
+
+## Loop 4A: the project tree (2026-11-08)
+
+Groups in the engine (order, folded state; sessions keep their order inside a group; deleting a group keeps its
+sessions). The sidebar is a tree: fold a group with a click, drag a session onto another row or a group header,
+drag a group header to reorder, right click for rename, move to group, restart, stop, remove; double click renames.
+The 2-second refresh no longer rebuilds the rows when nothing changed or during a drag. Checked with a real mouse
+drag on a virtual display: 10 sessions in 3 groups, order and folding survive reopening. 10 engine tests.

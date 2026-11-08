@@ -17,6 +17,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     created REAL NOT NULL,
     archived INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS groups (
+    name TEXT PRIMARY KEY,
+    position INTEGER NOT NULL DEFAULT 0,
+    folded INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -24,8 +29,11 @@ class Store:
     def __init__(self, path: str):
         self.path = path
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with closing(self._db()) as db:
+        with closing(self._db()) as db, db:
             db.executescript(SCHEMA)
+            cols = {r[1] for r in db.execute("PRAGMA table_info(sessions)")}
+            if "position" not in cols:  # Loop 4A: the order inside a group
+                db.execute("ALTER TABLE sessions ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
 
     def _db(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=5)
@@ -35,14 +43,20 @@ class Store:
 
     def add(self, name: str, tool: str, cwd: str, grp: str = "") -> dict:
         sid = secrets.token_hex(4)
-        row = {"id": sid, "name": name, "tool": tool, "cwd": cwd, "grp": grp, "created": time.time(), "archived": 0}
+        if grp:
+            self.add_group(grp)
         with closing(self._db()) as db, db:
-            db.execute("INSERT INTO sessions VALUES (:id, :name, :tool, :cwd, :grp, :created, :archived)", row)
+            pos = db.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM sessions WHERE grp = ?", (grp,)).fetchone()[0]
+            row = {"id": sid, "name": name, "tool": tool, "cwd": cwd, "grp": grp, "created": time.time(), "archived": 0,
+                   "position": pos}
+            db.execute("INSERT INTO sessions (id, name, tool, cwd, grp, created, archived, position) "
+                       "VALUES (:id, :name, :tool, :cwd, :grp, :created, :archived, :position)", row)
         return row
 
     def all(self, archived: bool = False) -> list[dict]:
         with closing(self._db()) as db:
-            rows = db.execute("SELECT * FROM sessions WHERE archived = ? ORDER BY created", (int(archived),)).fetchall()
+            rows = db.execute("SELECT * FROM sessions WHERE archived = ? ORDER BY position, created",
+                              (int(archived),)).fetchall()
         return [dict(r) for r in rows]
 
     def get(self, sid: str) -> dict | None:
@@ -57,6 +71,54 @@ class Store:
         sets = ", ".join(f"{k} = :{k}" for k in allowed)
         with closing(self._db()) as db, db:
             db.execute(f"UPDATE sessions SET {sets} WHERE id = :id", {**allowed, "id": sid})
+
+    # ---------------------------------------------------------------- groups (the project tree)
+    def groups(self) -> list[dict]:
+        with closing(self._db()) as db:
+            return [dict(r) for r in db.execute("SELECT * FROM groups ORDER BY position, name")]
+
+    def add_group(self, name: str) -> None:
+        with closing(self._db()) as db, db:
+            if not db.execute("SELECT 1 FROM groups WHERE name = ?", (name,)).fetchone():
+                pos = db.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM groups").fetchone()[0]
+                db.execute("INSERT INTO groups (name, position) VALUES (?, ?)", (name, pos))
+
+    def rename_group(self, old: str, new: str) -> None:
+        with closing(self._db()) as db, db:
+            if db.execute("SELECT 1 FROM groups WHERE name = ?", (new,)).fetchone():
+                raise ValueError(f"a group named {new} already exists")
+            db.execute("UPDATE groups SET name = ? WHERE name = ?", (new, old))
+            db.execute("UPDATE sessions SET grp = ? WHERE grp = ?", (new, old))
+
+    def delete_group(self, name: str) -> None:
+        """The group goes; its sessions stay, moved to the end of the sessions without a group."""
+        with closing(self._db()) as db, db:
+            base = db.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM sessions WHERE grp = ''").fetchone()[0]
+            for i, (sid,) in enumerate(db.execute("SELECT id FROM sessions WHERE grp = ? ORDER BY position", (name,)).fetchall()):
+                db.execute("UPDATE sessions SET grp = '', position = ? WHERE id = ?", (base + i, sid))
+            db.execute("DELETE FROM groups WHERE name = ?", (name,))
+
+    def fold_group(self, name: str, folded: bool) -> None:
+        with closing(self._db()) as db, db:
+            db.execute("UPDATE groups SET folded = ? WHERE name = ?", (int(folded), name))
+
+    def order_groups(self, names: list[str]) -> None:
+        with closing(self._db()) as db, db:
+            for i, n in enumerate(names):
+                db.execute("UPDATE groups SET position = ? WHERE name = ?", (i, n))
+
+    def move(self, sid: str, grp: str, index: int) -> None:
+        """Puts a session at `index` inside `grp` (renumbering that group)."""
+        if grp:
+            self.add_group(grp)
+        with closing(self._db()) as db, db:
+            ids = [r[0] for r in db.execute("SELECT id FROM sessions WHERE grp = ? AND id != ? AND archived = 0 "
+                                            "ORDER BY position, created", (grp, sid))]
+            index = max(0, min(index, len(ids)))
+            ids.insert(index, sid)
+            db.execute("UPDATE sessions SET grp = ? WHERE id = ?", (grp, sid))
+            for i, x in enumerate(ids):
+                db.execute("UPDATE sessions SET position = ? WHERE id = ?", (i, x))
 
     def delete(self, sid: str) -> None:
         with closing(self._db()) as db, db:

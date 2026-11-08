@@ -11,7 +11,7 @@ DATA="$(mktemp -d -t agmgd-shots-XXXX)"
 cleanup() { tmux -L agmgd-shots kill-server 2>/dev/null || true; vdisplay_stop; rm -rf "$DATA"; }
 trap cleanup EXIT
 godot --headless --path app --import >/dev/null 2>&1 || true
-for step in create reopen; do
+for step in ${STEPS:-create reopen}; do
   DISPLAY="$VDISPLAY" WAYLAND_DISPLAY="" AGMGD_HOME="$DATA" AGMGD_PORT=18790 AGMGD_TMUX_SOCKET=agmgd-shots \
     DRIVE_STEP=$step DRIVE_OUT="$OUT" DRIVE_TRUSTED="$TRUSTED" \
     godot --display-driver x11 --audio-driver Dummy --rendering-driver opengl3 --resolution 1440x900 --path app \
