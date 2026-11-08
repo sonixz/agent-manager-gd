@@ -191,6 +191,29 @@ class SandboxesTest(unittest.TestCase):
         self.assertEqual(self.s.revoke_brain_key("cold-test", True), {"revoked": "cold-test"})
         self.assertEqual(self.brain.revoked, ["cold-test"])
 
+    def test_the_owner_routes_answer_over_http(self):
+        """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
+        tok = load_token(self.tmp)
+        srv = serve(self.s, tok, 0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+
+        def call(method, path, body=None):
+            req = urllib.request.Request(base + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+                                         headers={"Authorization": "Bearer " + tok, "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read())
+        try:
+            self.assertEqual(len(call("GET", "/sandboxes/orphans/agmgd-spike-96416e")["machines"]), 1)
+            self.assertEqual(call("POST", "/sandboxes/orphans/destroy", {"app": "agmgd-spike-96416e", "machine": "", "confirmed": True}),
+                             {"destroyed": "agmgd-spike-96416e"})
+            self.assertEqual({k["id"] for k in call("GET", "/brain/keys")["keys"]}, {"cbrain1", "cold-test"})
+            self.assertEqual(call("POST", "/brain/keys/cold-test/revoke", {"confirmed": True}), {"revoked": "cold-test"})
+            self.assertEqual(call("POST", "/sandboxes/budget", {"monthly_usd": 5})["monthly_usd"], 5.0)
+            self.assertEqual(call("POST", "/sandboxes/stop-all", {}), {"stopped": []})
+        finally:
+            srv.shutdown()
+
     def test_the_brain_relay_answers_only_to_a_sandbox_secret(self):
         self.s.sandboxes.prepare()
         d = self.s.create("Cloud work", "claude", "", host="sandbox")

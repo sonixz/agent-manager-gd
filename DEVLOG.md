@@ -263,3 +263,9 @@ The owner asked to handle these in Agent Manager instead of Fly's dashboard and 
   keys can be revoked one by one or all at once, confirmed; a key in use is refused (it goes with its session or
   sandbox). API: GET /brain/keys, POST /brain/keys/<id>/revoke {confirmed}.
 - Captures (read-only; the confirmation opened, never accepted): docs/screens/loop15/46, 47. Tests: 55.
+
+Owner test (2026-11-08): the connected-repository workflow worked end to end on GitHub (gd-project, deploy key,
+check, a Claude Code session on it that read the Second Brain over MCP). Destroying the Fly leftovers from the app
+found a bug: the generic /sandboxes/<id>/<action> route answered before the orphan routes (« no such session »). Fixed
+by ordering the routes; a new test calls the owner routes over HTTP (it fails without the fix). The two leftover apps
+(6 stopped machines from Loops 12–13) were then destroyed at the owner's request; none is left. Tests: 56.
