@@ -1,0 +1,29 @@
+# Godot
+.godot/
+export/
+*.translation
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Local data and secrets: never committed
+/data/
+*.sqlite3
+*.sqlite3-*
+api_token
+.env.keys
+.env.*.keys
+.env.local
+.env.*.local
+
+# Third-party downloads for prototypes (fetched on purpose, verified, never committed)
+/vendor-cache/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
