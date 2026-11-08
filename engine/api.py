@@ -112,6 +112,9 @@ def make_handler(sessions: Sessions, token: str):
                         b = self._body()
                         sessions.send(sid, str(b.get("text", "")), bool(b.get("enter", True)))
                         return self._reply(200, {"ok": True})
+                    if method == "POST" and action == "keys":
+                        sessions.keys(sid, [str(k) for k in self._body().get("keys", [])])
+                        return self._reply(200, {"ok": True})
                     if method == "POST" and action == "restart":
                         return self._reply(200, sessions.restart(sid))
                     if method == "POST" and action == "stop":

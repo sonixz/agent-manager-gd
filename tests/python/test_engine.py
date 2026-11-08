@@ -71,6 +71,16 @@ class EngineTest(unittest.TestCase):
         self.assertIn("agmgd-test", cmd)
         self.assertEqual(cmd[-1], s["tmux"])
 
+    def test_named_keys_only(self):
+        s = self.sessions.create("k", "shell", self.tmp)
+        self.sessions.send(s["id"], "read -r x; echo got:$x", enter=True)
+        time.sleep(0.3)
+        self.sessions.send(s["id"], "yes", enter=False)
+        self.sessions.keys(s["id"], ["Enter"])
+        self.assertTrue(self.wait_for(s["id"], "got:yes"))
+        with self.assertRaises(ValueError):
+            self.sessions.keys(s["id"], ["C-c; kill-server"])
+
     def test_bad_input_is_refused(self):
         with self.assertRaises(ValueError):
             self.sessions.create("t", "rm -rf", self.tmp)

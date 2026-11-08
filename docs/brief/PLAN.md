@@ -7,7 +7,7 @@ Chaque loop se termine par une revue du propriétaire (captures, rapport en fran
 | **1** ✅ | Vision, plan, recherches (marché, terminal) | Ce dossier `docs/` existe et le propriétaire l'a lu |
 | **2** ✅ | **Prototype du terminal, « oui ou non »** | Un candidat passe toute la grille de `docs/research/TERMINAL.md`, mesurée, avec captures ; sinon on s'arrête ou on change d'approche |
 | 3 ✅ | Moteur Python + sessions tmux persistantes | Lancer, fermer l'appli, rouvrir : les sessions sont là, avec leur terminal |
-| 4 | Vivre avec plusieurs sessions | voir le détail plus bas |
+| 4 ✅ | Vivre avec plusieurs sessions | voir le détail plus bas |
 | 5 | Reprendre et ramifier | voir le détail plus bas |
 | 6 | Le Brain branché d'office | voir le détail plus bas |
 | 7 | Le contexte qui survit | voir le détail plus bas |

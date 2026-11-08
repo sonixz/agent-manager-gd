@@ -147,6 +147,17 @@ class Sessions:
             raise ValueError("the session is not running")
         self.tmux.send_text(self.tmux_name(sid), text, enter)
 
+    KEYS = {"Enter", "Escape", "Up", "Down", "Left", "Right", "Tab", "BTab", "y", "n", "1", "2", "3"}
+
+    def keys(self, sid: str, keys: list[str]) -> None:
+        """Named keys only (approve with Enter, refuse with Escape…): never arbitrary tmux key strings."""
+        if self.get(sid)["state"] != "running":
+            raise ValueError("the session is not running")
+        bad = [k for k in keys if k not in self.KEYS]
+        if bad or not keys or len(keys) > 8:
+            raise ValueError("keys must be among " + ", ".join(sorted(self.KEYS)))
+        self.tmux.run("send-keys", "-t", self.tmux_name(sid), *keys)
+
     def restart(self, sid: str) -> dict:
         """Starts the tool again in the same session (fresh conversation); recreates the tmux session if it is gone."""
         d = self.get(sid)

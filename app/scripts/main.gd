@@ -34,6 +34,10 @@ var ask_dialog: ConfirmationDialog
 var ask_edit: LineEdit
 var ask_done: Callable
 var f_group: OptionButton
+var queue_box: VBoxContainer
+var toast: PanelContainer
+var toast_label: Label
+var last_activity := {}       # session id -> activity seen at the previous refresh
 var terms := {}          # session id -> VtTerminal
 var selected := ""
 var list_box: VBoxContainer
@@ -112,6 +116,9 @@ func _build() -> void:
 		await refresh()))
 	top.add_child(grp_btn)
 	sv.add_child(top)
+	queue_box = VBoxContainer.new()
+	queue_box.add_theme_constant_override("separation", 6)
+	sv.add_child(queue_box)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -161,6 +168,16 @@ func _build() -> void:
 	empty_label.set_anchors_preset(PRESET_CENTER)
 	empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	term_host.add_child(empty_label)
+	toast = PanelContainer.new()
+	toast.add_theme_stylebox_override("panel", _box(C_PANEL_2, 10, Color("ff9e64"), 1, 12))
+	toast.set_anchors_preset(PRESET_BOTTOM_RIGHT)
+	toast.position = Vector2(-20, -20)
+	toast.grow_horizontal = GROW_DIRECTION_BEGIN
+	toast.grow_vertical = GROW_DIRECTION_BEGIN
+	toast.visible = false
+	toast_label = Label.new()
+	toast.add_child(toast_label)
+	term_host.add_child(toast)
 	_build_new_dialog()
 	_build_menus()
 
@@ -224,6 +241,7 @@ func refresh() -> void:
 	sessions = []
 	for g in tree:
 		sessions.append_array(g["sessions"])
+	_watch_transitions()
 	var sig := JSON.stringify(tree) + selected
 	# rebuilding the rows during a drag would drop it; an unchanged tree needs no rebuild
 	if sig != tree_sig and not get_viewport().gui_is_dragging():
@@ -232,7 +250,105 @@ func refresh() -> void:
 	_render_header()
 
 
+func _watch_transitions() -> void:
+	for x in sessions:
+		var id := str(x["id"])
+		var act := str(x.get("activity", ""))
+		var before := str(last_activity.get(id, ""))
+		if before != "" and act != before and act in ["approval", "waiting"]:
+			_toast("%s %s" % [x["name"], ACTIVITY[act][1]])
+			if not get_window().has_focus():
+				DisplayServer.window_request_attention()  # the taskbar button flashes
+		last_activity[id] = act
+
+
+func _toast(text: String) -> void:
+	toast_label.text = text
+	toast.visible = true
+	toast.reset_size()
+	var t := get_tree().create_timer(6.0)
+	t.timeout.connect(func() -> void:
+		if toast_label.text == text:
+			toast.visible = false)
+
+
+func _render_queue() -> void:
+	for c in queue_box.get_children():
+		c.queue_free()
+	var waiting := sessions.filter(func(x): return str(x.get("activity", "")) in ["approval", "waiting"])
+	if waiting.is_empty():
+		return
+	var title := Label.new()
+	title.text = "THEY WAIT FOR YOU   %d" % waiting.size()
+	title.add_theme_color_override("font_color", Color("ff9e64"))
+	title.add_theme_font_size_override("font_size", 12)
+	queue_box.add_child(title)
+	for x in waiting.slice(0, 4):  # the queue never pushes the tree off the screen
+		var id := str(x["id"])
+		var act := str(x["activity"])
+		var card := PanelContainer.new()
+		card.add_theme_stylebox_override("panel", _box(C_PANEL_2, 8, ACTIVITY[act][0].darkened(0.25), 1, 8))
+		var v := VBoxContainer.new()
+		card.add_child(v)
+		var l := Label.new()
+		var msg := str(x.get("message", ""))
+		l.text = "%s · %s" % [x["name"], ACTIVITY[act][1]]
+		l.tooltip_text = msg
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.add_theme_font_size_override("font_size", 13)
+		v.add_child(l)
+		if msg != "":
+			var m := Label.new()
+			m.text = msg.left(90)
+			m.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			m.add_theme_color_override("font_color", C_MUTED)
+			m.add_theme_font_size_override("font_size", 12)
+			v.add_child(m)
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 6)
+		v.add_child(h)
+		if act == "approval":
+			h.add_child(_small("Approve", func() -> void: _keys(id, ["Enter"]), "Sends Enter: the agent's highlighted choice (Yes)"))
+			h.add_child(_small("Refuse", func() -> void: _keys(id, ["Escape"]), "Sends Escape"))
+		else:
+			h.add_child(_small("Reply…", func() -> void: _quick_reply(id), "Write to the agent without opening its terminal"))
+		h.add_child(_small("Open", func() -> void: select(id)))
+		queue_box.add_child(card)
+	if waiting.size() > 4:
+		var more := Label.new()
+		more.text = "+ %d more in the list below" % (waiting.size() - 4)
+		more.add_theme_color_override("font_color", C_MUTED)
+		more.add_theme_font_size_override("font_size", 12)
+		queue_box.add_child(more)
+
+
+func _small(text: String, cb: Callable, tip := "") -> Button:
+	var b := Button.new()
+	b.text = text
+	b.tooltip_text = tip
+	b.add_theme_font_size_override("font_size", 12)
+	b.pressed.connect(cb)
+	return b
+
+
+func _keys(id: String, keys: Array) -> void:
+	var r := await engine.call_api("POST", "/sessions/%s/keys" % id, {"keys": keys})
+	if r.has("error"):
+		status_label.text = str(r["error"])
+	await get_tree().create_timer(0.6).timeout
+	await refresh()
+
+
+func _quick_reply(id: String) -> void:
+	_ask("Reply to " + str(_session(id).get("name", "")), "", func(t: String) -> void:
+		var r := await engine.call_api("POST", "/sessions/%s/send" % id, {"text": t})
+		if r.has("error"):
+			status_label.text = str(r["error"])
+		await refresh())
+
+
 func _render_list() -> void:
+	_render_queue()
 	for c in list_box.get_children():
 		c.queue_free()
 	for g in tree:
@@ -356,6 +472,7 @@ func _move(id: String, gname: String, index: int) -> void:
 
 func _build_menus() -> void:
 	row_menu = PopupMenu.new()
+	row_menu.add_item("Quick reply…", 5)
 	row_menu.add_item("Rename…", 0)
 	row_menu.add_submenu_node_item("Move to group", _make_move_menu(), 1)
 	row_menu.add_separator()
@@ -394,6 +511,9 @@ func _build_menus() -> void:
 
 
 func _on_row_menu(mid: int) -> void:
+	if mid == 5:
+		_quick_reply(menu_target)
+		return
 	if mid == 0:
 		_rename_session(menu_target)
 		return

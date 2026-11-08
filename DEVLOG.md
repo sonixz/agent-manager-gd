@@ -55,3 +55,12 @@ approval prompts in Codex's last lines. The session's conversation id is kept fo
 real Claude Code (its SessionStart hook reaches the engine, no prompt, no cost) and simulated events for the other
 states. Found and fixed: Godot 4.7's OS.execute/create_process re-split arguments containing double quotes, so the
 engine launch no longer quotes (wsl.exe --cd on Windows). 15 engine tests (1 real-Claude test, opt-in).
+
+## Loop 4C: quick reply, the waiting queue, alerts (2026-11-08)
+
+« They wait for you » at the top of the sidebar: the sessions waiting for an OK (Approve sends Enter, the agent's
+highlighted choice; Refuse sends Escape) or for an answer (Reply… writes without opening the terminal), at most four
+cards. Quick reply also from the right-click menu. When a session starts waiting, a toast appears and, if the window
+is not focused, its taskbar button flashes. The engine accepts named keys only (`POST /sessions/<id>/keys`), never
+raw tmux key strings. Checked: the toast on a new approval, the queue, a quick reply reaching a shell. 16 engine tests.
+Loop 4 is complete: next is the owner's first real test on Windows (★).
