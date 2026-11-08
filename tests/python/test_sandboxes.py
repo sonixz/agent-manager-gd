@@ -199,7 +199,11 @@ class SandboxesTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.s.wrap_up(d["id"])
         sb = self.s.sandboxes.by_session(d["id"])
+        port_file = os.path.join(self.tmp, "runtime", f"sandbox-{sb['id']}.port")
+        os.makedirs(os.path.dirname(port_file), exist_ok=True)
+        open(port_file, "w").write("12345")
         self.s.sandboxes.destroy(sb["id"], True)
+        self.assertFalse(os.path.exists(port_file))                          # nothing left behind
         self.assertEqual(self.s.archive(d["id"])["state"], "archived")
 
     def test_measured_costs_survive_the_machine_and_estimates_come_first(self):

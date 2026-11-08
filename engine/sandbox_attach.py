@@ -15,6 +15,14 @@ from engine.keys import Keys                      # noqa: E402
 from engine.sandboxes import FLYCTL, Fly, Sandboxes  # noqa: E402
 from engine.store import Store                    # noqa: E402
 
+def _forget_port(home: str, sbid: str) -> None:
+    """The terminal is closed: its local proxy port means nothing any more."""
+    try:
+        os.remove(os.path.join(home, "runtime", f"sandbox-{sbid}.port"))
+    except OSError:
+        pass
+
+
 TMUX_CLIPBOARD = ["set -s set-clipboard on", "set -s terminal-features[90] *:clipboard", "set -g mouse on",
                   "set -g history-limit 50000"]
 AGENT_CMD = {"claude": "claude --mcp-config /root/.agmgd/mcp.json", "codex": "codex", "shell": "bash -l"}
@@ -77,6 +85,7 @@ def main() -> int:
     cmd = base + tunnel + ["-t", "root@127.0.0.1", "cd " + sb["workdir"] + " 2>/dev/null; tmux new -A -s am"]
     rc = subprocess.call(cmd)
     proxy.kill()
+    _forget_port(home, sb["id"])
     return rc
 
 

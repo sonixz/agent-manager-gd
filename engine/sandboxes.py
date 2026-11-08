@@ -303,6 +303,10 @@ class Sandboxes:
         if brain and sb["brain_client"]:
             brain.revoke(sb["brain_client"])
         shutil.rmtree(os.path.dirname(self.key_path(sbid)), ignore_errors=True)
+        try:  # its terminal's proxy port, if one was left
+            os.remove(os.path.join(self.home, "runtime", f"sandbox-{sbid}.port"))
+        except OSError:
+            pass
         self._set(sbid, destroyed=1)
         return self.get(sbid)
 
