@@ -12,3 +12,7 @@ window/size/viewport_height=900
 
 [rendering]
 renderer/rendering_method="gl_compatibility"
+
+[audio]
+
+driver/enable_input=true

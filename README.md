@@ -49,6 +49,11 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   uncommitted changes, everything since the session started, or its branch against the target. Click a line to
   comment it (or comment the whole file); **Send review** sends the open comments to the agent as one numbered request
   (file:line, the comment, the line's code); sent comments stay visible until marked handled.
+- **Keys** (◐ → Keys…): paste your own API keys (OpenAI for the voice, Fly.io and Anthropic for cloud sandboxes).
+  On Windows they are encrypted with DPAPI for your Windows user; they are never shown again or logged, and are read
+  only when a feature needs them.
+- **Dictation**: hold **F8** and speak; on release the text is written into the active session's prompt (as a paste,
+  never with Enter): you read it and press Enter yourself. Transcription by OpenAI with your key (≈ $0.003/min, shown).
 - **Connected repositories** (⎇ Repos): add a repository's SSH address; Agent Manager makes a deploy key for it only,
   shows the public key to add on GitHub (*Deploy keys*, with write access), checks it, and sessions started on that
   repository use that key only. Rotate or disconnect any time. Details: `docs/REPOSITORIES.md`.

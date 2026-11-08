@@ -430,6 +430,39 @@ func _run() -> void:
 			await wait(0.6)
 			await shot("30-new-session-on-repo")
 			main.new_dialog.hide()
+		"voice":
+			var home := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Cart refactor", "tool": "shell", "cwd": home, "group": "Shop"})
+			var sid := str(a["id"])
+			await main.engine.call_api("POST", "/keys", {"name": "openai", "value": "sk-test-not-a-real-key"})
+			await main.refresh()
+			main.set_view("keys")
+			await wait(2.0)
+			await shot("31-keys")
+			var listed: Dictionary = await main.engine.call_api("GET", "/keys")
+			report.append("keys listed without values: %s" % not JSON.stringify(listed).contains("sk-test"))
+			main.select(sid)
+			await wait(1.5)
+			# what F8 does, with a synthetic recording (no microphone on the virtual display)
+			main.voice_label.text = "🎙  Listening to you for « Cart refactor »…  release F8 to write it"
+			main.voice_meter.value = 0.6
+			main.voice_overlay.visible = true
+			main.voice_overlay.reset_size()
+			await wait(0.5)
+			await shot("32-listening")
+			main.voice_overlay.visible = false
+			var frames := PackedVector2Array()
+			for i in 44100:
+				var x := sin(TAU * 220.0 * i / 44100.0) * 0.3
+				frames.append(Vector2(x, x))
+			var wav := Dictation.to_wav(frames, 44100.0)
+			report.append("wav bytes: %d (16 kHz mono, 1 s)" % wav.size())
+			var r: Dictionary = await main.engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(wav), "seconds": 1.0})
+			main.on_transcribed(sid, str(r.get("text", r.get("error", ""))), float(r.get("cost_usd", 0)))
+			await wait(1.5)
+			await shot("33-dictated")
+			var screen: String = main.terms[sid].get_screen_text()
+			report.append("dictated text in the prompt: %s; not executed: %s" % [screen.contains("Ajoute un test"), not screen.contains("command not found")])
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())

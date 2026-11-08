@@ -46,7 +46,7 @@ def make_handler(sessions: Sessions, token: str):
 
         def _body(self) -> dict:
             n = int(self.headers.get("Content-Length") or 0)
-            if n > 1_000_000:
+            if n > (30_000_000 if self.path.startswith("/voice") else 1_000_000):
                 raise ValueError("request too large")
             raw = self.rfile.read(n) if n else b"{}"
             data = json.loads(raw.decode("utf-8") or "{}")
@@ -80,6 +80,20 @@ def make_handler(sessions: Sessions, token: str):
                     if act == "disconnect":
                         return self._reply(200, sessions.repos.disconnect(rid))
                     return self._reply(404, {"error": "not found"})
+                if parts == ["keys"] and method == "GET":
+                    return self._reply(200, sessions.keys_store.all())
+                if parts == ["keys"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.keys_store.set(str(b.get("name", "")), str(b.get("value", ""))))
+                if len(parts) == 2 and parts[0] == "keys" and method == "DELETE":
+                    return self._reply(200, sessions.keys_store.delete(parts[1]))
+                if parts == ["voice", "transcribe"] and method == "POST":
+                    import base64 as _b64
+                    from . import voice
+                    b = self._body()
+                    wav = _b64.b64decode(str(b.get("audio_b64", "")) or b"")
+                    key = "" if os.environ.get("AGMGD_VOICE_FAKE") else sessions.keys_store.get("openai")
+                    return self._reply(200, voice.transcribe(wav, key, float(b.get("seconds", 0)), str(b.get("language", ""))))
                 if parts == ["brain"] and method == "GET":
                     return self._reply(200, sessions.brain.status() if sessions.brain else {"connected": False, "reason": "off"})
                 if parts == ["summaries"] and method == "GET":

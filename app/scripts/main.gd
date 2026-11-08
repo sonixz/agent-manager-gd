@@ -50,6 +50,11 @@ var board_previews := {}      # id -> Label (Board view)
 var f_worktree: CheckBox
 var f_brain: CheckBox
 var f_brief: CheckBox
+var dictation: Dictation
+var voice_overlay: PanelContainer
+var voice_label: Label
+var voice_meter: ProgressBar
+var keys_list: VBoxContainer
 var repos_list: VBoxContainer
 var repos_cache: Array = []
 var f_repo: OptionButton
@@ -125,6 +130,14 @@ func _notification(what: int) -> void:
 
 # ------------------------------------------------------------------ shortcuts
 func _input(e: InputEvent) -> void:
+	# F8: hold to dictate into the active session (works even when the terminal has the focus)
+	if e is InputEventKey and e.keycode == KEY_F8 and not e.echo:
+		if e.pressed:
+			_voice_start()
+		else:
+			_voice_stop()
+		get_viewport().set_input_as_handled()
+		return
 	if not (e is InputEventKey and e.pressed and not e.echo):
 		return
 	var k := e as InputEventKey
@@ -276,7 +289,7 @@ func _build() -> void:
 	view_buttons["repos"] = repos_btn
 	var theme_btn := Button.new()
 	theme_btn.text = "◐"
-	theme_btn.tooltip_text = "Theme"
+	theme_btn.tooltip_text = "Theme and keys"
 	theme_btn.pressed.connect(func() -> void: theme_menu.popup(Rect2i(Vector2i(theme_btn.get_screen_position() + Vector2(0, theme_btn.size.y)), Vector2i.ZERO)))
 	hb.add_child(theme_btn)
 	var more := Button.new()
@@ -317,6 +330,9 @@ func _build() -> void:
 	_build_menus()
 	palette = CommandPalette.new()
 	add_child(palette)
+	dictation = Dictation.new()
+	add_child(dictation)
+	_build_voice_overlay(area)
 	_restyle()
 
 
@@ -567,7 +583,7 @@ func _render_list() -> void:
 			hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 			hint.add_theme_font_size_override("font_size", 12)
 			list_box.add_child(hint)
-	empty_label.visible = sessions.is_empty() and view not in ["history", "repos"]
+	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys"]
 
 
 func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
@@ -709,7 +725,7 @@ func select(id: String) -> void:
 	if not grid_ids.has(id):
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
-	if view in ["board", "history", "repos"]:
+	if view in ["board", "history", "repos", "keys"]:
 		view = "focus"  # picking a session opens it (Review follows the selected session)
 	if view == "review":
 		review_file = 0
@@ -735,7 +751,7 @@ func set_view(v: String) -> void:
 		for id in grid_ids:
 			await _ensure_terminal(id)
 	content.modulate.a = 0.0
-	empty_label.visible = sessions.is_empty() and v not in ["history", "repos"]
+	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys"]
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.18)
 	_render_header()
@@ -780,7 +796,7 @@ func _park_all() -> void:
 
 func _layout_view() -> void:
 	_park_all()
-	if sessions.is_empty() and view not in ["history", "repos"]:
+	if sessions.is_empty() and view not in ["history", "repos", "keys"]:
 		return
 	match view:
 		"focus":
@@ -808,6 +824,9 @@ func _layout_view() -> void:
 		"repos":
 			content.add_child(_repos_view())
 			_load_repos()
+		"keys":
+			content.add_child(_keys_view())
+			_load_keys()
 		"board":
 			var scroll := ScrollContainer.new()
 			scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1149,6 +1168,144 @@ func _open_finish(id: String) -> void:
 	finish_merge.disabled = int(r["commits_ahead"]) == 0
 	finish_dialog.get_ok_button().disabled = int(r["uncommitted"]) > 0
 	finish_dialog.popup_centered()
+
+
+# ------------------------------------------------------------------ voice (Loop 10)
+func _build_voice_overlay(area: Control) -> void:
+	voice_overlay = PanelContainer.new()
+	voice_overlay.set_anchors_preset(PRESET_CENTER_BOTTOM)
+	voice_overlay.grow_horizontal = GROW_DIRECTION_BOTH
+	voice_overlay.grow_vertical = GROW_DIRECTION_BEGIN
+	voice_overlay.position.y = -40
+	voice_overlay.visible = false
+	voice_overlay.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL_2"), 14, AmTheme.col("MINT"), 1, 14))
+	var v := VBoxContainer.new()
+	voice_overlay.add_child(v)
+	voice_label = Label.new()
+	voice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	voice_label.add_theme_font_size_override("font_size", 15)
+	v.add_child(voice_label)
+	voice_meter = ProgressBar.new()
+	voice_meter.custom_minimum_size = Vector2(360, 6)
+	voice_meter.show_percentage = false
+	voice_meter.max_value = 1.0
+	v.add_child(voice_meter)
+	area.add_child(voice_overlay)
+	dictation.level.connect(func(x: float) -> void: voice_meter.value = lerpf(voice_meter.value, x * 3.0, 0.4))
+
+
+func _voice_start() -> void:
+	if dictation.recording or selected == "" or not terms.has(selected):
+		return
+	if not dictation.available():
+		_toast("No microphone found")
+		return
+	dictation.start()
+	voice_label.text = "🎙  Listening to you for « %s »…  release F8 to write it" % _session(selected).get("name", "")
+	voice_overlay.visible = true
+	voice_overlay.reset_size()
+
+
+func _voice_stop() -> void:
+	if not dictation.recording:
+		return
+	var rec := dictation.stop()
+	if float(rec["seconds"]) < 0.4:
+		voice_overlay.visible = false
+		return
+	voice_label.text = "Writing it down…"
+	var target := selected
+	var r := await engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(rec["wav"]), "seconds": rec["seconds"]})
+	voice_overlay.visible = false
+	if r.has("error"):
+		_toast(str(r["error"]))
+		if str(r["error"]).contains("Keys"):
+			set_view("keys")
+		return
+	on_transcribed(target, str(r.get("text", "")), float(r.get("cost_usd", 0)))
+
+
+## The dictated text goes into the session's prompt as a paste: never with Enter. The owner reads, then sends.
+func on_transcribed(id: String, text: String, cost: float) -> void:
+	if text.strip_edges() == "" or not terms.has(id):
+		return
+	terms[id].paste_text(text.strip_edges())
+	terms[id].grab_focus()
+	_toast("Dictated into %s: read it, then Enter%s" % [_session(id).get("name", ""), ("   (≈ $%.4f)" % cost) if cost > 0 else ""])
+
+
+# ------------------------------------------------------------------ keys (Loop 10)
+func _keys_view() -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	var title := Label.new()
+	title.text = "Keys"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	v.add_child(title)
+	var intro := _muted("Paste your own API keys here. They are encrypted on this computer, never shown again, never written to a log; Agent Manager reads one only when a feature needs it (the voice, cloud sandboxes).")
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(intro)
+	keys_list = VBoxContainer.new()
+	keys_list.add_theme_constant_override("separation", 10)
+	v.add_child(keys_list)
+	return v
+
+
+func _load_keys() -> void:
+	var r := await engine.call_api("GET", "/keys")
+	if r.has("error") or keys_list == null or not is_instance_valid(keys_list):
+		return
+	for c in keys_list.get_children():
+		c.queue_free()
+	var prot := _muted("Protection: " + str(r.get("protection", "")))
+	prot.add_theme_font_size_override("font_size", 12)
+	keys_list.add_child(prot)
+	for k in r["keys"]:
+		keys_list.add_child(_key_card(k))
+
+
+func _key_card(k: Dictionary) -> Control:
+	var name := str(k["name"])
+	var card := PanelContainer.new()
+	var is_set := bool(k["set"])
+	card.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, AmTheme.col("MINT") if is_set else AmTheme.col("BORDER"), 1, 14))
+	var v := VBoxContainer.new()
+	card.add_child(v)
+	var top := HBoxContainer.new()
+	v.add_child(top)
+	var l := Label.new()
+	l.text = str(k["label"])
+	l.add_theme_font_size_override("font_size", 15)
+	l.add_theme_font_override("font", AmTheme.ui_font(650))
+	top.add_child(l)
+	var st := Label.new()
+	st.text = ("   ● set on " + _date(float(k["set_at"]))) if is_set else "   ○ not set"
+	st.add_theme_color_override("font_color", AmTheme.col("MINT") if is_set else AmTheme.col("FAINT"))
+	st.add_theme_font_size_override("font_size", 12)
+	st.size_flags_horizontal = SIZE_EXPAND_FILL
+	top.add_child(st)
+	v.add_child(_muted("Used for: " + str(k["use"])))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	var edit := LineEdit.new()
+	edit.secret = true
+	edit.placeholder_text = "paste a new key to replace it" if is_set else "paste the key"
+	edit.size_flags_horizontal = SIZE_EXPAND_FILL
+	row.add_child(edit)
+	row.add_child(_small("Save", func() -> void:
+		var value := edit.text
+		edit.text = ""
+		var r := await engine.call_api("POST", "/keys", {"name": name, "value": value})
+		_toast(str(r.get("error", "Saved: %s (encrypted)" % k["label"])))
+		await _load_keys()))
+	if is_set:
+		row.add_child(_small("Remove", func() -> void:
+			_confirm("Remove the %s key from this computer?" % k["label"], func() -> void:
+				await engine.call_api("DELETE", "/keys/" + name)
+				await _load_keys())))
+	return card
 
 
 # ------------------------------------------------------------------ repositories (Loop 9)
@@ -1509,6 +1666,8 @@ func open_palette() -> void:
 	items.append({"label": "History", "hint": "every session and conversation · Ctrl+Shift+H", "run": set_view.bind("history")})
 	items.append({"label": "Review the changes", "hint": "diff and line comments · Ctrl+Shift+R", "run": set_view.bind("review")})
 	items.append({"label": "Repositories", "hint": "connected repositories and deploy keys", "run": set_view.bind("repos")})
+	items.append({"label": "Keys", "hint": "your API keys: OpenAI (voice), Fly.io, Anthropic", "run": set_view.bind("keys")})
+	items.append({"label": "Dictate (hold F8)", "hint": "speak into the active session; you press Enter", "run": func() -> void: _toast("Hold F8 and speak, release to write it into the prompt")})
 	items.append({"label": "New session", "hint": "Ctrl+Shift+N", "run": _open_new})
 	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", func(n: String) -> void:
 		await engine.call_api("POST", "/groups", {"name": n})
@@ -1674,7 +1833,15 @@ func _build_menus() -> void:
 	for t in AmTheme.THEMES:
 		theme_menu.add_item(AmTheme.LABELS[t])
 		theme_menu.set_item_metadata(theme_menu.item_count - 1, t)
-	theme_menu.index_pressed.connect(func(i: int) -> void: set_theme_name(str(theme_menu.get_item_metadata(i))))
+	theme_menu.add_separator()
+	theme_menu.add_item("Keys…")
+	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__keys")
+	theme_menu.index_pressed.connect(func(i: int) -> void:
+		var m := str(theme_menu.get_item_metadata(i))
+		if m == "__keys":
+			set_view("keys")
+		else:
+			set_theme_name(m))
 	add_child(theme_menu)
 	confirm_dialog = ConfirmationDialog.new()
 	confirm_dialog.title = "Please confirm"

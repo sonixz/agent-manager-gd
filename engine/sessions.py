@@ -57,7 +57,9 @@ class Sessions:
         self.brain = brain  # engine.brain.Brain or None (tests, or the Brain switched off)
         self.home = home or os.path.dirname(os.path.dirname(store.path))
         from .repos import Repos
+        from .keys import Keys
         self.repos = Repos(store.path, self.home)
+        self.keys_store = Keys(self.home)
 
     # ---------------------------------------------------------------- launching
     def command_for(self, rec: dict, mode: str = "new", conversation: str = "") -> list[str]:

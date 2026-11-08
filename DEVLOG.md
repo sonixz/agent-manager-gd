@@ -156,3 +156,15 @@ Rotate (reminds the old fingerprint to delete) and Disconnect. A session started
 cards show « ⎇ <repository> ». docs/REPOSITORIES.md documents keys and connected repositories. Tests: 40 (a local
 bare repository stands in for GitHub through file://, allowed only in tests). Bug found: the address parser kept
 « .git ». The real GitHub check needs the owner to add a deploy key (★).
+
+## Loop 10: Keys and voice dictation (2026-11-08)
+
+engine/keys.py: the owner's API keys (OpenAI, Fly.io, Anthropic), encrypted at rest with Windows DPAPI through
+PowerShell (the value goes base64-encoded on stdin, never on a command line; a non-ASCII round trip checked), 0600
+files, never returned by the API (only set / when / how protected); plain 0600 files only on a Linux without Windows,
+said on screen. engine/voice.py: a WAV to text through OpenAI's transcription endpoint (gpt-4o-mini-transcribe, then
+whisper-1), with the estimated cost. The app: a Keys view (masked fields, Save, Remove with confirmation) and hold-F8
+dictation: the microphone on a silent bus with a capture effect, a 16 kHz mono WAV, a « listening » overlay with a
+level meter; the text is pasted (bracketed) into the active session's prompt, never sent with Enter. Checked with a
+fake transcription: the dictated French text lands in a shell's prompt and is not executed; Windows headless still
+loads. Tests: 43. The real voice test needs the owner's OpenAI key and microphone (★).
