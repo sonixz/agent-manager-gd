@@ -20,6 +20,18 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
 3. « + New session »: Claude Code, Codex or a shell, in a folder (a Windows path is fine). Close the app: the sessions
    keep running in a private tmux server (`tmux -L agmgd ls`); reopen it and they are there.
 
+## Using it
+
+- **Views** (top right): **Focus** one terminal · **Grid** up to four terminals side by side (right click a session →
+  Show in grid) · **Board** a tile per session with a live preview of its screen.
+- **Themes** (◐): the Second Brain's seven themes (Focus, Terminal, Neon, Evening, Forest, Morning, Paper) for the
+  interface and the terminal's colours.
+- **They wait for you**: sessions waiting for your OK (Approve / Refuse) or an answer (Reply… without opening them).
+- **Shortcuts** (Ctrl alone works outside a terminal; with Shift they work everywhere, since a terminal keeps plain
+  Ctrl keys for its programs): Ctrl+Shift+K command palette · Ctrl+Shift+N new session · Ctrl+Shift+F / G / B Focus,
+  Grid, Board · Ctrl+Shift+↑ / ↓ previous / next session · Ctrl+Shift+A approve the first waiting session.
+  In a terminal: Ctrl+Shift+C / V copy and paste, Shift+drag selects even when the program uses the mouse.
+
 Tests: `python3 -m unittest discover -s tests/python -t .`; the app end to end on a virtual display:
 `tools/app_shots.sh <out-dir> [a folder Claude Code already trusts]`.
 

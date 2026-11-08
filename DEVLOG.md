@@ -72,3 +72,15 @@ showed `Cannot find instance binding callbacks` for input events: clang (zig) dr
 registrations, so keys and mouse events reaching the extension had no binding. The Windows build now generates and
 calls a registration for every engine class (SConstruct). Checked headless on Windows: é, Shift+Tab, AltGr+E, Ctrl+C
 and mouse motion reach VtTerminal with no error.
+
+## Loop 4D: the design pass (2026-11-08)
+
+The interface gets an identity: the Second Brain's seven palettes and style tokens (AmTheme), also driving the
+terminal's background, text and 16 ANSI colours (darkened on the light Paper theme). Session cards: tool badge
+(✻ Claude Code, ◎ Codex, ❯ shell) with an animated state dot (slow pulse while working, a beat while waiting), the
+agent's last words, time in this state, folder and git branch; a soft flash when the state changes. Three views of the
+real terminals: Focus, Grid (up to four side by side, titled, ⤢ to open alone) and Board (tiles with a live preview of
+each screen). A command palette (Ctrl+Shift+K) with fuzzy matching for sessions, approvals, replies, views and themes,
+and shortcuts. Found and fixed on the way: selecting a card on press rebuilt the list mid-drag (now on release);
+headless runs have a 64x64 window, so the drive script sets a real size. Checked: tree drag and click, create/reopen on
+Linux and Windows headless, captures of the three views, the palette and three themes in docs/screens/loop4d.

@@ -1,0 +1,146 @@
+class_name SessionCard
+extends PanelContainer
+## One session in the sidebar: tool badge, name, what it is doing (animated dot), the agent's last words,
+## time in this state, folder and git branch. Main wires clicks, drag and drop and the menu.
+
+signal picked(id: String)
+signal menu(id: String)
+signal rename(id: String)
+
+const TOOL_BADGE := {"claude": ["✻", Color("d97757")], "codex": ["◎", Color("10a37f")], "shell": ["❯", Color("8b98a8")]}
+
+var id := ""
+var data := {}
+var dot: Panel
+var _pulse: Tween
+
+
+func setup(s: Dictionary, selected: bool, activity: Array) -> void:
+	data = s
+	id = str(s["id"])
+	mouse_filter = MOUSE_FILTER_STOP
+	var acc: Color = activity[0]
+	var attention := str(s.get("activity", "")) in ["approval", "waiting"]
+	var bg := AmTheme.col("PANEL_2") if selected else AmTheme.col("PANEL")
+	var border := AmTheme.col("MINT") if selected else (acc.darkened(0.15) if attention else AmTheme.col("BORDER"))
+	add_theme_stylebox_override("panel", AmTheme.box(bg, 10, border, 1, 10))
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	h.mouse_filter = MOUSE_FILTER_IGNORE
+	add_child(h)
+	# tool badge with the state dot on its corner
+	var badge := Panel.new()
+	badge.custom_minimum_size = Vector2(34, 34)
+	badge.mouse_filter = MOUSE_FILTER_IGNORE
+	var tb: Array = TOOL_BADGE.get(str(s["tool"]), ["•", AmTheme.col("MUTED")])
+	badge.add_theme_stylebox_override("panel", AmTheme.box(Color(tb[1], 0.18), 9, Color(tb[1], 0.55), 1, 0))
+	var glyph := Label.new()
+	glyph.text = tb[0]
+	glyph.add_theme_color_override("font_color", tb[1])
+	glyph.add_theme_font_size_override("font_size", 17)
+	glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	glyph.set_anchors_preset(PRESET_FULL_RECT)
+	glyph.mouse_filter = MOUSE_FILTER_IGNORE
+	badge.add_child(glyph)
+	dot = Panel.new()
+	dot.size = Vector2(11, 11)
+	dot.position = Vector2(26, -3)
+	dot.mouse_filter = MOUSE_FILTER_IGNORE
+	var ds := StyleBoxFlat.new()
+	ds.bg_color = acc
+	ds.set_corner_radius_all(6)
+	ds.border_color = bg
+	ds.set_border_width_all(2)
+	dot.add_theme_stylebox_override("panel", ds)
+	badge.add_child(dot)
+	var badge_wrap := VBoxContainer.new()
+	badge_wrap.mouse_filter = MOUSE_FILTER_IGNORE
+	badge_wrap.add_child(badge)
+	h.add_child(badge_wrap)
+	# text column
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 1)
+	v.mouse_filter = MOUSE_FILTER_IGNORE
+	h.add_child(v)
+	var top := HBoxContainer.new()
+	top.mouse_filter = MOUSE_FILTER_IGNORE
+	v.add_child(top)
+	var name := _label(str(s["name"]), AmTheme.col("TEXT"), 14, 600)
+	name.size_flags_horizontal = SIZE_EXPAND_FILL
+	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	top.add_child(name)
+	top.add_child(_label(_ago(float(s.get("since", 0))), AmTheme.col("FAINT"), 11))
+	v.add_child(_label("%s · %s" % [s["tool_label"], activity[1]], acc if attention or str(s.get("activity", "")) == "working" else AmTheme.col("MUTED"), 12))
+	var msg := str(s.get("message", "")).replace("\n", " ").strip_edges()
+	if msg != "":
+		var m := _label(("runs " + msg) if str(s["tool"]) == "shell" else "“%s”" % msg, AmTheme.col("MUTED"), 11)
+		m.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		m.custom_minimum_size = Vector2(10, 0)
+		v.add_child(m)
+	var where := str(s["cwd"]).get_file() if str(s["cwd"]).get_file() != "" else str(s["cwd"])
+	var meta := "▸ " + where + ("   ⎇ " + str(s["branch"]) if str(s.get("branch", "")) != "" else "")
+	var w := _label(meta, AmTheme.col("FAINT"), 11)
+	w.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	w.custom_minimum_size = Vector2(10, 0)
+	w.tooltip_text = str(s["cwd"])
+	v.add_child(w)
+	tooltip_text = str(s["cwd"])
+	if str(s.get("activity", "")) == "working":
+		_pulse = create_tween().set_loops()
+		_pulse.tween_property(dot, "modulate:a", 0.25, 0.7).set_trans(Tween.TRANS_SINE)
+		_pulse.tween_property(dot, "modulate:a", 1.0, 0.7).set_trans(Tween.TRANS_SINE)
+	elif attention:
+		_pulse = create_tween().set_loops()
+		_pulse.tween_property(dot, "scale", Vector2(1.35, 1.35), 0.45).set_trans(Tween.TRANS_BACK)
+		_pulse.tween_property(dot, "scale", Vector2.ONE, 0.45)
+	dot.pivot_offset = dot.size / 2
+
+
+## A soft flash when the state changes (main calls it).
+func flash(color: Color) -> void:
+	var ov := Panel.new()
+	ov.mouse_filter = MOUSE_FILTER_IGNORE
+	ov.set_anchors_preset(PRESET_FULL_RECT)
+	ov.add_theme_stylebox_override("panel", AmTheme.box(Color(color, 0.22), 10, Color(0, 0, 0, 0), 0, 0))
+	add_child(ov)
+	var t := create_tween()
+	t.tween_property(ov, "modulate:a", 0.0, 0.9).set_trans(Tween.TRANS_QUAD)
+	t.tween_callback(ov.queue_free)
+
+
+func _gui_input(e: InputEvent) -> void:
+	if not e is InputEventMouseButton:
+		return
+	# Selecting rebuilds the list, so it happens on release: on press it would free this card mid-drag.
+	if e.pressed and e.button_index == MOUSE_BUTTON_LEFT and e.double_click:
+		rename.emit(id)
+	elif not e.pressed and e.button_index == MOUSE_BUTTON_LEFT and not get_viewport().gui_is_dragging():
+		picked.emit(id)
+	elif e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
+		menu.emit(id)
+
+
+func _label(t: String, color: Color, size: int, weight := 400) -> Label:
+	var l := Label.new()
+	l.text = t
+	l.add_theme_color_override("font_color", color)
+	l.add_theme_font_size_override("font_size", size)
+	if weight != 400:
+		l.add_theme_font_override("font", AmTheme.ui_font(weight))
+	l.mouse_filter = MOUSE_FILTER_IGNORE
+	return l
+
+
+static func _ago(t: float) -> String:
+	if t <= 0:
+		return ""
+	var d := int(Time.get_unix_time_from_system() - t)
+	if d < 60:
+		return "now"
+	if d < 3600:
+		return "%d min" % (d / 60)
+	if d < 86400:
+		return "%d h" % (d / 3600)
+	return "%d d" % (d / 86400)

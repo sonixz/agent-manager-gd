@@ -33,7 +33,7 @@ func _id(name: String) -> String:
 
 func _row(name: String) -> Control:
 	for c in main.list_box.get_children():
-		if c is Button and c.text.contains(name + "\n"):
+		if c is SessionCard and str(c.data.get("name", "")) == name:
 			return c
 	return null
 
@@ -79,8 +79,45 @@ func _tree_text() -> String:
 	return " ".join(parts)
 
 
+## Demo sessions: four real Claude Code (started, no prompt), a busy shell, a quiet one; states injected.
+func _demo() -> Dictionary:
+	var trusted := OS.get_environment("DRIVE_TRUSTED")
+	var home := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
+	await main.engine.call_api("POST", "/groups", {"name": "Second Brain"})
+	await main.engine.call_api("POST", "/groups", {"name": "Agent Manager"})
+	var made := {}
+	for it in [["Themes", "claude", "Second Brain"], ["MCP fixes", "claude", "Second Brain"], ["Docs", "claude", "Second Brain"],
+			["Terminal", "claude", "Agent Manager"], ["Build", "shell", "Agent Manager"], ["Scratch", "shell", ""]]:
+		var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": it[0], "tool": it[1], "cwd": trusted if it[1] == "claude" else home, "group": it[2]})
+		made[it[0]] = str(r.get("id", ""))
+	var c0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - c0 < 40000:
+		await wait(1.0)
+		await main.refresh()
+		var started: int = main.sessions.filter(func(x): return x["tool"] == "claude" and str(x["conversation"]) != "").size()
+		if started == 4:
+			break
+	var hook := ProjectSettings.globalize_path("res://").path_join("../engine/hook.py").simplify_path()
+	var data := OS.get_environment("AGMGD_HOME")
+	for ev in [["Themes", {"hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"}],
+			["MCP fixes", {"hook_event_name": "UserPromptSubmit", "prompt": "x"}],
+			["Docs", {"hook_event_name": "Stop"}],
+			["Terminal", {"hook_event_name": "Notification", "message": "Claude is waiting for your input"}]]:
+		var pf := FileAccess.open(data.path_join("payload.json"), FileAccess.WRITE)
+		pf.store_string(JSON.stringify(ev[1]))
+		pf.close()
+		OS.execute("bash", ["-c", "AGMGD_SESSION=%s AGMGD_HOME=%s python3 %s claude < %s" % [made[ev[0]], data, hook, data.path_join("payload.json")]])
+	await main.engine.call_api("POST", "/sessions/%s/send" % made["Build"], {"text": "clear; git log --oneline --color=always | head -12; python3 prototype/terminal-ghostty/tools/colors.py; sleep 120"})
+	await main.engine.call_api("POST", "/sessions/%s/send" % made["Scratch"], {"text": "echo 'déjà « vu » — ✓ 😀'"})
+	await wait(1.5)
+	await main.refresh()
+	return made
+
+
 func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
+	if DisplayServer.get_name() == "headless":
+		root.size = Vector2i(1440, 900)  # a headless window is 64x64: terminals would shrink to one line
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 	var t0 := Time.get_ticks_msec()
@@ -111,6 +148,19 @@ func _run() -> void:
 			await main.engine.call_api("POST", "/groups/Ticket%20System/fold", {"folded": true})
 			await main.refresh()
 			await wait(0.5)
+			var eng := _row("Engine")
+			if eng:
+				var at: Vector2 = eng.get_global_rect().get_center()
+				for pressed in [true, false]:
+					var ev := InputEventMouseButton.new()
+					ev.button_index = MOUSE_BUTTON_LEFT
+					ev.pressed = pressed
+					ev.position = at
+					ev.global_position = at
+					Input.parse_input_event(ev)
+					await process_frame
+				await wait(1.0)
+				report.append("a click on a card selects it: %s" % (main.selected == _id("Engine")))
 			main.select(_id("Terminal"))
 			await wait(1.0)
 			await shot("05-tree")
@@ -174,6 +224,34 @@ func _run() -> void:
 			main.select(made["Themes"])
 			await wait(1.0)
 			await shot("08-waiting-queue")
+		"design":
+			var made := await _demo()
+			main.select(made["Themes"])
+			await wait(2.5)
+			await main.refresh()
+			await shot("10-focus-%s" % AmTheme.current)
+			main.grid_ids = [made["Themes"], made["Build"], made["Docs"], made["Terminal"]]
+			main.set_view("grid")
+			await wait(3.0)
+			await shot("11-grid")
+			main.set_view("board")
+			await wait(3.0)
+			await main.refresh()
+			await wait(1.0)
+			await shot("12-board")
+			main.set_view("focus")
+			main.open_palette()
+			main.palette.edit.text = "th"
+			main.palette._filter("th")
+			await wait(0.6)
+			await shot("13-palette")
+			main.palette.hide()
+			for t in ["terminal", "neon", "paper"]:
+				await main.set_theme_name(t)
+				await wait(1.2)
+				await shot("14-theme-%s" % t)
+			await main.set_theme_name("focus")
+			report.append("design: views and themes captured; sessions=%d" % main.sessions.size())
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())
@@ -202,6 +280,9 @@ func _run() -> void:
 			await shot("02-claude-session")
 			var shell_text: String = main.terms[str(main.sessions[1]["id"])].get_screen_text()
 			report.append("shell screen shows the accents: %s" % shell_text.contains("déjà « vu » — ✓"))
+			if not shell_text.contains("déjà « vu » — ✓"):
+				var tt: Control = main.terms[str(main.sessions[1]["id"])]
+				report.append("screen was: [%s] running=%s cols=%d rows=%d size=%s parent=%s view=%s root=%s" % [shell_text.strip_edges().right(300).replace("\n", " | "), tt.is_running(), tt.get_cols(), tt.get_rows(), tt.size, tt.get_parent().name, main.view, root.size])
 			report.append("sessions: %s" % ", ".join(main.sessions.map(func(s): return "%s=%s" % [s["name"], s["state"]])))
 		"reopen":
 			await wait(2.0)

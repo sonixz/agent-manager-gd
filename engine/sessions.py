@@ -63,6 +63,24 @@ class Sessions:
     def session_env(self, sid: str) -> dict:
         return {"AGMGD_SESSION": sid, "AGMGD_HOME": self.home}
 
+    _branches: dict = {}
+
+    def branch(self, cwd: str) -> str:
+        """The folder's current git branch ('' outside a repository), cached for 15 seconds."""
+        now = time.time()
+        hit = self._branches.get(cwd)
+        if hit and now - hit[0] < 15:
+            return hit[1]
+        import subprocess
+        try:
+            out = subprocess.run(["git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True,
+                                 text=True, timeout=3)
+            name = out.stdout.strip() if out.returncode == 0 else ""
+        except (OSError, subprocess.SubprocessError):
+            name = ""
+        self._branches[cwd] = (now, name)
+        return name
+
     def hook_state(self, sid: str) -> dict:
         try:
             with open(os.path.join(self.home, "state", sid + ".json"), encoding="utf-8") as f:
@@ -99,6 +117,8 @@ class Sessions:
         activity, message = self.activity(rec, t, hs) if state == "running" else (state, "")
         return {**rec, "tool_label": TOOLS.get(rec["tool"], {}).get("label", rec["tool"]), "state": state,
                 "activity": activity, "message": message, "conversation": hs.get("conversation", ""),
+                "since": float(hs.get("time", 0) or (t.activity if t else 0) or rec["created"]),
+                "branch": self.branch(rec["cwd"]),
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
 
