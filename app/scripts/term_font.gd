@@ -4,6 +4,11 @@ class_name TermFont
 static func make() -> Font:
 	# the imported resource (a release build has no raw .ttf inside); its own copy, as the fallbacks are set on it
 	var main := (load("res://assets/fonts/JetBrainsMonoNL-Regular.ttf") as FontFile).duplicate() as FontFile
+	# the same rendering as a font loaded from the raw file (the import's defaults differ)
+	main.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
+	main.hinting = TextServer.HINTING_LIGHT
+	main.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_AUTO
+	main.keep_rounding_remainders = true
 	var fb: Array[Font] = []
 	for names in [["Cascadia Mono", "DejaVu Sans Mono"], ["Segoe UI Symbol", "DejaVu Sans"], ["Yu Gothic", "Noto Sans CJK JP"],
 			["Malgun Gothic", "Noto Sans CJK KR"], ["Segoe UI Emoji", "Noto Color Emoji"]]:

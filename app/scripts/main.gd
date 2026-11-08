@@ -107,6 +107,8 @@ func _ready() -> void:
 	cfg.load(SETTINGS)
 	AmTheme.apply(str(cfg.get_value("ui", "theme", OS.get_environment("AGMGD_THEME") if OS.get_environment("AGMGD_THEME") != "" else "focus")))
 	view = str(cfg.get_value("ui", "view", "focus"))
+	if view in ["setup", "shortcuts", "connect"]:  # settings pages are not reopened at startup
+		view = "focus"
 	spoken = bool(cfg.get_value("ui", "spoken", false))
 	_load_keymap()
 	theme = AmTheme.build()
