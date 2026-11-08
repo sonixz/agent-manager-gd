@@ -16,7 +16,7 @@ Chaque loop se termine par une revue du propriétaire (captures, rapport en fran
 | 10 | La voix : dictée vers les terminaux | idem |
 | 11 | La voix : commandes et état parlé | idem |
 | 12 | Sandbox Fly.io, « oui ou non » | idem |
-| 13 | Sandboxes complètes : tunnels, connexions, supervision avec le Brain | idem |
+| 13 | Sandboxes complètes : gestionnaire de sandboxes, tunnels, connexions, supervision avec le Brain | idem |
 | 14 | Coûts : Fly.io et agents, budgets | idem |
 | 15 | Finition et installeur | idem |
 
@@ -133,13 +133,19 @@ Détails : `docs/brief/SANDBOX.md`. Mêmes règles qu'avant (tests, captures, ra
 ### Loop 12 · Sandbox Fly.io, « oui ou non »
 - Notre image (tmux, git, Claude Code, Codex, Python, mini moteur, sshd), le registre choisi par le propriétaire.
 - Une machine pour une session : secrets (clé du dépôt, clés API des agents), clonage, branche `am/<session>`,
-  l'agent dans tmux, le terminal dans Agent Manager (badge ☁) ; fin : résumé, branche poussée, machine détruite.
+  l'agent dans tmux, le terminal dans Agent Manager (badge ☁) ; fin : résumé, branche poussée, sandbox marquée
+  « terminée, prête à détruire ». **Agent Manager ne détruit jamais une sandbox de lui-même.**
 - Mesures : temps de démarrage, latence du terminal, coût par exécution. Verdict écrit.
 - Besoins : compte et clé Fly (dotenvx), accord pour installer `flyctl`, clés API des agents, petit budget plafonné.
 
-### Loop 13 · Sandboxes complètes : tunnels, connexions, supervision avec le Brain
+### Loop 13 · Sandboxes complètes : gestionnaire, tunnels, connexions, supervision avec le Brain
+- 13 0 Gestionnaire de sandboxes : toutes les sandboxes (en cours, arrêtées, terminées) avec dépôt, session, branche,
+  taille, âge, état de la machine et du tunnel, Brain joignable, coût, dernière activité, dernier résumé, branche
+  poussée ou non ; Ouvrir, Démarrer, Arrêter (pause), Détruire (toujours confirmé, après vérification du travail non
+  commité ou non poussé, montré) ; « Détruire les terminées » (liste à cocher, confirmée) ; les orphelines du compte
+  Fly listées sans y toucher. Rien n'est jamais détruit automatiquement.
 - 13A Tunnels : un tunnel SSH inversé par sandbox (`ssh.exe` de Windows via `fly proxy`) vers le `/mcp` du Brain ;
-  clé du Brain par sandbox, révoquée à la destruction ; reconnexion automatique.
+  clé du Brain par sandbox, révoquée quand le propriétaire la détruit ; reconnexion automatique.
 - 13B Vue « Connexions » : pour chaque sandbox, l'état de la machine (démarre, travaille, arrêtée, détruite), l'état
   du tunnel (ouvert, en reconnexion, coupé) et sa latence, le Brain joignable ou non depuis la sandbox (test de santé
   à travers le tunnel), la dernière activité ; alertes quand un tunnel tombe ou qu'une sandbox ne répond plus.
@@ -151,8 +157,8 @@ Détails : `docs/brief/SANDBOX.md`. Mêmes règles qu'avant (tests, captures, ra
 
 ### Loop 14 · Coûts : Fly.io et agents, budgets
 - Fly.io : compteur en direct par sandbox, totaux jour et mois (estimation sur la grille publiée, datée), budget
-  mensuel (alerte à 80 %, refus à 100 %), durée de vie maximale, destruction après N minutes d'inactivité,
-  « Tout arrêter », historique des sandboxes.
+  mensuel (alerte à 80 %, refus de nouvelles sandboxes à 100 %), et, si le propriétaire l'active, l'**arrêt** (pause,
+  jamais la destruction) d'une sandbox inactive ou hors budget ; « Tout arrêter » met tout en pause ; historique.
 - Agents : coût par session et par jour lu dans les journaux de Claude Code et de Codex (lecture seule), sans
   estimation inventée ; mention claire quand une donnée manque.
 

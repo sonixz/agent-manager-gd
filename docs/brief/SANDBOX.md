@@ -26,7 +26,8 @@ worktree per session as today) or *Sandbox* (below). Git commands of that sessio
 
 ## 2. Sandboxes: cheap, throw-away instances
 
-One sandbox = one Fly Machine for one session, destroyed when the work is done.
+One sandbox = one Fly Machine for one session. **Agent Manager never destroys a sandbox on its own**: destroying is
+always the owner's act, in the sandbox manager (section 5).
 
 1. **Start**: a small machine from our image (tmux, git, Claude Code, Codex, Python, our mini engine); the
    repository's deploy key and the agent's credentials are given as machine secrets; the repository is cloned and a
@@ -35,7 +36,8 @@ One sandbox = one Fly Machine for one session, destroyed when the work is done.
 2. **Work**: states, approvals, the Brain (through the tunnel, below), Board and Grid views as for local sessions.
 3. **Finish**: Wrap up (the agent's summary), the agent commits and pushes its branch with the deploy key; Agent
    Manager shows the branch's diff (Loop 8) and can open the pull request link; the summary comes back to History and
-   is proposed to the Brain; the machine and its secrets are **destroyed**. Nothing persists in the cloud.
+   is proposed to the Brain; the sandbox is marked **finished, ready to destroy** in the sandbox manager. It is
+   destroyed (machine, volume and secrets) only when the owner says so.
 
 **Logging in once, with throw-away machines**: a login made inside a machine would vanish with it. So the
 credentials are given once to Agent Manager (dotenvx or the system keyring) and injected into each sandbox as
@@ -49,26 +51,38 @@ third-party tool is allowed must be checked with Anthropic first: off by default
 The Brain listens only on 127.0.0.1 of the owner's computer. While Agent Manager is open it keeps an **SSH reverse
 tunnel** to each running sandbox (Windows' own `ssh.exe` over `fly proxy`, so it reaches the Brain on Windows'
 localhost): the sandbox's 127.0.0.1:8765 leads to the Brain's `/mcp`. Each sandbox session gets its own Brain key
-(level « propose items »), revoked when the sandbox is destroyed. App closed: no tunnel, the agent gets « Brain
+(level « propose items »), revoked when the owner destroys the sandbox. App closed: no tunnel, the agent gets « Brain
 unreachable » and keeps working; its summary is proposed to the Brain when it comes back.
 
 ## 4. Fly.io costs in Agent Manager
 
 - A live counter per sandbox and a total per day and month: running seconds × the machine size's price from Fly's
   published price list (shown as an estimate, with the date of the price list).
-- **Caps**: a monthly budget, a maximum lifetime per sandbox, destroy after N minutes without activity; a warning
-  at 80 %, new sandboxes refused at 100 %.
-- **Stop everything**: one button destroys every running sandbox.
+- **Caps, never destructive**: a monthly budget (warning at 80 %, new sandboxes refused at 100 %); optionally, the
+  owner can let Agent Manager **stop** (pause, not destroy) a sandbox idle for N minutes or over budget — a stopped
+  machine keeps its files and costs only its storage, and starts again on demand.
+- **Stop everything**: one button stops (pauses) every running sandbox; nothing is destroyed.
 - A history of past sandboxes: repository, duration, estimated cost, outcome (branch pushed or not).
 
-## 5. Needed from the owner
+## 5. The sandbox manager
+
+A view listing every sandbox, running, stopped or finished:
+- repository, session, branch, size, age, state of the machine and of its tunnel, Brain reachable or not, cost so
+  far, last activity, last summary, whether its branch is pushed;
+- actions: open its terminal, **Start**, **Stop** (pause), **Destroy** (always confirmed; before destroying, Agent
+  Manager checks for uncommitted changes and commits not pushed and shows them, so no work is lost by mistake),
+  **Destroy the finished ones** (a list to tick, confirmed);
+- **orphans**: machines in the Fly account tagged as Agent Manager's but unknown locally (made from another computer,
+  or left after a crash) are listed, never touched without the owner.
+
+## 6. Needed from the owner
 
 A Fly.io account and API token (dotenvx), the agreement to install `flyctl` (a download, checked), a registry for the
 image (Fly's or GHCR; visibility is the owner's choice), API keys for the agents used in sandboxes, a test budget.
 
-## 6. Milestones
+## 7. Milestones
 
 1. **Repositories and deploy keys** (local only): add, check, rotate, disconnect; agents launched on a repository.
 2. **Sandbox go/no-go**: one machine from our image, a session's terminal attached, a branch pushed with the deploy
-   key, the Brain through the tunnel, destroyed at the end. Measured: start time, terminal latency, cost per run.
-3. **Fly.io costs and caps**, then several sandboxes in parallel.
+   key, the Brain through the tunnel, destroyed by the owner from the sandbox manager. Measured: start time, terminal latency, cost per run.
+3. **The sandbox manager, Fly.io costs and caps**, then several sandboxes in parallel.
