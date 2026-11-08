@@ -4,3 +4,11 @@
 
 Repository created (local only). docs/brief/VISION.md and PLAN.md, docs/research/MARKET.md (market scan) and
 TERMINAL.md (the VT engine candidates and the 12-line go/no-go grid), docs/DECISIONS.md, AGENTS.md. No code yet.
+
+## Loop 2, round 1: godot-xterm on the bench (2026-11-08)
+
+prototype/terminal: a bench attaching godot-xterm v4.0.3 (downloaded with the owner's agreement, checksum checked,
+not committed) to a private tmux server, scripted on a virtual display: render, keys, Claude Code and Codex,
+mouse, resize, speed. French accents, truecolor, widths, full-screen TUIs and resize pass; dim, strikethrough,
+box-drawing gaps, colour emoji, Shift+Tab, mouse and paste fail; idle redraw is costly. Verdict and table in
+docs/research/TERMINAL.md: not impeccable as is; round 2 proposed with libghostty-vt.

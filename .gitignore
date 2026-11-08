@@ -27,3 +27,6 @@ api_token
 Thumbs.db
 .vscode/
 .idea/
+
+# Third-party addon for the terminal prototype (in vendor-cache, copied here)
+/prototype/terminal/addons/

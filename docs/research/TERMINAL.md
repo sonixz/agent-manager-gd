@@ -59,3 +59,33 @@ The verdict (kept candidate, numbers, captures) is written at the end of this fi
 
 WSL: tmux 3.4, Godot 4.7.2, claude, codex, gcc. Not installed: SCons, CMake, Zig. Native Windows: no psmux, no
 claude, no codex on PATH.
+
+## Round 1: godot-xterm v4.0.3 (2026-11-08)
+
+Downloaded from the official release with the owner's agreement, checked against its published SHA-256
+(`3c41f533…d9ccae`), kept out of the repository. Bench: `prototype/terminal/` (`tools/bench.sh render|input|tui|mouse|perf|baseline`),
+godot-xterm attached through its PTY to a private tmux server, on a virtual display (software rendering, no GPU).
+
+| # | Check | Result |
+|---|---|---|
+| 1 | French text and keys | **Pass.** Every accent, « » — € œ renders; typed keys send the right UTF-8 (é = c3 a9…); Claude Code's input shows « Écris « déjà vu » — ça marche ? » exactly. Dead keys are composed by the OS before Godot: to confirm on Windows. |
+| 2 | Colours | **Pass** for 16, 256 and 24-bit (smooth gradients). **Fail:** *dim* and *strikethrough* are not drawn (bold, italic, underline, inverse are). |
+| 3 | Wide chars, emoji | **Partial.** Widths are right (CJK takes two cells, bars align) once system fonts are added as fallbacks. **Fail:** emoji are monochrome; ZWJ sequences and flags split into pieces (no grapheme clusters). Box-drawing lines (─) show gaps between cells: Claude Code's separators look dashed. |
+| 4 | Full-screen TUIs | **Pass.** Claude Code (v2.1.319) and Codex render fully in tmux; typing works. |
+| 5 | Copy / paste | Selection and copy exist in the API. **Missing:** no paste method and no bracketed paste: the app must add it (it can see the program ask for mode 2004 in the stream). |
+| 6 | Keys | **29/30.** **Fail:** Shift+Tab sends a plain Tab (Claude Code uses Shift+Tab to change mode). Fixable in our key layer. |
+| 7 | Mouse | **Fail.** tmux asks for mouse reports (1000/1006) but clicks and the wheel send nothing. Fixable in our layer (we know the cell size and the mode). |
+| 8 | Scrollback | tmux keeps 10 000 lines; scrolling it needs the mouse wheel (see 7). |
+| 9 | Resize | **Pass.** The terminal and tmux follow (79x22 after a resize). |
+| 10 | Speed | Software rendering: empty scene 136 fps, **one idle terminal 43 fps**, four terminals with one streaming 12.5 fps. The terminal redraws every frame even when idle. To measure on a real GPU (Windows) before judging. |
+| 11 | Platforms | Linux PTY works. The Windows DLL contains ConPTY code: untested. |
+| 12 | Themes | Colours are theme overrides (`ansi_0_color`…); fonts are overrides: compatible. |
+
+**Verdict, round 1: not impeccable as is.** Fixable in our own layer: Shift+Tab and other keys, mouse reports,
+bracketed paste, focus events. Not fixable without changing the library: dim, strikethrough, continuous box drawing,
+colour emoji and grapheme clusters, the idle redraw cost. libtsm (its VT core) is old and lacks modern sequences
+(synchronized output, the Kitty keyboard protocol, grapheme clustering).
+
+**Recommendation:** round 2 with libghostty-vt (modern, complete VT state, grapheme clusters, Kitty keyboard) and
+our own renderer in a GDExtension (glyph atlas, box drawing drawn as shapes like Ghostty does, redraw only what
+changed). godot-xterm stays the fallback and the development terminal meanwhile.
