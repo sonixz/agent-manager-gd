@@ -488,6 +488,17 @@ func _run() -> void:
 			await main.run_voice_command("Écris-moi un poème")
 			report.append("unknown handled: %s" % main.toast_label.text.left(70))
 			main.set_spoken(false)
+		"usage":
+			var data := OS.get_environment("AGMGD_HOME")
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Usage demo", "tool": "claude", "cwd": OS.get_environment("DRIVE_TRUSTED"), "brain": false})
+			await wait(6.0)
+			# give it a real conversation of this computer (this very Claude Code session's log), so the view shows real tokens
+			OS.execute("python3", ["-c", "import sqlite3,time,sys; db=sqlite3.connect(sys.argv[1]); db.execute('INSERT OR IGNORE INTO conversations VALUES (?,?,?,?,?,?)', (sys.argv[2],'claude',sys.argv[3],time.time(),time.time(),'')); db.commit()", data.path_join("data/sessions.sqlite3"), str(a["id"]), "17896074-ee98-473f-90bd-c4fe2c79bed6"])
+			main.set_view("usage")
+			await wait(2.5)
+			await shot("36-usage")
+			var u: Dictionary = await main.engine.call_api("GET", "/usage")
+			report.append("usage sessions: %s" % ", ".join((u.get("sessions", []) as Array).map(func(x): return "%s=%s (logs %s)" % [x["name"], x["total"], x["logs_found"]])))
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())

@@ -97,6 +97,9 @@ def make_handler(sessions: Sessions, token: str):
                 if parts == ["voice", "command"] and method == "POST":
                     from . import voice_commands
                     return self._reply(200, voice_commands.parse(str(self._body().get("text", "")), sessions.list()))
+                if parts == ["usage"] and method == "GET":
+                    from . import usage
+                    return self._reply(200, usage.report(sessions.store.history()))
                 if parts == ["brain"] and method == "GET":
                     return self._reply(200, sessions.brain.status() if sessions.brain else {"connected": False, "reason": "off"})
                 if parts == ["summaries"] and method == "GET":

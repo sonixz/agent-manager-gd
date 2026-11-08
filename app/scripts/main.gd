@@ -58,6 +58,7 @@ var voice_overlay: PanelContainer
 var voice_label: Label
 var voice_meter: ProgressBar
 var keys_list: VBoxContainer
+var usage_box: VBoxContainer
 var repos_list: VBoxContainer
 var repos_cache: Array = []
 var f_repo: OptionButton
@@ -589,7 +590,7 @@ func _render_list() -> void:
 			hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 			hint.add_theme_font_size_override("font_size", 12)
 			list_box.add_child(hint)
-	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys"]
+	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage"]
 
 
 func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
@@ -731,7 +732,7 @@ func select(id: String) -> void:
 	if not grid_ids.has(id):
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
-	if view in ["board", "history", "repos", "keys"]:
+	if view in ["board", "history", "repos", "keys", "usage"]:
 		view = "focus"  # picking a session opens it (Review follows the selected session)
 	if view == "review":
 		review_file = 0
@@ -757,7 +758,7 @@ func set_view(v: String) -> void:
 		for id in grid_ids:
 			await _ensure_terminal(id)
 	content.modulate.a = 0.0
-	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys"]
+	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage"]
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.18)
 	_render_header()
@@ -802,7 +803,7 @@ func _park_all() -> void:
 
 func _layout_view() -> void:
 	_park_all()
-	if sessions.is_empty() and view not in ["history", "repos", "keys"]:
+	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage"]:
 		return
 	match view:
 		"focus":
@@ -833,6 +834,9 @@ func _layout_view() -> void:
 		"keys":
 			content.add_child(_keys_view())
 			_load_keys()
+		"usage":
+			content.add_child(_usage_view())
+			_load_usage()
 		"board":
 			var scroll := ScrollContainer.new()
 			scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1312,6 +1316,112 @@ func set_spoken(on: bool) -> void:
 	_toast("Spoken status " + ("on: short spoken notices when an agent waits or finishes" if on else "off"))
 
 
+# ------------------------------------------------------------------ usage (Loop 14)
+func _usage_view() -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	usage_box = VBoxContainer.new()
+	usage_box.size_flags_horizontal = SIZE_EXPAND_FILL
+	usage_box.add_theme_constant_override("separation", 12)
+	scroll.add_child(usage_box)
+	return scroll
+
+
+static func _tok(n: int) -> String:
+	if n >= 1_000_000:
+		return "%.1fM" % (n / 1_000_000.0)
+	if n >= 1000:
+		return "%.1fk" % (n / 1000.0)
+	return str(n)
+
+
+func _load_usage() -> void:
+	var r := await engine.call_api("GET", "/usage")
+	if r.has("error") or usage_box == null or not is_instance_valid(usage_box):
+		return
+	for c in usage_box.get_children():
+		c.queue_free()
+	var title := Label.new()
+	title.text = "Usage · tokens"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	usage_box.add_child(title)
+	var note := _muted(str(r.get("note", "")))
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	usage_box.add_child(note)
+	var tools: Dictionary = r.get("tools", {})
+	var totals := HBoxContainer.new()
+	totals.add_theme_constant_override("separation", 12)
+	usage_box.add_child(totals)
+	for t in [["claude", "✻ Claude Code"], ["codex", "◎ Codex"]]:
+		var tile := PanelContainer.new()
+		tile.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, AmTheme.col("BORDER"), 1, 14))
+		var tv := VBoxContainer.new()
+		tile.add_child(tv)
+		tv.add_child(_muted(t[1]))
+		var big := Label.new()
+		big.text = _tok(int(tools.get(t[0], 0)))
+		big.add_theme_font_size_override("font_size", 28)
+		big.add_theme_font_override("font", AmTheme.ui_font(650))
+		tv.add_child(big)
+		tv.add_child(_muted("tokens, all sessions"))
+		totals.add_child(tile)
+	# tokens per day: one series, thin bars on a shared baseline, a value on hover
+	var days: Array = (r.get("days", []) as Array).slice(maxi(0, (r.get("days", []) as Array).size() - 21))
+	if not days.is_empty():
+		usage_box.add_child(_muted("Tokens per day (last %d days with activity)" % days.size()))
+		var chart := HBoxContainer.new()
+		chart.custom_minimum_size = Vector2(0, 160)
+		chart.add_theme_constant_override("separation", 4)
+		chart.alignment = BoxContainer.ALIGNMENT_BEGIN
+		var top := 1
+		for d in days:
+			top = maxi(top, int(d["total"]))
+		for d in days:
+			var col := VBoxContainer.new()
+			col.custom_minimum_size = Vector2(34, 160)
+			col.alignment = BoxContainer.ALIGNMENT_END
+			var bar := Panel.new()
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = AmTheme.col("INFO")
+			sb.corner_radius_top_left = 4
+			sb.corner_radius_top_right = 4
+			bar.add_theme_stylebox_override("panel", sb)
+			bar.custom_minimum_size = Vector2(26, maxf(2.0, 130.0 * int(d["total"]) / top))
+			bar.size_flags_horizontal = SIZE_SHRINK_CENTER
+			bar.tooltip_text = "%s · %s tokens (in %s, out %s, cache read %s, cache write %s)" % [d["day"], _tok(int(d["total"])), _tok(int(d.get("input", 0))), _tok(int(d.get("output", 0))), _tok(int(d.get("cache_read", 0))), _tok(int(d.get("cache_write", 0)))]
+			col.add_child(bar)
+			var dl := Label.new()
+			dl.text = str(d["day"]).substr(5)
+			dl.add_theme_font_size_override("font_size", 10)
+			dl.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+			dl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			col.add_child(dl)
+			chart.add_child(col)
+		usage_box.add_child(chart)
+	# per session
+	var grid := GridContainer.new()
+	grid.columns = 6
+	grid.add_theme_constant_override("h_separation", 22)
+	grid.add_theme_constant_override("v_separation", 6)
+	usage_box.add_child(grid)
+	for h in ["Session", "Total", "Input", "Output", "Cache read", "Cache write"]:
+		var hl := _muted(h)
+		hl.add_theme_font_size_override("font_size", 12)
+		grid.add_child(hl)
+	for s0 in r.get("sessions", []):
+		var tk: Dictionary = s0["tokens"]
+		var name := Label.new()
+		name.text = "%s %s%s" % [SessionCard.TOOL_BADGE.get(str(s0["tool"]), ["•"])[0], s0["name"], ("   (no log found)" if int(s0["logs_found"]) == 0 else "")]
+		grid.add_child(name)
+		for v in [s0["total"], tk.get("input", 0), tk.get("output", 0), tk.get("cache_read", 0), tk.get("cache_write", 0)]:
+			var vl := Label.new()
+			vl.text = _tok(int(v))
+			vl.add_theme_font_override("font", font)
+			vl.add_theme_font_size_override("font_size", 13)
+			grid.add_child(vl)
+
+
 # ------------------------------------------------------------------ keys (Loop 10)
 func _keys_view() -> Control:
 	var v := VBoxContainer.new()
@@ -1745,6 +1855,7 @@ func open_palette() -> void:
 	items.append({"label": "Review the changes", "hint": "diff and line comments · Ctrl+Shift+R", "run": set_view.bind("review")})
 	items.append({"label": "Repositories", "hint": "connected repositories and deploy keys", "run": set_view.bind("repos")})
 	items.append({"label": "Keys", "hint": "your API keys: OpenAI (voice), Fly.io, Anthropic", "run": set_view.bind("keys")})
+	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
 	items.append({"label": "Dictate (hold F8)", "hint": "speak into the active session; you press Enter", "run": func() -> void: _toast("Hold F8 and speak, release to write it into the prompt")})
 	items.append({"label": "Voice command (hold F9)", "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold F9 and say a command")})
 	items.append({"label": "Spoken status: " + ("turn off" if spoken else "turn on"), "hint": "short spoken notices", "run": func() -> void: set_spoken(not spoken)})
@@ -1916,12 +2027,16 @@ func _build_menus() -> void:
 	theme_menu.add_separator()
 	theme_menu.add_item("Spoken status (on / off)")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__spoken")
+	theme_menu.add_item("Usage…")
+	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__usage")
 	theme_menu.add_item("Keys…")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__keys")
 	theme_menu.index_pressed.connect(func(i: int) -> void:
 		var m := str(theme_menu.get_item_metadata(i))
 		if m == "__keys":
 			set_view("keys")
+		elif m == "__usage":
+			set_view("usage")
 		elif m == "__spoken":
 			set_spoken(not spoken)
 		else:

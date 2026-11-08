@@ -178,3 +178,13 @@ asks for a visible confirmation before approving, refusing or wrapping up. Spoke
 through Godot's text-to-speech (free, offline; a French voice when there is one), off by default, toggled in ◐ or the
 palette; « who is waiting? » always answers aloud. Checked: the commands drive the app (grid view, open Build,
 confirmation for « approve Themes », an unknown sentence ignored), the spoken answer text. Tests: 46.
+
+## Loop 14, first part: agent usage from their own logs (2026-11-08)
+
+engine/usage.py reads, read-only, the logs the agents write themselves: Claude Code's transcripts (assistant
+messages' usage, counted once per message id: the same message is often written twice while streaming) and Codex's
+rollouts (the last cumulative token_count). Tokens per session (through its recorded conversations), per day and per
+tool; a session without a readable log says so. No money amount: the logs carry none, and on a subscription a price
+would mislead. The Usage view: totals per tool, tokens per day (one series, thin bars, details on hover), a table
+per session. Captured with a real log of this computer. The Fly.io cost part waits for the sandboxes (Loops 12–13).
+Tests: 47.
