@@ -155,6 +155,19 @@ static func build() -> Theme:
 	t.set_stylebox("hovered", "ItemList", box(Color(col("TEXT"), 0.05), 4, Color(0, 0, 0, 0), 0, 4))
 	t.set_color("font_color", "ItemList", col("TEXT"))
 	t.set_color("font_selected_color", "ItemList", col("TEXT"))
+	# dialog windows: the frame and title bar take the theme too (Godot's default is a grey frame)
+	var frame := box(col("PANEL"), 12, col("BORDER"), 1, 0)
+	frame.expand_margin_top = 34
+	frame.expand_margin_left = 6
+	frame.expand_margin_right = 6
+	frame.expand_margin_bottom = 6
+	frame.shadow_color = Color(0, 0, 0, 0.35)
+	frame.shadow_size = 18
+	t.set_stylebox("embedded_border", "Window", frame)
+	t.set_stylebox("embedded_unfocused_border", "Window", frame)
+	t.set_color("title_color", "Window", col("TEXT"))
+	t.set_font("title_font", "Window", ui_font(650))
+	t.set_constant("title_height", "Window", 32)
 	t.set_stylebox("panel", "TooltipPanel", box(col("PANEL_2"), 6, col("BORDER"), 1, 8))
 	t.set_color("font_color", "TooltipLabel", col("TEXT"))
 	t.set_color("font_color", "CheckBox", col("TEXT"))

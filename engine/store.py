@@ -17,6 +17,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     created REAL NOT NULL,
     archived INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS conversations (
+    session_id TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    conversation TEXT NOT NULL,
+    started REAL NOT NULL,
+    last_seen REAL NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (session_id, conversation)
+);
 CREATE TABLE IF NOT EXISTS groups (
     name TEXT PRIMARY KEY,
     position INTEGER NOT NULL DEFAULT 0,
@@ -34,6 +43,11 @@ class Store:
             cols = {r[1] for r in db.execute("PRAGMA table_info(sessions)")}
             if "position" not in cols:  # Loop 4A: the order inside a group
                 db.execute("ALTER TABLE sessions ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+            for col in ("parent", "worktree", "base_repo"):  # Loop 5: forks and git worktrees
+                if col not in cols:
+                    db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+            if "archived_at" not in cols:
+                db.execute("ALTER TABLE sessions ADD COLUMN archived_at REAL NOT NULL DEFAULT 0")
 
     def _db(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=5)
@@ -41,16 +55,18 @@ class Store:
         db.execute("PRAGMA journal_mode=WAL")
         return db
 
-    def add(self, name: str, tool: str, cwd: str, grp: str = "") -> dict:
+    def add(self, name: str, tool: str, cwd: str, grp: str = "", parent: str = "", worktree: str = "",
+            base_repo: str = "") -> dict:
         sid = secrets.token_hex(4)
         if grp:
             self.add_group(grp)
         with closing(self._db()) as db, db:
             pos = db.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM sessions WHERE grp = ?", (grp,)).fetchone()[0]
             row = {"id": sid, "name": name, "tool": tool, "cwd": cwd, "grp": grp, "created": time.time(), "archived": 0,
-                   "position": pos}
-            db.execute("INSERT INTO sessions (id, name, tool, cwd, grp, created, archived, position) "
-                       "VALUES (:id, :name, :tool, :cwd, :grp, :created, :archived, :position)", row)
+                   "position": pos, "parent": parent, "worktree": worktree, "base_repo": base_repo, "archived_at": 0}
+            db.execute("INSERT INTO sessions (id, name, tool, cwd, grp, created, archived, position, parent, worktree, "
+                       "base_repo, archived_at) VALUES (:id, :name, :tool, :cwd, :grp, :created, :archived, :position, "
+                       ":parent, :worktree, :base_repo, :archived_at)", row)
         return row
 
     def all(self, archived: bool = False) -> list[dict]:
@@ -65,12 +81,50 @@ class Store:
         return dict(r) if r else None
 
     def update(self, sid: str, **fields) -> None:
-        allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived")}
+        allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived", "archived_at", "cwd", "worktree")}
         if not allowed:
             return
         sets = ", ".join(f"{k} = :{k}" for k in allowed)
         with closing(self._db()) as db, db:
             db.execute(f"UPDATE sessions SET {sets} WHERE id = :id", {**allowed, "id": sid})
+
+    # ---------------------------------------------------------------- conversations (never lose one)
+    def touch_conversation(self, sid: str, tool: str, conversation: str) -> bool:
+        """Records a conversation id for a session; True when it is new."""
+        if not conversation:
+            return False
+        now = time.time()
+        with closing(self._db()) as db, db:
+            cur = db.execute("UPDATE conversations SET last_seen = ? WHERE session_id = ? AND conversation = ?",
+                             (now, sid, conversation))
+            if cur.rowcount:
+                return False
+            db.execute("INSERT INTO conversations (session_id, tool, conversation, started, last_seen) "
+                       "VALUES (?, ?, ?, ?, ?)", (sid, tool, conversation, now, now))
+            return True
+
+    def conversations(self, sid: str) -> list[dict]:
+        with closing(self._db()) as db:
+            return [dict(r) for r in db.execute("SELECT * FROM conversations WHERE session_id = ? ORDER BY last_seen DESC",
+                                                (sid,))]
+
+    def history(self, query: str = "") -> list[dict]:
+        """Every session ever made (archived ones too), newest first, each with its conversations; filtered by text."""
+        with closing(self._db()) as db:
+            rows = [dict(r) for r in db.execute("SELECT * FROM sessions ORDER BY created DESC")]
+            convs = [dict(r) for r in db.execute("SELECT * FROM conversations ORDER BY last_seen DESC")]
+        by = {}
+        for c in convs:
+            by.setdefault(c["session_id"], []).append(c)
+        q = query.strip().lower()
+        out = []
+        for r in rows:
+            r["conversations"] = by.get(r["id"], [])
+            hay = " ".join([r["name"], r["cwd"], r["grp"], r["tool"], r["id"]] +
+                           [c["conversation"] + " " + c["note"] for c in r["conversations"]]).lower()
+            if not q or all(w in hay for w in q.split()):
+                out.append(r)
+        return out
 
     # ---------------------------------------------------------------- groups (the project tree)
     def groups(self) -> list[dict]:

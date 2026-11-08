@@ -6,6 +6,9 @@ import os
 import re
 import sys
 import time
+import uuid
+import subprocess
+import shutil
 
 from .store import Store
 from .tmux import CONF, PREFIX, Tmux
@@ -43,8 +46,9 @@ class Sessions:
         self.home = home or os.path.dirname(os.path.dirname(store.path))
 
     # ---------------------------------------------------------------- launching
-    def command_for(self, rec: dict) -> list[str]:
-        """The tool's command with this session's hooks: options of this launch only, never the user's settings."""
+    def command_for(self, rec: dict, mode: str = "new", conversation: str = "") -> list[str]:
+        """The tool's command with this session's hooks: options of this launch only, never the user's settings.
+        mode: new (a fresh conversation), resume (its own conversation), fork (a copy of a conversation)."""
         hook = [sys.executable or "python3", HOOK]
         if rec["tool"] == "claude":
             cmd = " ".join(_q(c) for c in hook + ["claude"])
@@ -55,9 +59,22 @@ class Sessions:
             path = os.path.join(folder, "claude-settings.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(settings, f)
-            return ["claude", "--settings", path]
+            base = ["claude", "--settings", path]
+            if mode == "resume" and conversation:
+                return base + ["--resume", conversation]
+            if mode == "fork" and conversation:
+                return base + ["--resume", conversation, "--fork-session"]
+            # a fresh conversation: we choose its id, so it is known (and kept) from the first second
+            new_id = str(uuid.uuid4())
+            self.store.touch_conversation(rec["id"], "claude", new_id)
+            return base + ["--session-id", new_id]
         if rec["tool"] == "codex":
-            return ["codex", "-c", "notify=" + json.dumps(hook + ["codex"])]
+            notify = ["-c", "notify=" + json.dumps(hook + ["codex"])]
+            if mode == "resume":  # without a known id Codex shows its own picker
+                return ["codex", "resume"] + notify + ([conversation] if conversation else [])
+            if mode == "fork":
+                return ["codex", "fork"] + notify + ([conversation] if conversation else [])
+            return ["codex"] + notify
         return list(TOOLS[rec["tool"]]["command"])
 
     def session_env(self, sid: str) -> dict:
@@ -92,7 +109,8 @@ class Sessions:
     def tmux_name(sid: str) -> str:
         return PREFIX + sid
 
-    def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48) -> dict:
+    def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
+               worktree: bool = False) -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
@@ -100,7 +118,11 @@ class Sessions:
         cwd = os.path.expanduser(host_path((cwd or "~").strip()))
         if not os.path.isdir(cwd):
             raise ValueError(f"no such folder: {cwd}")
-        rec = self.store.add(name.strip(), tool, cwd, grp)
+        wt, base = ("", "")
+        if worktree:
+            wt, base = self._add_worktree(cwd, name)
+            cwd = wt
+        rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base)
         try:
             self.tmux.new_session(self.tmux_name(rec["id"]), cwd, self.command_for(rec),
                                   env=self.session_env(rec["id"]), width=width, height=height)
@@ -114,10 +136,15 @@ class Sessions:
         t = live.get(self.tmux_name(rec["id"]))
         state = "missing" if t is None else ("exited" if t.pane_dead else "running")
         hs = self.hook_state(rec["id"])
+        if hs.get("conversation"):
+            self.store.touch_conversation(rec["id"], rec["tool"], hs["conversation"])
         activity, message = self.activity(rec, t, hs) if state == "running" else (state, "")
+        if rec.get("archived"):
+            state, activity = "archived", "archived"
         return {**rec, "tool_label": TOOLS.get(rec["tool"], {}).get("label", rec["tool"]), "state": state,
                 "activity": activity, "message": message, "conversation": hs.get("conversation", ""),
                 "since": float(hs.get("time", 0) or (t.activity if t else 0) or rec["created"]),
+                "last_conversation": self.last_conversation(rec["id"]),
                 "branch": self.branch(rec["cwd"]),
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
@@ -205,6 +232,114 @@ class Sessions:
             os.remove(os.path.join(self.home, "state", sid + ".json"))
         except OSError:
             pass
+
+    # ---------------------------------------------------------------- history, resume, fork (Loop 5)
+    def last_conversation(self, sid: str) -> str:
+        convs = self.store.conversations(sid)
+        return convs[0]["conversation"] if convs else ""
+
+    def _launch(self, d: dict, cmd: list[str]) -> None:
+        try:
+            os.remove(os.path.join(self.home, "state", d["id"] + ".json"))
+        except OSError:
+            pass
+        if d["state"] in ("missing", "archived") or d["tmux"] not in self.tmux.sessions():
+            self.tmux.new_session(d["tmux"], d["cwd"], cmd, env=self.session_env(d["id"]))
+        else:
+            self.tmux.respawn(d["tmux"], d["cwd"], cmd)
+
+    def resume(self, sid: str, conversation: str = "") -> dict:
+        """Starts the session again on its own conversation (the latest one unless told), so no context is lost."""
+        d = self.get(sid)
+        if d["tool"] == "shell":
+            return self.restart(sid)
+        conv = conversation or self.last_conversation(sid)
+        if conversation and conversation not in [c["conversation"] for c in self.store.conversations(sid)]:
+            raise ValueError("not a conversation of this session")
+        if d.get("archived"):
+            self.store.update(sid, archived=0, archived_at=0)
+            d = self.get(sid)
+        self._launch(d, self.command_for(d, "resume", conv))
+        return self.get(sid)
+
+    def fork(self, sid: str, name: str = "", conversation: str = "") -> dict:
+        """A new session continuing a copy of this session's conversation (same tool, folder and group)."""
+        d = self.get(sid)
+        if d["tool"] == "shell":
+            raise ValueError("a shell has no conversation to fork")
+        conv = conversation or self.last_conversation(sid)
+        if not conv and d["tool"] == "claude":
+            raise ValueError("no conversation recorded yet for this session")
+        rec = self.store.add((name or d["name"] + " (fork)").strip()[:60], d["tool"], d["cwd"], d["grp"], parent=sid)
+        self.tmux.new_session(self.tmux_name(rec["id"]), rec["cwd"], self.command_for(rec, "fork", conv),
+                              env=self.session_env(rec["id"]))
+        return self.get(rec["id"])
+
+    def archive(self, sid: str) -> dict:
+        """Out of the way but never forgotten: the record and every conversation id stay (History)."""
+        self.get(sid)
+        self.tmux.kill(self.tmux_name(sid))
+        self.store.update(sid, archived=1, archived_at=time.time())
+        return self.get(sid)
+
+    def history(self, query: str = "") -> list[dict]:
+        return [{**r, "tool_label": TOOLS.get(r["tool"], {}).get("label", r["tool"])} for r in self.store.history(query)]
+
+    # ---------------------------------------------------------------- git worktrees (Loop 5C)
+    @staticmethod
+    def _git(cwd: str, *args: str, check: bool = True) -> str:
+        out = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=30)
+        if check and out.returncode != 0:
+            raise ValueError("git " + args[0] + ": " + (out.stderr.strip() or out.stdout.strip())[:300])
+        return out.stdout.strip()
+
+    def _add_worktree(self, cwd: str, name: str) -> tuple[str, str]:
+        root = self._git(cwd, "rev-parse", "--show-toplevel")
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "session"
+        base_path = f"{root}-worktrees/{slug}"
+        path, n = base_path, 2
+        while os.path.exists(path) or self._git(root, "rev-parse", "--verify", "--quiet", f"am/{os.path.basename(path)}", check=False):
+            path, n = f"{base_path}-{n}", n + 1
+        self._git(root, "worktree", "add", "-b", f"am/{os.path.basename(path)}", path)
+        return path, root
+
+    def worktree_status(self, sid: str) -> dict:
+        d = self.get(sid)
+        if not d.get("worktree"):
+            return {"worktree": ""}
+        branch = self._git(d["worktree"], "rev-parse", "--abbrev-ref", "HEAD")
+        target = self._git(d["base_repo"], "rev-parse", "--abbrev-ref", "HEAD")
+        dirty = self._git(d["worktree"], "status", "--porcelain")
+        ahead = int(self._git(d["base_repo"], "rev-list", "--count", f"{target}..{branch}") or 0)
+        return {"worktree": d["worktree"], "base_repo": d["base_repo"], "branch": branch, "target": target,
+                "uncommitted": len([x for x in dirty.splitlines() if x.strip()]), "commits_ahead": ahead}
+
+    def finish(self, sid: str, merge: bool, delete_branch: bool) -> dict:
+        """Ends a worktree session: optionally merges its branch into the repository's current branch, then removes
+        the worktree. Refused while changes are uncommitted; a merge that conflicts is undone."""
+        st = self.worktree_status(sid)
+        if not st["worktree"]:
+            raise ValueError("this session has no worktree of its own")
+        if st["uncommitted"]:
+            raise ValueError(f"{st['uncommitted']} uncommitted change(s) in the worktree: commit or discard them first")
+        merged = False
+        if merge and st["commits_ahead"]:
+            if self._git(st["base_repo"], "status", "--porcelain"):
+                raise ValueError("the main checkout has uncommitted changes: merge refused")
+            out = subprocess.run(["git", "-C", st["base_repo"], "merge", "--no-edit", st["branch"]], capture_output=True,
+                                 text=True, timeout=60)
+            if out.returncode != 0:
+                subprocess.run(["git", "-C", st["base_repo"], "merge", "--abort"], capture_output=True, timeout=30)
+                raise ValueError("the merge conflicts; nothing was changed: " + (out.stdout + out.stderr).strip()[:300])
+            merged = True
+        self.tmux.kill(self.tmux_name(sid))
+        self._git(st["base_repo"], "worktree", "remove", st["worktree"])
+        deleted = False
+        if delete_branch:
+            deleted = subprocess.run(["git", "-C", st["base_repo"], "branch", "-d", st["branch"]], capture_output=True,
+                                     timeout=30).returncode == 0  # -d: never deletes unmerged work
+        self.store.update(sid, archived=1, archived_at=time.time(), cwd=st["base_repo"], worktree="")
+        return {"merged": merged, "branch_deleted": deleted, "branch": st["branch"], "target": st["target"]}
 
     def tree(self) -> dict:
         """Groups in order, each with its sessions in order; sessions without a group first."""

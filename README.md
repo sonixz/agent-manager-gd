@@ -26,6 +26,15 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   Show in grid) · **Board** a tile per session with a live preview of its screen.
 - **Themes** (◐): the Second Brain's seven themes (Focus, Terminal, Neon, Evening, Forest, Morning, Paper) for the
   interface and the terminal's colours.
+- **Never lose a conversation**: every session keeps every conversation id it ever had (Claude Code gets its id from
+  the app at launch; Codex reports it). **Resume** starts a session again on its own conversation — after a reboot,
+  after it ended, or from the archive. **Fork…** opens a new session on a copy of a conversation. **Archive** puts a
+  session away; **History** (Ctrl+Shift+H) lists every session ever made with its conversations, searchable by name,
+  folder, group or id, each resumable at any time.
+- **Git branch per session**: tick « In its own git branch » when creating a session: it works in
+  `<repository>-worktrees/<name>` on branch `am/<name>`. **Finish its git branch…** shows what is ahead and
+  uncommitted, can merge it into the repository's current branch (a conflicting merge is undone) and removes the
+  worktree; uncommitted work blocks it, and the branch is deleted only if merged.
 - **They wait for you**: sessions waiting for your OK (Approve / Refuse) or an answer (Reply… without opening them).
 - **Shortcuts** (Ctrl alone works outside a terminal; with Shift they work everywhere, since a terminal keeps plain
   Ctrl keys for its programs): Ctrl+Shift+K command palette · Ctrl+Shift+N new session · Ctrl+Shift+F / G / B Focus,

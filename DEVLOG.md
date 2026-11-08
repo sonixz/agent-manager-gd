@@ -84,3 +84,16 @@ each screen). A command palette (Ctrl+Shift+K) with fuzzy matching for sessions,
 and shortcuts. Found and fixed on the way: selecting a card on press rebuilt the list mid-drag (now on release);
 headless runs have a 64x64 window, so the drive script sets a real size. Checked: tree drag and click, create/reopen on
 Linux and Windows headless, captures of the three views, the palette and three themes in docs/screens/loop4d.
+
+## Loop 5: resume, fork, worktrees and a history that never forgets (2026-11-08)
+
+Every conversation id is kept (`conversations` table): Claude Code sessions get theirs from the app at launch
+(`--session-id <uuid>`), so it is known from the first second; Codex's arrives through `notify`. Resume (`claude
+--resume <id>`, `codex resume <id>`, or Codex's own picker when no id was seen) works after an exit, a reboot or from
+the archive; Fork (`--resume <id> --fork-session`, `codex fork <id>`) makes a new session with a parent link.
+Archive takes a session out of the sidebar and keeps its record and conversations; History lists every session ever
+made with its conversations, searchable, each resumable or forkable, ids copyable. Worktrees: a session can start in
+`<repo>-worktrees/<name>` on `am/<name>`; Finish shows commits ahead and uncommitted changes, merges into the
+repository's current branch on request (aborted on conflict), removes the worktree, deletes the branch with `-d` only.
+Dialog windows now take the theme. Engine tests: 21 (5 new with fake claude/codex printing their options, and a real
+temporary git repository). Captures in docs/screens/loop5.

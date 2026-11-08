@@ -66,6 +66,9 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, {k: v["label"] for k, v in TOOLS.items()})
                 if parts == ["sessions"] and method == "GET":
                     return self._reply(200, {"sessions": sessions.list()})
+                if parts == ["history"] and method == "GET":
+                    q = parse_qs(url.query).get("q", [""])[0]
+                    return self._reply(200, {"sessions": sessions.history(q)})
                 if parts == ["tree"] and method == "GET":
                     return self._reply(200, sessions.tree())
                 if parts == ["groups"] and method == "POST":
@@ -97,7 +100,8 @@ def make_handler(sessions: Sessions, token: str):
                     b = self._body()
                     return self._reply(201, sessions.create(str(b.get("name", "")), str(b.get("tool", "shell")),
                                                             str(b.get("cwd", "~")), str(b.get("group", "")),
-                                                            int(b.get("width", 160)), int(b.get("height", 48))))
+                                                            int(b.get("width", 160)), int(b.get("height", 48)),
+                                                            bool(b.get("worktree", False))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
@@ -115,6 +119,20 @@ def make_handler(sessions: Sessions, token: str):
                     if method == "POST" and action == "keys":
                         sessions.keys(sid, [str(k) for k in self._body().get("keys", [])])
                         return self._reply(200, {"ok": True})
+                    if method == "POST" and action == "resume":
+                        return self._reply(200, sessions.resume(sid, str(self._body().get("conversation", ""))))
+                    if method == "POST" and action == "fork":
+                        b = self._body()
+                        return self._reply(201, sessions.fork(sid, str(b.get("name", "")), str(b.get("conversation", ""))))
+                    if method == "POST" and action == "archive":
+                        return self._reply(200, sessions.archive(sid))
+                    if method == "GET" and action == "conversations":
+                        return self._reply(200, {"conversations": sessions.store.conversations(sid)})
+                    if method == "GET" and action == "worktree":
+                        return self._reply(200, sessions.worktree_status(sid))
+                    if method == "POST" and action == "finish":
+                        b = self._body()
+                        return self._reply(200, sessions.finish(sid, bool(b.get("merge", False)), bool(b.get("delete_branch", False))))
                     if method == "POST" and action == "restart":
                         return self._reply(200, sessions.restart(sid))
                     if method == "POST" and action == "stop":

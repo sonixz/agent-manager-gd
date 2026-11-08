@@ -47,6 +47,13 @@ var ask_done: Callable
 var palette: CommandPalette
 var bg_rect: ColorRect
 var board_previews := {}      # id -> Label (Board view)
+var f_worktree: CheckBox
+var history_search: LineEdit
+var history_list: VBoxContainer
+var finish_dialog: ConfirmationDialog
+var finish_info: Label
+var finish_merge: CheckBox
+var finish_delete: CheckBox
 
 
 func activity_of(s: Dictionary) -> Array:
@@ -110,6 +117,7 @@ func _input(e: InputEvent) -> void:
 			KEY_F: set_view("focus")
 			KEY_G: set_view("grid")
 			KEY_B: set_view("board")
+			KEY_H: set_view("history")
 			KEY_DOWN: _step(1)
 			KEY_UP: _step(-1)
 			KEY_A: _approve_first()
@@ -223,7 +231,7 @@ func _build() -> void:
 	var seg := HBoxContainer.new()
 	seg.add_theme_constant_override("separation", 0)
 	hb.add_child(seg)
-	for v in [["focus", "Focus", "Ctrl+Shift+F"], ["grid", "Grid", "Ctrl+Shift+G"], ["board", "Board", "Ctrl+Shift+B"]]:
+	for v in [["focus", "Focus", "Ctrl+Shift+F"], ["grid", "Grid", "Ctrl+Shift+G"], ["board", "Board", "Ctrl+Shift+B"], ["history", "History", "Ctrl+Shift+H"]]:
 		var b := Button.new()
 		b.text = v[1]
 		b.tooltip_text = v[2]
@@ -231,6 +239,13 @@ func _build() -> void:
 		b.pressed.connect(set_view.bind(v[0]))
 		seg.add_child(b)
 		view_buttons[v[0]] = b
+	var resume_btn := Button.new()
+	resume_btn.name = "ResumeBtn"
+	resume_btn.text = "↻ Resume"
+	resume_btn.tooltip_text = "Start it again on its own conversation"
+	resume_btn.visible = false
+	resume_btn.pressed.connect(func() -> void: _resume(selected, ""))
+	hb.add_child(resume_btn)
 	var theme_btn := Button.new()
 	theme_btn.text = "◐"
 	theme_btn.tooltip_text = "Theme"
@@ -349,6 +364,11 @@ func _build_new_dialog() -> void:
 	f_cwd.text = "~"
 	f_cwd.placeholder_text = "C:\\git-2026\\my-project or ~/my-project"
 	g.add_child(f_cwd)
+	g.add_child(Control.new())
+	f_worktree = CheckBox.new()
+	f_worktree.text = "In its own git branch (a worktree beside the repository)"
+	f_worktree.tooltip_text = "The session works in <repository>-worktrees/<name> on branch am/<name>; Finish merges it back."
+	g.add_child(f_worktree)
 	new_dialog.confirmed.connect(_create)
 
 
@@ -361,6 +381,7 @@ func _muted(t: String) -> Label:
 
 func _open_new() -> void:
 	f_name.text = ""
+	f_worktree.button_pressed = false
 	f_group.clear()
 	f_group.add_item("(no group)")
 	f_group.set_item_metadata(0, "")
@@ -588,6 +609,9 @@ func _render_header() -> void:
 	header_state.add_theme_color_override("font_color", act[0])
 	for k in view_buttons:
 		view_buttons[k].button_pressed = k == view
+	var rb: Button = get_node("Root/MainCol/Header").find_child("ResumeBtn", true, false)
+	if rb:
+		rb.visible = s and str(s.get("tool", "")) != "shell" and str(s.get("state", "")) in ["exited", "missing"]
 
 
 # ------------------------------------------------------------------ views
@@ -596,8 +620,8 @@ func select(id: String) -> void:
 	if not grid_ids.has(id):
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
-	if view == "board":
-		view = "focus"
+	if view in ["board", "history"]:
+		view = "focus"  # picking a session opens it
 	await _ensure_terminal(id)
 	_layout_view()
 	if terms.has(id):
@@ -664,7 +688,7 @@ func _park_all() -> void:
 
 func _layout_view() -> void:
 	_park_all()
-	if sessions.is_empty():
+	if sessions.is_empty() and view != "history":
 		return
 	match view:
 		"focus":
@@ -683,6 +707,9 @@ func _layout_view() -> void:
 					f.size_flags_horizontal = SIZE_EXPAND_FILL
 					f.size_flags_vertical = SIZE_EXPAND_FILL
 					g.add_child(f)
+		"history":
+			content.add_child(_history_view())
+			_load_history()
 		"board":
 			var scroll := ScrollContainer.new()
 			scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -823,6 +850,170 @@ func _refresh_previews() -> void:
 			board_previews[id].text = "\n".join(keep)
 
 
+# ------------------------------------------------------------------ history (Loop 5): nothing is ever lost
+func _history_view() -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	var top := HBoxContainer.new()
+	v.add_child(top)
+	var title := Label.new()
+	title.text = "Every session, every conversation"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	title.size_flags_horizontal = SIZE_EXPAND_FILL
+	top.add_child(title)
+	history_search = LineEdit.new()
+	history_search.placeholder_text = "Search a name, folder, group or conversation id…"
+	history_search.custom_minimum_size = Vector2(380, 0)
+	history_search.text_changed.connect(func(_t: String) -> void: _load_history())
+	top.add_child(history_search)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(scroll)
+	history_list = VBoxContainer.new()
+	history_list.size_flags_horizontal = SIZE_EXPAND_FILL
+	history_list.add_theme_constant_override("separation", 8)
+	scroll.add_child(history_list)
+	return v
+
+
+func _load_history() -> void:
+	if history_list == null or not is_instance_valid(history_list):
+		return
+	var q := history_search.text.strip_edges() if is_instance_valid(history_search) else ""
+	var r := await engine.call_api("GET", "/history?q=" + q.uri_encode())
+	if r.has("error") or not is_instance_valid(history_list):
+		return
+	for c in history_list.get_children():
+		c.queue_free()
+	for h in r["sessions"]:
+		history_list.add_child(_history_row(h))
+	if (r["sessions"] as Array).is_empty():
+		var none := Label.new()
+		none.text = "Nothing matches."
+		none.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+		history_list.add_child(none)
+
+
+func _history_row(h: Dictionary) -> Control:
+	var id := str(h["id"])
+	var archived := int(h.get("archived", 0)) == 1
+	var row := PanelContainer.new()
+	row.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, AmTheme.col("BORDER"), 1, 12))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	row.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	v.add_child(top)
+	var tb: Array = SessionCard.TOOL_BADGE.get(str(h["tool"]), ["•", AmTheme.col("MUTED")])
+	var g := Label.new()
+	g.text = tb[0]
+	g.add_theme_color_override("font_color", tb[1])
+	g.add_theme_font_size_override("font_size", 18)
+	top.add_child(g)
+	var n := Label.new()
+	n.text = str(h["name"])
+	n.add_theme_font_size_override("font_size", 15)
+	n.add_theme_font_override("font", AmTheme.ui_font(650))
+	top.add_child(n)
+	var st := Label.new()
+	st.text = "archived " + _date(float(h.get("archived_at", 0))) if archived else "in the sidebar"
+	st.add_theme_color_override("font_color", AmTheme.col("FAINT") if archived else AmTheme.col("MINT"))
+	st.add_theme_font_size_override("font_size", 12)
+	st.size_flags_horizontal = SIZE_EXPAND_FILL
+	top.add_child(st)
+	if str(h["tool"]) != "shell":
+		top.add_child(_small("Resume", func() -> void: _resume(id, ""), "Starts it again on its latest conversation"))
+		top.add_child(_small("Fork…", func() -> void: _fork(id), "A new session on a copy of the conversation"))
+	elif archived:
+		top.add_child(_small("Restore", func() -> void: _resume(id, ""), "Back to the sidebar, a fresh shell"))
+	var meta := Label.new()
+	meta.text = "%s  ·  %s%s  ·  made %s%s" % [h["tool_label"], h["cwd"], ("  ·  " + str(h["grp"])) if str(h["grp"]) != "" else "", _date(float(h["created"])), ("  ·  fork of " + str(h["parent"])) if str(h.get("parent", "")) != "" else ""]
+	meta.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	meta.add_theme_font_size_override("font_size", 12)
+	v.add_child(meta)
+	for c in (h["conversations"] as Array).slice(0, 6):
+		var cr := HBoxContainer.new()
+		cr.add_theme_constant_override("separation", 8)
+		var cl := Label.new()
+		cl.text = "   ↳ %s   last seen %s" % [c["conversation"], _date(float(c["last_seen"]))]
+		cl.add_theme_font_override("font", font)
+		cl.add_theme_font_size_override("font_size", 12)
+		cl.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+		cl.size_flags_horizontal = SIZE_EXPAND_FILL
+		cr.add_child(cl)
+		var conv := str(c["conversation"])
+		cr.add_child(_small("Resume this one", func() -> void: _resume(id, conv)))
+		cr.add_child(_small("Copy id", func() -> void:
+			DisplayServer.clipboard_set(conv)
+			_toast("Conversation id copied")))
+		v.add_child(cr)
+	return row
+
+
+static func _date(t: float) -> String:
+	if t <= 0:
+		return ""
+	var bias := int(Time.get_time_zone_from_system().get("bias", 0)) * 60
+	return Time.get_datetime_string_from_unix_time(int(t) + bias, true).left(16)
+
+
+func _resume(id: String, conversation: String) -> void:
+	var r := await engine.call_api("POST", "/sessions/%s/resume" % id, {"conversation": conversation})
+	if r.has("error"):
+		status_label.text = str(r["error"])
+		return
+	if terms.has(id):
+		terms[id].queue_free()
+		terms.erase(id)
+	view = "focus"
+	await refresh()
+	await select(id)
+
+
+func _fork(id: String) -> void:
+	_ask("Fork " + str(_session(id).get("name", "")), str(_session(id).get("name", "session")) + " (fork)", func(n: String) -> void:
+		var r := await engine.call_api("POST", "/sessions/%s/fork" % id, {"name": n})
+		if r.has("error"):
+			status_label.text = str(r["error"])
+			return
+		view = "focus"
+		await refresh()
+		await select(str(r["id"])))
+
+
+func _archive(id: String) -> void:
+	await engine.call_api("POST", "/sessions/%s/archive" % id)
+	if terms.has(id):
+		terms[id].queue_free()
+		terms.erase(id)
+	grid_ids.erase(id)
+	if selected == id:
+		selected = ""
+	await refresh()
+	_toast("Archived: kept in History with its conversations")
+	if selected == "" and sessions.size() > 0:
+		await select(str(sessions[0]["id"]))
+	else:
+		_layout_view()
+
+
+func _open_finish(id: String) -> void:
+	var r := await engine.call_api("GET", "/sessions/%s/worktree" % id)
+	if r.has("error") or str(r.get("worktree", "")) == "":
+		status_label.text = "This session has no git branch of its own."
+		return
+	menu_target = id
+	finish_info.text = "Branch %s · %d commit(s) not in %s · %d uncommitted change(s)\n%s" % [r["branch"], r["commits_ahead"], r["target"], r["uncommitted"], r["worktree"]]
+	finish_merge.text = "Merge %s into %s first" % [r["branch"], r["target"]]
+	finish_merge.button_pressed = int(r["commits_ahead"]) > 0
+	finish_merge.disabled = int(r["commits_ahead"]) == 0
+	finish_dialog.get_ok_button().disabled = int(r["uncommitted"]) > 0
+	finish_dialog.popup_centered()
+
+
 # ------------------------------------------------------------------ palette
 func open_palette() -> void:
 	var items: Array = []
@@ -832,6 +1023,7 @@ func open_palette() -> void:
 		if str(s.get("activity", "")) == "approval":
 			items.append({"label": "Approve " + str(s["name"]), "hint": str(s.get("message", "")).left(50), "run": func() -> void: _keys(sid, ["Enter"])})
 		items.append({"label": "Reply to " + str(s["name"]), "hint": "without opening it", "run": func() -> void: _quick_reply(sid)})
+	items.append({"label": "History", "hint": "every session and conversation · Ctrl+Shift+H", "run": set_view.bind("history")})
 	items.append({"label": "New session", "hint": "Ctrl+Shift+N", "run": _open_new})
 	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", func(n: String) -> void:
 		await engine.call_api("POST", "/groups", {"name": n})
@@ -841,7 +1033,13 @@ func open_palette() -> void:
 	for t in AmTheme.THEMES:
 		items.append({"label": "Theme: " + AmTheme.LABELS[t], "hint": "", "run": set_theme_name.bind(t)})
 	if selected != "":
-		items.append({"label": "Restart " + str(_session(selected).get("name", "")), "hint": "", "run": _restart})
+		var sname := str(_session(selected).get("name", ""))
+		var sid2 := selected
+		if str(_session(selected).get("tool", "")) != "shell":
+			items.append({"label": "Resume " + sname, "hint": "its own conversation", "run": func() -> void: _resume(sid2, "")})
+			items.append({"label": "Fork " + sname, "hint": "a copy of the conversation", "run": func() -> void: _fork(sid2)})
+		items.append({"label": "Archive " + sname, "hint": "kept in History", "run": func() -> void: _archive(sid2)})
+		items.append({"label": "Restart " + sname + " fresh", "hint": "a new conversation", "run": _restart})
 		items.append({"label": "Rename " + str(_session(selected).get("name", "")), "hint": "", "run": func() -> void: _rename_session(selected)})
 	palette.open(items)
 
@@ -851,7 +1049,7 @@ func _create() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else ""})
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed})
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return
@@ -940,6 +1138,11 @@ func _build_menus() -> void:
 	row_menu.add_item("Quick reply…", 5)
 	row_menu.add_item("Show in grid", 6)
 	row_menu.add_item("Rename…", 0)
+	row_menu.add_separator()
+	row_menu.add_item("Resume its conversation", 7)
+	row_menu.add_item("Fork…", 8)
+	row_menu.add_item("Finish its git branch…", 9)
+	row_menu.add_item("Archive (kept in History)", 10)
 	move_menu = PopupMenu.new()
 	move_menu.about_to_popup.connect(func() -> void:
 		move_menu.clear()
@@ -952,9 +1155,15 @@ func _build_menus() -> void:
 	move_menu.index_pressed.connect(func(i: int) -> void: _move(menu_target, str(move_menu.get_item_metadata(i)), 1 << 20))
 	row_menu.add_submenu_node_item("Move to group", move_menu, 1)
 	row_menu.add_separator()
-	row_menu.add_item("Restart", 2)
+	row_menu.add_item("Restart fresh", 2)
 	row_menu.add_item("Stop", 3)
-	row_menu.add_item("Remove", 4)
+	row_menu.add_item("Remove and forget", 4)
+	row_menu.about_to_popup.connect(func() -> void:
+		var s := _session(menu_target)
+		var agent := str(s.get("tool", "")) != "shell"
+		row_menu.set_item_disabled(row_menu.get_item_index(7), not agent)
+		row_menu.set_item_disabled(row_menu.get_item_index(8), not agent)
+		row_menu.set_item_disabled(row_menu.get_item_index(9), str(s.get("worktree", "")) == ""))
 	row_menu.id_pressed.connect(_on_row_menu)
 	add_child(row_menu)
 	group_menu = PopupMenu.new()
@@ -978,6 +1187,40 @@ func _build_menus() -> void:
 		theme_menu.set_item_metadata(theme_menu.item_count - 1, t)
 	theme_menu.index_pressed.connect(func(i: int) -> void: set_theme_name(str(theme_menu.get_item_metadata(i))))
 	add_child(theme_menu)
+	finish_dialog = ConfirmationDialog.new()
+	finish_dialog.title = "Finish this git branch"
+	finish_dialog.ok_button_text = "Finish"
+	var fv := VBoxContainer.new()
+	fv.add_theme_constant_override("separation", 8)
+	finish_info = Label.new()
+	fv.add_child(finish_info)
+	finish_merge = CheckBox.new()
+	fv.add_child(finish_merge)
+	finish_delete = CheckBox.new()
+	finish_delete.text = "Delete the branch afterwards (only if merged)"
+	finish_delete.button_pressed = true
+	fv.add_child(finish_delete)
+	var warn := Label.new()
+	warn.text = "The worktree folder is removed; the session goes to History. Uncommitted changes block this."
+	warn.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	warn.add_theme_font_size_override("font_size", 12)
+	fv.add_child(warn)
+	finish_dialog.add_child(fv)
+	finish_dialog.confirmed.connect(func() -> void:
+		var id := menu_target
+		var r := await engine.call_api("POST", "/sessions/%s/finish" % id, {"merge": finish_merge.button_pressed, "delete_branch": finish_delete.button_pressed})
+		if r.has("error"):
+			status_label.text = str(r["error"])
+			return
+		_toast("Finished %s%s" % [r["branch"], (" · merged into " + str(r["target"])) if r["merged"] else ""])
+		if terms.has(id):
+			terms[id].queue_free()
+			terms.erase(id)
+		if selected == id:
+			selected = ""
+		await refresh()
+		_layout_view())
+	add_child(finish_dialog)
 	ask_dialog = ConfirmationDialog.new()
 	ask_edit = LineEdit.new()
 	ask_edit.custom_minimum_size = Vector2(340, 0)
@@ -1005,6 +1248,18 @@ func _on_row_menu(mid: int) -> void:
 		return
 	if mid == 0:
 		_rename_session(menu_target)
+		return
+	if mid == 7:
+		_resume(menu_target, "")
+		return
+	if mid == 8:
+		_fork(menu_target)
+		return
+	if mid == 9:
+		_open_finish(menu_target)
+		return
+	if mid == 10:
+		_archive(menu_target)
 		return
 	selected = menu_target
 	if mid == 2:
