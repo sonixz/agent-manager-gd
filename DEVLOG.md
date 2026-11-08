@@ -64,3 +64,11 @@ cards. Quick reply also from the right-click menu. When a session starts waiting
 is not focused, its taskbar button flashes. The engine accepts named keys only (`POST /sessions/<id>/keys`), never
 raw tmux key strings. Checked: the toast on a new approval, the queue, a quick reply reaching a shell. 16 engine tests.
 Loop 4 is complete: next is the owner's first real test on Windows (★).
+
+## Owner's first real test on Windows (2026-11-08)
+
+The owner ran the app on Windows (RTX 3060): it worked (a Claude Code session made from the app). The Windows log
+showed `Cannot find instance binding callbacks` for input events: clang (zig) drops godot-cpp's engine class
+registrations, so keys and mouse events reaching the extension had no binding. The Windows build now generates and
+calls a registration for every engine class (SConstruct). Checked headless on Windows: é, Shift+Tab, AltGr+E, Ctrl+C
+and mouse motion reach VtTerminal with no error.

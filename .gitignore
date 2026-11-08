@@ -39,3 +39,4 @@ Thumbs.db
 
 # App binaries, built by tools/build_native.sh
 /app/addons/vtterm/bin/
+/native/vtterm/gen/

@@ -9,6 +9,12 @@
 
 using namespace godot;
 
+#ifdef VTTERM_REGISTER_ALL
+namespace godot {
+void vtterm_register_engine_classes();
+}
+#endif
+
 static void initialize(ModuleInitializationLevel level) {
 	if (level != MODULE_INITIALIZATION_LEVEL_SCENE) return;
 	// clang (the Windows build uses zig) only emits an engine class's binding registration where the class is used in
@@ -16,6 +22,9 @@ static void initialize(ModuleInitializationLevel level) {
 	internal::EngineClassRegistration<FontFile>::callback();
 	internal::EngineClassRegistration<SystemFont>::callback();
 	internal::EngineClassRegistration<FontVariation>::callback();
+#ifdef VTTERM_REGISTER_ALL
+	vtterm_register_engine_classes();  // every engine class (Windows build)
+#endif
 	GDREGISTER_CLASS(VtTerminal);
 }
 
