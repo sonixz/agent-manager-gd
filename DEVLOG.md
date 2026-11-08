@@ -302,3 +302,9 @@ uses OSC 52, which neither tmux layer passed on and our terminal did not handle.
 - A copy rejoins rows that reach the right edge (VtTerminal.unwrap_full_rows): a long URL comes out whole.
 Checked on Linux in the real app: a shell inside tmux sends an OSC 52 copy, the text (accents included) lands in the
 clipboard. To unblock the owner meanwhile, the joined link was put on his Windows clipboard. Tests: 58.
+
+Owner test, voice (2026-11-08): « transcription failed: HTTP 403 ». OpenAI's answer, read with the owner's key on one
+second of silence: the key's project does not allow gpt-4o-mini-transcribe nor whisper-1 (model_not_found). The
+engine now tries the next model on that 403 too, and says what to do (allow one of them in the project's Limits on
+platform.openai.com) instead of a bare « HTTP 403 »; OpenAI's message is read without anything that looks like a key.
+Test added. Tests: 59.

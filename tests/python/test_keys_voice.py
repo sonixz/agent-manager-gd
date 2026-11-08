@@ -89,3 +89,21 @@ class VoiceApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VoiceErrorsTest(unittest.TestCase):
+    def test_a_model_not_allowed_in_the_project_is_explained(self):
+        import io
+        import urllib.error
+        from unittest import mock
+        from engine import voice
+
+        def refuse(req, timeout=0):
+            body = io.BytesIO(b'{"error": {"message": "Project `proj_x` does not have access to model `m` (sk-proj-abc123)", "code": "model_not_found"}}')
+            raise urllib.error.HTTPError(voice.URL, 403, "Forbidden", {}, body)
+        with mock.patch("urllib.request.urlopen", refuse):
+            with self.assertRaises(ValueError) as e:
+                voice.transcribe(b"\0" * 4000, "sk-test-not-real", 1.0)
+        self.assertIn("does not allow gpt-4o-mini-transcribe or whisper-1", str(e.exception))
+        self.assertIn("Limits", str(e.exception))
+
