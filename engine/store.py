@@ -34,6 +34,17 @@ CREATE TABLE IF NOT EXISTS summaries (
     path TEXT NOT NULL,
     text TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS review_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    line INTEGER NOT NULL DEFAULT 0,
+    code TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created REAL NOT NULL,
+    sent_at REAL NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS groups (
     name TEXT PRIMARY KEY,
     position INTEGER NOT NULL DEFAULT 0,
@@ -51,7 +62,7 @@ class Store:
             cols = {r[1] for r in db.execute("PRAGMA table_info(sessions)")}
             if "position" not in cols:  # Loop 4A: the order inside a group
                 db.execute("ALTER TABLE sessions ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
-            for col in ("parent", "worktree", "base_repo", "brain_client"):  # Loop 5 forks, worktrees; Loop 6 Brain
+            for col in ("parent", "worktree", "base_repo", "brain_client", "start_commit"):  # Loop 5 forks, worktrees; Loop 6 Brain
                 if col not in cols:
                     db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
             if "archived_at" not in cols:
@@ -64,17 +75,18 @@ class Store:
         return db
 
     def add(self, name: str, tool: str, cwd: str, grp: str = "", parent: str = "", worktree: str = "",
-            base_repo: str = "") -> dict:
+            base_repo: str = "", start_commit: str = "") -> dict:
         sid = secrets.token_hex(4)
         if grp:
             self.add_group(grp)
         with closing(self._db()) as db, db:
             pos = db.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM sessions WHERE grp = ?", (grp,)).fetchone()[0]
             row = {"id": sid, "name": name, "tool": tool, "cwd": cwd, "grp": grp, "created": time.time(), "archived": 0,
-                   "position": pos, "parent": parent, "worktree": worktree, "base_repo": base_repo, "archived_at": 0}
+                   "position": pos, "parent": parent, "worktree": worktree, "base_repo": base_repo, "archived_at": 0,
+                   "start_commit": start_commit}
             db.execute("INSERT INTO sessions (id, name, tool, cwd, grp, created, archived, position, parent, worktree, "
-                       "base_repo, archived_at) VALUES (:id, :name, :tool, :cwd, :grp, :created, :archived, :position, "
-                       ":parent, :worktree, :base_repo, :archived_at)", row)
+                       "base_repo, archived_at, start_commit) VALUES (:id, :name, :tool, :cwd, :grp, :created, :archived, "
+                       ":position, :parent, :worktree, :base_repo, :archived_at, :start_commit)", row)
         return row
 
     def all(self, archived: bool = False) -> list[dict]:
@@ -150,6 +162,29 @@ class Store:
             q, args = q + " WHERE cwd = ?", [cwd]
         with closing(self._db()) as db:
             return [dict(r) for r in db.execute(q + " ORDER BY created DESC", args)]
+
+    # ---------------------------------------------------------------- review comments (Loop 8)
+    def add_comment(self, sid: str, path: str, line: int, code: str, text: str) -> int:
+        with closing(self._db()) as db, db:
+            cur = db.execute("INSERT INTO review_comments (session_id, path, line, code, text, created) VALUES (?, ?, ?, ?, ?, ?)",
+                             (sid, path, line, code, text, time.time()))
+            return int(cur.lastrowid)
+
+    def comments(self, sid: str) -> list[dict]:
+        with closing(self._db()) as db:
+            return [dict(r) for r in db.execute("SELECT * FROM review_comments WHERE session_id = ? ORDER BY path, line, id", (sid,))]
+
+    def set_comment(self, cid: int, status: str = "", text: str = "") -> None:
+        with closing(self._db()) as db, db:
+            if status:
+                db.execute("UPDATE review_comments SET status = ?, sent_at = CASE WHEN ? = 'sent' THEN ? ELSE sent_at END WHERE id = ?",
+                           (status, status, time.time(), cid))
+            if text:
+                db.execute("UPDATE review_comments SET text = ? WHERE id = ?", (text, cid))
+
+    def delete_comment(self, cid: int) -> None:
+        with closing(self._db()) as db, db:
+            db.execute("DELETE FROM review_comments WHERE id = ? AND status = 'open'", (cid,))
 
     # ---------------------------------------------------------------- groups (the project tree)
     def groups(self) -> list[dict]:

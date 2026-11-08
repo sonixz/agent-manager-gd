@@ -131,6 +131,33 @@ def make_handler(sessions: Sessions, token: str):
                     if method == "POST" and action == "fork":
                         b = self._body()
                         return self._reply(201, sessions.fork(sid, str(b.get("name", "")), str(b.get("conversation", ""))))
+                    if method == "GET" and action == "diff":
+                        q = parse_qs(url.query)
+                        return self._reply(200, sessions.diff(sid, q.get("mode", ["uncommitted"])[0]))
+                    if method == "GET" and action == "comments":
+                        return self._reply(200, {"comments": sessions.store.comments(sid)})
+                    if method == "POST" and action == "comments":
+                        b = self._body()
+                        sessions.get(sid)
+                        text = str(b.get("text", "")).strip()
+                        if not text or len(text) > 4000:
+                            raise ValueError("a comment of 1 to 4000 characters")
+                        cid = sessions.store.add_comment(sid, str(b.get("path", ""))[:500], int(b.get("line", 0)),
+                                                         str(b.get("code", ""))[:500], text)
+                        return self._reply(201, {"id": cid, "comments": sessions.store.comments(sid)})
+                    if method == "POST" and action == "comment":
+                        b = self._body()
+                        cid = int(b.get("id", 0))
+                        if b.get("delete"):
+                            sessions.store.delete_comment(cid)
+                        else:
+                            st = str(b.get("status", ""))
+                            if st and st not in ("open", "sent", "handled"):
+                                raise ValueError("status: open, sent or handled")
+                            sessions.store.set_comment(cid, status=st, text=str(b.get("text", "")))
+                        return self._reply(200, {"comments": sessions.store.comments(sid)})
+                    if method == "POST" and action == "review":
+                        return self._reply(200, sessions.send_review(sid))
                     if method == "POST" and action == "wrapup":
                         return self._reply(200, sessions.wrap_up(sid, bool(self._body().get("archive", True))))
                     if method == "GET" and action == "summaries":

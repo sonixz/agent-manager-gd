@@ -50,6 +50,13 @@ var board_previews := {}      # id -> Label (Board view)
 var f_worktree: CheckBox
 var f_brain: CheckBox
 var f_brief: CheckBox
+var review_data := {}
+var review_mode := "uncommitted"
+var review_file := 0
+var review_files: ItemList
+var review_lines: VBoxContainer
+var review_send: Button
+var review_info: Label
 var read_dialog: AcceptDialog
 var read_text: RichTextLabel
 var brain_ok := false
@@ -126,6 +133,7 @@ func _input(e: InputEvent) -> void:
 			KEY_G: set_view("grid")
 			KEY_B: set_view("board")
 			KEY_H: set_view("history")
+			KEY_R: set_view("review")
 			KEY_DOWN: _step(1)
 			KEY_UP: _step(-1)
 			KEY_A: _approve_first()
@@ -239,7 +247,7 @@ func _build() -> void:
 	var seg := HBoxContainer.new()
 	seg.add_theme_constant_override("separation", 0)
 	hb.add_child(seg)
-	for v in [["focus", "Focus", "Ctrl+Shift+F"], ["grid", "Grid", "Ctrl+Shift+G"], ["board", "Board", "Ctrl+Shift+B"], ["history", "History", "Ctrl+Shift+H"]]:
+	for v in [["focus", "Focus", "Ctrl+Shift+F"], ["grid", "Grid", "Ctrl+Shift+G"], ["board", "Board", "Ctrl+Shift+B"], ["history", "History", "Ctrl+Shift+H"], ["review", "Review", "Ctrl+Shift+R"]]:
 		var b := Button.new()
 		b.text = v[1]
 		b.tooltip_text = v[2]
@@ -668,7 +676,9 @@ func select(id: String) -> void:
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
 	if view in ["board", "history"]:
-		view = "focus"  # picking a session opens it
+		view = "focus"  # picking a session opens it (Review follows the selected session)
+	if view == "review":
+		review_file = 0
 	await _ensure_terminal(id)
 	_layout_view()
 	if terms.has(id):
@@ -758,6 +768,9 @@ func _layout_view() -> void:
 		"history":
 			content.add_child(_history_view())
 			_load_history()
+		"review":
+			content.add_child(_review_view())
+			_load_review()
 		"board":
 			var scroll := ScrollContainer.new()
 			scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1101,6 +1114,208 @@ func _open_finish(id: String) -> void:
 	finish_dialog.popup_centered()
 
 
+# ------------------------------------------------------------------ review (Loop 8)
+func _review_view() -> Control:
+	var root := HBoxContainer.new()
+	root.add_theme_constant_override("separation", 10)
+	var left := VBoxContainer.new()
+	left.custom_minimum_size = Vector2(270, 0)
+	root.add_child(left)
+	var mode := OptionButton.new()
+	for m in [["uncommitted", "Uncommitted changes"], ["session", "Since the session started"], ["branch", "Its branch vs the target"]]:
+		mode.add_item(m[1])
+		mode.set_item_metadata(mode.item_count - 1, m[0])
+		if m[0] == review_mode:
+			mode.select(mode.item_count - 1)
+	mode.item_selected.connect(func(i: int) -> void:
+		review_mode = str(mode.get_item_metadata(i))
+		review_file = 0
+		_load_review())
+	left.add_child(mode)
+	review_info = Label.new()
+	review_info.add_theme_font_size_override("font_size", 12)
+	review_info.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	review_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	left.add_child(review_info)
+	review_files = ItemList.new()
+	review_files.size_flags_vertical = SIZE_EXPAND_FILL
+	review_files.add_theme_font_override("font", font)
+	review_files.add_theme_font_size_override("font_size", 12)
+	review_files.item_selected.connect(func(i: int) -> void:
+		review_file = i
+		_render_review_file())
+	left.add_child(review_files)
+	var row := HBoxContainer.new()
+	left.add_child(row)
+	row.add_child(_small("Refresh", _load_review))
+	row.add_child(_small("Comment the file…", func() -> void: _comment_on(_review_path(), 0, "")))
+	review_send = Button.new()
+	review_send.text = "Send review"
+	review_send.tooltip_text = "The open comments, as one numbered request to the agent"
+	review_send.pressed.connect(_send_review)
+	left.add_child(review_send)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = SIZE_EXPAND_FILL
+	root.add_child(scroll)
+	review_lines = VBoxContainer.new()
+	review_lines.size_flags_horizontal = SIZE_EXPAND_FILL
+	review_lines.add_theme_constant_override("separation", 0)
+	scroll.add_child(review_lines)
+	return root
+
+
+func _review_path() -> String:
+	var files: Array = review_data.get("files", [])
+	return str(files[review_file]["path"]) if review_file < files.size() else ""
+
+
+func _load_review() -> void:
+	if selected == "" or review_files == null or not is_instance_valid(review_files):
+		return
+	var r := await engine.call_api("GET", "/sessions/%s/diff?mode=%s" % [selected, review_mode])
+	if not is_instance_valid(review_files):
+		return
+	if r.has("error"):
+		review_data = {}
+		review_info.text = str(r["error"])
+		review_files.clear()
+		for c in review_lines.get_children():
+			c.queue_free()
+		return
+	review_data = r
+	review_files.clear()
+	var comments: Array = r.get("comments", [])
+	for f in r["files"]:
+		var n := comments.filter(func(c): return str(c["path"]) == str(f["path"]) and str(c["status"]) != "handled").size()
+		var mark: String = {"added": "A", "deleted": "D", "renamed": "R"}.get(str(f["status"]), "M")
+		review_files.add_item("%s %s  +%d −%d%s" % [mark, f["path"], int(f["additions"]), int(f["deletions"]), ("  ✎%d" % n) if n else ""])
+	var open_n := comments.filter(func(c): return str(c["status"]) == "open").size()
+	review_info.text = "%s · %d file(s) · +%d −%d%s" % [_session(selected).get("name", ""), (r["files"] as Array).size(), int(r.get("additions", 0)), int(r.get("deletions", 0)), ("\n" + str(r["note"])) if r.has("note") else ""]
+	review_send.text = "Send review (%d)" % open_n
+	review_send.disabled = open_n == 0
+	if review_files.item_count > 0:
+		review_file = mini(review_file, review_files.item_count - 1)
+		review_files.select(review_file)
+	_render_review_file()
+
+
+func _render_review_file() -> void:
+	for c in review_lines.get_children():
+		c.queue_free()
+	var files: Array = review_data.get("files", [])
+	if review_file >= files.size():
+		var none := Label.new()
+		none.text = "No change to review." if review_data.has("files") else ""
+		none.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+		review_lines.add_child(none)
+		return
+	var f: Dictionary = files[review_file]
+	var comments: Array = (review_data.get("comments", []) as Array).filter(func(c): return str(c["path"]) == str(f["path"]))
+	var title := Label.new()
+	title.text = "%s%s" % [f["path"], ("   (renamed from %s)" % f["old_path"]) if str(f["status"]) == "renamed" else ""]
+	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	review_lines.add_child(title)
+	for c in comments.filter(func(x): return int(x["line"]) == 0):
+		review_lines.add_child(_comment_card(c))
+	if f.get("binary", false):
+		review_lines.add_child(_muted("Binary file: not shown."))
+	var plus := Color("3fb950", 0.16) if not AmTheme.is_light() else Color("2e7d32", 0.14)
+	var minus := Color("f85149", 0.16) if not AmTheme.is_light() else Color("c62828", 0.12)
+	for h in f["hunks"]:
+		var hd := Label.new()
+		hd.text = str(h["header"])
+		hd.add_theme_font_override("font", font)
+		hd.add_theme_font_size_override("font_size", 12)
+		hd.add_theme_color_override("font_color", AmTheme.col("INFO"))
+		review_lines.add_child(hd)
+		for l in h["lines"]:
+			var t := str(l["t"])
+			var rowp := PanelContainer.new()
+			rowp.add_theme_stylebox_override("panel", AmTheme.box(plus if t == "+" else (minus if t == "-" else Color(0, 0, 0, 0)), 0, Color(0, 0, 0, 0), 0, 1))
+			rowp.mouse_filter = MOUSE_FILTER_STOP
+			rowp.mouse_default_cursor_shape = CURSOR_POINTING_HAND
+			rowp.tooltip_text = "Click to comment this line"
+			var hb := HBoxContainer.new()
+			hb.mouse_filter = MOUSE_FILTER_IGNORE
+			rowp.add_child(hb)
+			for n in [l["old"], l["new"]]:
+				var nl := Label.new()
+				nl.text = str(int(n)) if int(n) > 0 else ""
+				nl.custom_minimum_size = Vector2(44, 0)
+				nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				nl.add_theme_font_override("font", font)
+				nl.add_theme_font_size_override("font_size", 12)
+				nl.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+				nl.mouse_filter = MOUSE_FILTER_IGNORE
+				hb.add_child(nl)
+			var code := Label.new()
+			code.text = " %s %s" % [t if t != " " else " ", str(l["text"]).replace("\t", "    ")]
+			code.add_theme_font_override("font", font)
+			code.add_theme_font_size_override("font_size", 13)
+			code.add_theme_color_override("font_color", AmTheme.col("TEXT"))
+			code.mouse_filter = MOUSE_FILTER_IGNORE
+			hb.add_child(code)
+			var line_no := int(l["new"]) if int(l["new"]) > 0 else int(l["old"])
+			var path := str(f["path"])
+			var text := str(l["text"])
+			rowp.gui_input.connect(func(e: InputEvent) -> void:
+				if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+					_comment_on(path, line_no, text))
+			review_lines.add_child(rowp)
+			if t != "-":
+				for c in comments.filter(func(x): return int(x["line"]) == int(l["new"]) and int(l["new"]) > 0):
+					review_lines.add_child(_comment_card(c))
+	if f.get("truncated", false):
+		review_lines.add_child(_muted("… the rest of this file is not shown (too long)."))
+
+
+func _comment_card(c: Dictionary) -> Control:
+	var st := str(c["status"])
+	var col: Color = {"open": AmTheme.col("WARN"), "sent": AmTheme.col("INFO"), "handled": AmTheme.col("FAINT")}.get(st, AmTheme.col("MUTED"))
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", AmTheme.box(Color(col, 0.10), 8, Color(col, 0.6), 1, 8))
+	var h := HBoxContainer.new()
+	card.add_child(h)
+	var l := Label.new()
+	l.text = "✎ %s   · %s" % [c["text"], {"open": "to send", "sent": "sent to the agent", "handled": "handled"}.get(st, st)]
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.size_flags_horizontal = SIZE_EXPAND_FILL
+	l.add_theme_font_size_override("font_size", 13)
+	h.add_child(l)
+	var cid := int(c["id"])
+	if st == "open":
+		h.add_child(_small("Delete", func() -> void: _set_comment({"id": cid, "delete": true})))
+	elif st == "sent":
+		h.add_child(_small("Handled", func() -> void: _set_comment({"id": cid, "status": "handled"})))
+	return card
+
+
+func _comment_on(path: String, line: int, code: String) -> void:
+	if path == "":
+		return
+	_ask("Comment on %s%s" % [path, (":%d" % line) if line else ""], "", func(t: String) -> void:
+		var r := await engine.call_api("POST", "/sessions/%s/comments" % selected, {"path": path, "line": line, "code": code, "text": t})
+		if r.has("error"):
+			status_label.text = str(r["error"])
+		await _load_review())
+
+
+func _set_comment(body: Dictionary) -> void:
+	await engine.call_api("POST", "/sessions/%s/comment" % selected, body)
+	await _load_review()
+
+
+func _send_review() -> void:
+	var r := await engine.call_api("POST", "/sessions/%s/review" % selected, {})
+	if r.has("error"):
+		status_label.text = str(r["error"])
+		_toast(str(r["error"]))
+		return
+	_toast("Review sent to %s: %d point(s)" % [_session(selected).get("name", ""), int(r["sent"])])
+	await _load_review()
+
+
 # ------------------------------------------------------------------ palette
 func open_palette() -> void:
 	var items: Array = []
@@ -1111,6 +1326,7 @@ func open_palette() -> void:
 			items.append({"label": "Approve " + str(s["name"]), "hint": str(s.get("message", "")).left(50), "run": func() -> void: _keys(sid, ["Enter"])})
 		items.append({"label": "Reply to " + str(s["name"]), "hint": "without opening it", "run": func() -> void: _quick_reply(sid)})
 	items.append({"label": "History", "hint": "every session and conversation · Ctrl+Shift+H", "run": set_view.bind("history")})
+	items.append({"label": "Review the changes", "hint": "diff and line comments · Ctrl+Shift+R", "run": set_view.bind("review")})
 	items.append({"label": "New session", "hint": "Ctrl+Shift+N", "run": _open_new})
 	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", func(n: String) -> void:
 		await engine.call_api("POST", "/groups", {"name": n})

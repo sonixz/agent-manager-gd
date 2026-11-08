@@ -133,3 +133,14 @@ session in the same folder can be briefed: its first message points to the lates
 shared). Real check with Claude Code (one small prompt, owner-approved, Brain proposal off for the test): it wrote
 its summary unasked for permission, the engine kept it and archived the session; the new-session dialog then offered
 the brief. Tests: 31 (3 new with a fake agent). Captures in docs/screens/loop7.
+
+## Loop 8: diff review with line comments (2026-11-08)
+
+engine/review.py: a session's diff in three modes (uncommitted changes with new files included; since the commit the
+session started from, now recorded at creation; its worktree branch against the repository's target), parsed from
+`git diff` into files, hunks and numbered lines (renames, deletions, binary files, long files truncated). Line
+comments are stored (`review_comments`: open, sent, handled); « Send review » types them into the agent's session as
+one numbered request (file:line, the comment, the line's code). The Review view: file list with +/− and comment
+counts, the coloured diff, click a line to comment, comment cards under their lines (Delete while open, Handled once
+sent). Bug found by the tests: a binary file had no name (no ---/+++ lines): the path now also comes from the
+`diff --git` header. Tests: 35. Captures in docs/screens/loop8.

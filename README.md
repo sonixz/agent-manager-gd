@@ -45,6 +45,10 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   propose it there with its own key (you approve it in the Brain). When the agent is done, the summary is kept with
   the session (History, searchable, « Read ») and the session is archived. A new session in the same folder can start
   from it: « Brief it with the latest summary of this folder » sends a short first message pointing to that summary.
+- **Review** (Ctrl+Shift+R): the selected session's changes, file by file (arrow keys), coloured, with line numbers:
+  uncommitted changes, everything since the session started, or its branch against the target. Click a line to
+  comment it (or comment the whole file); **Send review** sends the open comments to the agent as one numbered request
+  (file:line, the comment, the line's code); sent comments stay visible until marked handled.
 - **Git branch per session**: tick « In its own git branch » when creating a session: it works in
   `<repository>-worktrees/<name>` on branch `am/<name>`. **Finish its git branch…** shows what is ahead and
   uncommitted, can merge it into the repository's current branch (a conflicting merge is undone) and removes the

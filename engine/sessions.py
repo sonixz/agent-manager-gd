@@ -172,7 +172,8 @@ class Sessions:
             cwd = wt
         if parent and not self.store.get(parent):
             raise ValueError("unknown parent session")
-        rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent)
+        from .review import head
+        rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent, start_commit=head(cwd))
         if brain:
             self._connect_brain(rec)
         cmd = self.command_for(rec)
@@ -447,6 +448,32 @@ class Sessions:
                                      timeout=30).returncode == 0  # -d: never deletes unmerged work
         self.store.update(sid, archived=1, archived_at=time.time(), cwd=st["base_repo"], worktree="")
         return {"merged": merged, "branch_deleted": deleted, "branch": st["branch"], "target": st["target"]}
+
+    # ---------------------------------------------------------------- diff review (Loop 8)
+    def diff(self, sid: str, mode: str = "uncommitted") -> dict:
+        from . import review
+        d = self.get(sid)
+        if mode not in ("uncommitted", "session", "branch"):
+            raise ValueError("mode: uncommitted, session or branch")
+        target = ""
+        if mode == "branch":
+            if not d.get("worktree"):
+                raise ValueError("this session has no git branch of its own: use « uncommitted » or « since start »")
+            target = self._git(d["base_repo"], "rev-parse", "--abbrev-ref", "HEAD")
+        return {**review.diff(d["cwd"], mode, d.get("start_commit", ""), target), "comments": self.store.comments(sid)}
+
+    def send_review(self, sid: str) -> dict:
+        from . import review
+        d = self.get(sid)
+        if d["state"] != "running":
+            raise ValueError("the session is not running: Resume it first")
+        open_ = [c for c in self.store.comments(sid) if c["status"] == "open"]
+        if not open_:
+            raise ValueError("no open comment to send")
+        self.tmux.send_text(self.tmux_name(sid), review.compose(open_))
+        for c in open_:
+            self.store.set_comment(c["id"], status="sent")
+        return {"sent": len(open_)}
 
     def tree(self) -> dict:
         """Groups in order, each with its sessions in order; sessions without a group first."""
