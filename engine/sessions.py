@@ -56,6 +56,8 @@ class Sessions:
         self.tmux = tmux
         self.brain = brain  # engine.brain.Brain or None (tests, or the Brain switched off)
         self.home = home or os.path.dirname(os.path.dirname(store.path))
+        from .repos import Repos
+        self.repos = Repos(store.path, self.home)
 
     # ---------------------------------------------------------------- launching
     def command_for(self, rec: dict, mode: str = "new", conversation: str = "") -> list[str]:
@@ -126,7 +128,14 @@ class Sessions:
     port = 8790  # the engine's API port, for the agents' MCP server (set by __main__)
 
     def session_env(self, sid: str) -> dict:
-        return {"AGMGD_SESSION": sid, "AGMGD_HOME": self.home, "AGMGD_PORT": str(self.port)}
+        env = {"AGMGD_SESSION": sid, "AGMGD_HOME": self.home, "AGMGD_PORT": str(self.port)}
+        rec = self.store.get(sid) or {}
+        if rec.get("repo_id"):  # git in this session uses the repository's deploy key only
+            try:
+                env.update(self.repos.env(rec["repo_id"]))
+            except KeyError:
+                pass
+        return env
 
     _branches: dict = {}
 
@@ -158,11 +167,14 @@ class Sessions:
         return PREFIX + sid
 
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
-               worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False) -> dict:
+               worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
+               repo: str = "") -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
             raise ValueError("a name of 1 to 60 characters")
+        if repo:  # a connected repository: its local folder (cloned with its key when needed)
+            cwd = self.repos.ensure_clone(repo)
         cwd = os.path.expanduser(host_path((cwd or "~").strip()))
         if not os.path.isdir(cwd):
             raise ValueError(f"no such folder: {cwd}")
@@ -173,7 +185,8 @@ class Sessions:
         if parent and not self.store.get(parent):
             raise ValueError("unknown parent session")
         from .review import head
-        rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent, start_commit=head(cwd))
+        rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent, start_commit=head(cwd),
+                             repo_id=repo)
         if brain:
             self._connect_brain(rec)
         cmd = self.command_for(rec)
@@ -207,6 +220,7 @@ class Sessions:
                 "since": float(hs.get("time", 0) or (t.activity if t else 0) or rec["created"]),
                 "last_conversation": self.last_conversation(rec["id"]),
                 "brain": bool(rec.get("brain_client")),
+                "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "branch": self.branch(rec["cwd"]),
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
@@ -299,6 +313,18 @@ class Sessions:
             pass
 
     # ---------------------------------------------------------------- history, resume, fork (Loop 5)
+    def _repo_name(self, rid: str) -> str:
+        if not rid:
+            return ""
+        try:
+            return self.repos.get(rid)["name"]
+        except KeyError:
+            return ""
+
+    def repo_sessions(self, rid: str) -> list[dict]:
+        return [{"id": r["id"], "name": r["name"], "archived": r["archived"], "created": r["created"]}
+                for r in self.store.history() if r.get("repo_id") == rid]
+
     def last_conversation(self, sid: str) -> str:
         convs = self.store.conversations(sid)
         return convs[0]["conversation"] if convs else ""

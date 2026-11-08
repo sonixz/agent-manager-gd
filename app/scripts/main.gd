@@ -50,6 +50,11 @@ var board_previews := {}      # id -> Label (Board view)
 var f_worktree: CheckBox
 var f_brain: CheckBox
 var f_brief: CheckBox
+var repos_list: VBoxContainer
+var repos_cache: Array = []
+var f_repo: OptionButton
+var confirm_dialog: ConfirmationDialog
+var confirm_done: Callable
 var review_data := {}
 var review_mode := "uncommitted"
 var review_file := 0
@@ -262,6 +267,13 @@ func _build() -> void:
 	resume_btn.visible = false
 	resume_btn.pressed.connect(func() -> void: _resume(selected, ""))
 	hb.add_child(resume_btn)
+	var repos_btn := Button.new()
+	repos_btn.text = "⎇ Repos"
+	repos_btn.tooltip_text = "Connected repositories and their deploy keys"
+	repos_btn.toggle_mode = true
+	repos_btn.pressed.connect(set_view.bind("repos"))
+	hb.add_child(repos_btn)
+	view_buttons["repos"] = repos_btn
 	var theme_btn := Button.new()
 	theme_btn.text = "◐"
 	theme_btn.tooltip_text = "Theme"
@@ -375,6 +387,18 @@ func _build_new_dialog() -> void:
 	g.add_child(_muted("Group"))
 	f_group = OptionButton.new()
 	g.add_child(f_group)
+	g.add_child(_muted("Repository"))
+	f_repo = OptionButton.new()
+	f_repo.tooltip_text = "A connected repository: the session works in its folder and git uses its deploy key"
+	f_repo.item_selected.connect(func(_i: int) -> void:
+		var on := str(f_repo.get_selected_metadata()) != ""
+		f_cwd.editable = not on
+		if on:
+			for r in repos_cache:
+				if str(r["id"]) == str(f_repo.get_selected_metadata()):
+					f_cwd.text = str(r["local_path"]) if str(r["local_path"]) != "" else "(cloned on first use)"
+		_check_brief())
+	g.add_child(f_repo)
 	g.add_child(_muted("Folder"))
 	f_cwd = LineEdit.new()
 	f_cwd.text = "~"
@@ -425,6 +449,16 @@ func _check_brief() -> void:
 
 func _open_new() -> void:
 	f_name.text = ""
+	f_cwd.editable = true
+	f_repo.clear()
+	f_repo.add_item("(none: a folder)")
+	f_repo.set_item_metadata(0, "")
+	var rr := await engine.call_api("GET", "/repos")
+	repos_cache = rr.get("repos", [])
+	for r in repos_cache:
+		if str(r["status"]) == "connected":
+			f_repo.add_item("⎇ " + str(r["name"]))
+			f_repo.set_item_metadata(f_repo.item_count - 1, str(r["id"]))
 	f_worktree.button_pressed = false
 	f_brain.disabled = not brain_ok
 	f_brain.button_pressed = brain_ok
@@ -533,7 +567,7 @@ func _render_list() -> void:
 			hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 			hint.add_theme_font_size_override("font_size", 12)
 			list_box.add_child(hint)
-	empty_label.visible = sessions.is_empty() and view != "history"
+	empty_label.visible = sessions.is_empty() and view not in ["history", "repos"]
 
 
 func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
@@ -675,7 +709,7 @@ func select(id: String) -> void:
 	if not grid_ids.has(id):
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
-	if view in ["board", "history"]:
+	if view in ["board", "history", "repos"]:
 		view = "focus"  # picking a session opens it (Review follows the selected session)
 	if view == "review":
 		review_file = 0
@@ -701,7 +735,7 @@ func set_view(v: String) -> void:
 		for id in grid_ids:
 			await _ensure_terminal(id)
 	content.modulate.a = 0.0
-	empty_label.visible = sessions.is_empty() and v != "history"
+	empty_label.visible = sessions.is_empty() and v not in ["history", "repos"]
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.18)
 	_render_header()
@@ -746,7 +780,7 @@ func _park_all() -> void:
 
 func _layout_view() -> void:
 	_park_all()
-	if sessions.is_empty() and view != "history":
+	if sessions.is_empty() and view not in ["history", "repos"]:
 		return
 	match view:
 		"focus":
@@ -771,6 +805,9 @@ func _layout_view() -> void:
 		"review":
 			content.add_child(_review_view())
 			_load_review()
+		"repos":
+			content.add_child(_repos_view())
+			_load_repos()
 		"board":
 			var scroll := ScrollContainer.new()
 			scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1114,6 +1151,150 @@ func _open_finish(id: String) -> void:
 	finish_dialog.popup_centered()
 
 
+# ------------------------------------------------------------------ repositories (Loop 9)
+func _repos_view() -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	var title := Label.new()
+	title.text = "Connected repositories"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	v.add_child(title)
+	var intro := _muted("Create the repository yourself (GitHub or any SSH git host), add its SSH address here: Agent Manager makes a deploy key for it only. Add that key on the repository (tick « Allow write access » so agents can push their branch), then Check.")
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(intro)
+	var form := HBoxContainer.new()
+	form.add_theme_constant_override("separation", 8)
+	v.add_child(form)
+	var url := LineEdit.new()
+	url.placeholder_text = "git@github.com:owner/repo.git"
+	url.size_flags_horizontal = SIZE_EXPAND_FILL
+	form.add_child(url)
+	var path := LineEdit.new()
+	path.placeholder_text = "local folder (optional: cloned on first use)"
+	path.custom_minimum_size = Vector2(340, 0)
+	form.add_child(path)
+	var add := Button.new()
+	add.text = "+ Add a repository"
+	add.pressed.connect(func() -> void:
+		var r := await engine.call_api("POST", "/repos", {"url": url.text.strip_edges(), "local_path": path.text.strip_edges()})
+		if r.has("error"):
+			_toast(str(r["error"]))
+			return
+		url.text = ""
+		path.text = ""
+		await _load_repos())
+	form.add_child(add)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(scroll)
+	repos_list = VBoxContainer.new()
+	repos_list.size_flags_horizontal = SIZE_EXPAND_FILL
+	repos_list.add_theme_constant_override("separation", 10)
+	scroll.add_child(repos_list)
+	return v
+
+
+func _load_repos() -> void:
+	var r := await engine.call_api("GET", "/repos")
+	if r.has("error") or repos_list == null or not is_instance_valid(repos_list):
+		return
+	repos_cache = r["repos"]
+	for c in repos_list.get_children():
+		c.queue_free()
+	for repo in repos_cache:
+		repos_list.add_child(_repo_card(repo))
+	if repos_cache.is_empty():
+		repos_list.add_child(_muted("No repository yet."))
+
+
+func _repo_card(r: Dictionary) -> Control:
+	var rid := str(r["id"])
+	var st := str(r["status"])
+	var col: Color = {"connected": AmTheme.col("MINT"), "failed": AmTheme.col("ERROR")}.get(st, AmTheme.col("WARN"))
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, Color(col, 0.55), 1, 14))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	card.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	v.add_child(top)
+	var n := Label.new()
+	n.text = "⎇ " + str(r["name"])
+	n.add_theme_font_size_override("font_size", 16)
+	n.add_theme_font_override("font", AmTheme.ui_font(650))
+	top.add_child(n)
+	var chip := Label.new()
+	chip.text = {"connected": "● connected", "failed": "● the key does not work", "waiting": "● waiting for the key on the repository"}.get(st, st)
+	chip.add_theme_color_override("font_color", col)
+	chip.add_theme_font_size_override("font_size", 12)
+	chip.size_flags_horizontal = SIZE_EXPAND_FILL
+	top.add_child(chip)
+	top.add_child(_small("New session on it", func() -> void:
+		await _open_new()
+		for i in f_repo.item_count:
+			if str(f_repo.get_item_metadata(i)) == rid:
+				f_repo.select(i)
+				f_repo.item_selected.emit(i)
+		f_name.text = str(r["name"])))
+	var meta := _muted("%s   ·   %s   ·   key %s   ·   added %s%s" % [r["url"], (str(r["local_path"]) + (" (cloned)" if r["cloned"] else " (not cloned yet)")) if str(r["local_path"]) != "" else "cloned on first use", r["fingerprint"], _date(float(r["created"])), ("   ·   last used " + _date(float(r["last_used"]))) if float(r["last_used"]) > 0 else ""])
+	meta.add_theme_font_size_override("font_size", 12)
+	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(meta)
+	if str(r["message"]) != "":
+		var m := Label.new()
+		m.text = str(r["message"])
+		m.add_theme_color_override("font_color", col)
+		m.add_theme_font_size_override("font_size", 12)
+		m.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(m)
+	var key := LineEdit.new()
+	key.text = str(r["public_key"])
+	key.editable = false
+	key.add_theme_font_override("font", font)
+	key.add_theme_font_size_override("font_size", 11)
+	key.tooltip_text = "The PUBLIC key: safe to copy. The private key never leaves Agent Manager's data folder."
+	v.add_child(key)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	v.add_child(row)
+	var pub := str(r["public_key"])
+	row.add_child(_small("Copy the public key", func() -> void:
+		DisplayServer.clipboard_set(pub)
+		_toast("Public key copied: add it as a deploy key on the repository")))
+	if str(r["deploy_keys_page"]) != "":
+		var page := str(r["deploy_keys_page"])
+		row.add_child(_small("Open GitHub's Deploy keys page", func() -> void: OS.shell_open(page)))
+	row.add_child(_small("Check", func() -> void:
+		var c := await engine.call_api("POST", "/repos/%s/check" % rid, {})
+		_toast("%s: %s" % [r["name"], c.get("status", c.get("error", ""))])
+		await _load_repos()))
+	row.add_child(_small("Rotate the key", func() -> void:
+		_confirm("Make a new key for %s? The old one stops being used here; delete it on the repository." % r["name"], func() -> void:
+			await engine.call_api("POST", "/repos/%s/rotate" % rid, {})
+			await _load_repos())))
+	row.add_child(_small("Disconnect", func() -> void:
+		_confirm("Disconnect %s? Its key is deleted here (delete it on the repository too). Its sessions stay in History." % r["name"], func() -> void:
+			var d := await engine.call_api("POST", "/repos/%s/disconnect" % rid, {})
+			_toast(str(d.get("reminder", d.get("error", ""))))
+			await _load_repos())))
+	var sess: Array = r.get("sessions", [])
+	if not sess.is_empty():
+		var l := _muted("Sessions on it: " + ", ".join(sess.map(func(x): return str(x["name"]) + (" (archived)" if int(x["archived"]) == 1 else ""))))
+		l.add_theme_font_size_override("font_size", 12)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(l)
+	return card
+
+
+func _confirm(text: String, done: Callable) -> void:
+	confirm_dialog.dialog_text = text
+	confirm_done = done
+	confirm_dialog.popup_centered()
+
+
 # ------------------------------------------------------------------ review (Loop 8)
 func _review_view() -> Control:
 	var root := HBoxContainer.new()
@@ -1327,6 +1508,7 @@ func open_palette() -> void:
 		items.append({"label": "Reply to " + str(s["name"]), "hint": "without opening it", "run": func() -> void: _quick_reply(sid)})
 	items.append({"label": "History", "hint": "every session and conversation · Ctrl+Shift+H", "run": set_view.bind("history")})
 	items.append({"label": "Review the changes", "hint": "diff and line comments · Ctrl+Shift+R", "run": set_view.bind("review")})
+	items.append({"label": "Repositories", "hint": "connected repositories and deploy keys", "run": set_view.bind("repos")})
 	items.append({"label": "New session", "hint": "Ctrl+Shift+N", "run": _open_new})
 	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", func(n: String) -> void:
 		await engine.call_api("POST", "/groups", {"name": n})
@@ -1354,7 +1536,7 @@ func _create() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled})
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else ""})
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return
@@ -1494,6 +1676,14 @@ func _build_menus() -> void:
 		theme_menu.set_item_metadata(theme_menu.item_count - 1, t)
 	theme_menu.index_pressed.connect(func(i: int) -> void: set_theme_name(str(theme_menu.get_item_metadata(i))))
 	add_child(theme_menu)
+	confirm_dialog = ConfirmationDialog.new()
+	confirm_dialog.title = "Please confirm"
+	confirm_dialog.dialog_autowrap = true
+	confirm_dialog.min_size = Vector2i(460, 0)
+	confirm_dialog.confirmed.connect(func() -> void:
+		if confirm_done.is_valid():
+			confirm_done.call())
+	add_child(confirm_dialog)
 	read_dialog = AcceptDialog.new()
 	read_text = RichTextLabel.new()
 	read_text.custom_minimum_size = Vector2(700, 460)

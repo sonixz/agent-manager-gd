@@ -12,7 +12,7 @@ Chaque loop se termine par une revue du propriétaire (captures, rapport en fran
 | 6 ✅ | Le Brain branché d'office | voir le détail plus bas |
 | 7 ✅ | Le contexte qui survit | voir le détail plus bas |
 | 8 ✅ | Revue de diff avec commentaires | voir « Loops 8 à 15 » plus bas |
-| 9 | Dépôts connectés et clés de déploiement | idem |
+| 9 ✅ | Dépôts connectés et clés de déploiement | idem |
 | 10 | La voix : dictée vers les terminaux | idem |
 | 11 | La voix : commandes et état parlé | idem |
 | 12 | Sandbox Fly.io, « oui ou non » | idem |

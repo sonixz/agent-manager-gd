@@ -66,6 +66,20 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, {k: v["label"] for k, v in TOOLS.items()})
                 if parts == ["sessions"] and method == "GET":
                     return self._reply(200, {"sessions": sessions.list()})
+                if parts == ["repos"] and method == "GET":
+                    return self._reply(200, {"repos": [{**r, "sessions": sessions.repo_sessions(r["id"])} for r in sessions.repos.all()]})
+                if parts == ["repos"] and method == "POST":
+                    b = self._body()
+                    return self._reply(201, sessions.repos.add(str(b.get("url", "")), str(b.get("local_path", "")), str(b.get("name", ""))))
+                if len(parts) == 3 and parts[0] == "repos" and method == "POST":
+                    rid, act = parts[1], parts[2]
+                    if act == "check":
+                        return self._reply(200, sessions.repos.check(rid))
+                    if act == "rotate":
+                        return self._reply(200, sessions.repos.rotate(rid))
+                    if act == "disconnect":
+                        return self._reply(200, sessions.repos.disconnect(rid))
+                    return self._reply(404, {"error": "not found"})
                 if parts == ["brain"] and method == "GET":
                     return self._reply(200, sessions.brain.status() if sessions.brain else {"connected": False, "reason": "off"})
                 if parts == ["summaries"] and method == "GET":
@@ -108,7 +122,8 @@ def make_handler(sessions: Sessions, token: str):
                                                             str(b.get("cwd", "~")), str(b.get("group", "")),
                                                             int(b.get("width", 160)), int(b.get("height", 48)),
                                                             bool(b.get("worktree", False)), bool(b.get("brain", True)),
-                                                            str(b.get("parent", "")), bool(b.get("brief", False))))
+                                                            str(b.get("parent", "")), bool(b.get("brief", False)),
+                                                            str(b.get("repo", ""))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""

@@ -144,3 +144,15 @@ one numbered request (file:line, the comment, the line's code). The Review view:
 counts, the coloured diff, click a line to comment, comment cards under their lines (Delete while open, Handled once
 sent). Bug found by the tests: a binary file had no name (no ---/+++ lines): the path now also comes from the
 `diff --git` header. Tests: 35. Captures in docs/screens/loop8.
+
+## Loop 9: connected repositories and deploy keys (2026-11-08)
+
+engine/repos.py: add a repository by its SSH address (https refused with the reason), an ed25519 deploy key per
+repository (private key 0600 in our data folder, never in the database or a log), the public key and the GitHub
+« Deploy keys » page link, Check (`git ls-remote` with that key only, a clear message when the key is not added yet),
+Rotate (reminds the old fingerprint to delete) and Disconnect. A session started on a repository works in its folder
+(cloned with the key on first use) and its tmux environment carries GIT_SSH_COMMAND with that key only
+(IdentitiesOnly, our own known_hosts). The Repositories view (⎇ Repos) and the Repository choice in New session;
+cards show « ⎇ <repository> ». docs/REPOSITORIES.md documents keys and connected repositories. Tests: 40 (a local
+bare repository stands in for GitHub through file://, allowed only in tests). Bug found: the address parser kept
+« .git ». The real GitHub check needs the owner to add a deploy key (★).

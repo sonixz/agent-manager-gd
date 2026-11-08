@@ -49,6 +49,9 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   uncommitted changes, everything since the session started, or its branch against the target. Click a line to
   comment it (or comment the whole file); **Send review** sends the open comments to the agent as one numbered request
   (file:line, the comment, the line's code); sent comments stay visible until marked handled.
+- **Connected repositories** (⎇ Repos): add a repository's SSH address; Agent Manager makes a deploy key for it only,
+  shows the public key to add on GitHub (*Deploy keys*, with write access), checks it, and sessions started on that
+  repository use that key only. Rotate or disconnect any time. Details: `docs/REPOSITORIES.md`.
 - **Git branch per session**: tick « In its own git branch » when creating a session: it works in
   `<repository>-worktrees/<name>` on branch `am/<name>`. **Finish its git branch…** shows what is ahead and
   uncommitted, can merge it into the repository's current branch (a conflicting merge is undone) and removes the

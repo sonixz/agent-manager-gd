@@ -406,6 +406,30 @@ func _run() -> void:
 			await wait(1.5)
 			await shot("28-review-in-terminal")
 			report.append("review sent: %s" % main.terms[sid].get_screen_text().contains("Use Decimal for money"))
+		"repos":
+			var data := OS.get_environment("AGMGD_HOME")
+			var bare := data.path_join("remote/shop.git")
+			OS.execute("bash", ["-c", "mkdir -p %s/seed && cd %s/seed && git init -q -b main && echo '# Shop' > README.md && git add . && git -c user.name=d -c user.email=d@d commit -q -m start && git clone -q --bare . %s" % [data, data, bare]])
+			await main.engine.call_api("POST", "/repos", {"url": "git@github.com:sonixz/demo-shop.git", "local_path": "/mnt/c/git-2026/demo-shop"})
+			var ok: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "file://" + bare, "name": "shop"})
+			await main.engine.call_api("POST", "/repos/%s/check" % ok["id"], {})
+			var bad: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@git.nowhere.invalid:team/api.git"})
+			await main.engine.call_api("POST", "/repos/%s/check" % bad["id"], {})
+			var s1: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Shop agent", "tool": "shell", "cwd": "", "repo": ok["id"], "group": "Shop"})
+			report.append("session on the repository: %s" % s1.get("cwd", s1.get("error", "")))
+			await main.refresh()
+			main.set_view("repos")
+			await wait(2.0)
+			await shot("29-repositories")
+			await main._open_new()
+			for i in main.f_repo.item_count:
+				if str(main.f_repo.get_item_metadata(i)) == str(ok["id"]):
+					main.f_repo.select(i)
+					main.f_repo.item_selected.emit(i)
+			main.f_name.text = "Shop, second agent"
+			await wait(0.6)
+			await shot("30-new-session-on-repo")
+			main.new_dialog.hide()
 		"tree-reopen":
 			await wait(1.5)
 			report.append("tree after reopening: " + _tree_text())

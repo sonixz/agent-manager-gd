@@ -62,7 +62,7 @@ class Store:
             cols = {r[1] for r in db.execute("PRAGMA table_info(sessions)")}
             if "position" not in cols:  # Loop 4A: the order inside a group
                 db.execute("ALTER TABLE sessions ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
-            for col in ("parent", "worktree", "base_repo", "brain_client", "start_commit"):  # Loop 5 forks, worktrees; Loop 6 Brain
+            for col in ("parent", "worktree", "base_repo", "brain_client", "start_commit", "repo_id"):  # Loop 5 forks, worktrees; Loop 6 Brain
                 if col not in cols:
                     db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
             if "archived_at" not in cols:
@@ -75,7 +75,7 @@ class Store:
         return db
 
     def add(self, name: str, tool: str, cwd: str, grp: str = "", parent: str = "", worktree: str = "",
-            base_repo: str = "", start_commit: str = "") -> dict:
+            base_repo: str = "", start_commit: str = "", repo_id: str = "") -> dict:
         sid = secrets.token_hex(4)
         if grp:
             self.add_group(grp)
@@ -83,10 +83,10 @@ class Store:
             pos = db.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM sessions WHERE grp = ?", (grp,)).fetchone()[0]
             row = {"id": sid, "name": name, "tool": tool, "cwd": cwd, "grp": grp, "created": time.time(), "archived": 0,
                    "position": pos, "parent": parent, "worktree": worktree, "base_repo": base_repo, "archived_at": 0,
-                   "start_commit": start_commit}
+                   "start_commit": start_commit, "repo_id": repo_id}
             db.execute("INSERT INTO sessions (id, name, tool, cwd, grp, created, archived, position, parent, worktree, "
-                       "base_repo, archived_at, start_commit) VALUES (:id, :name, :tool, :cwd, :grp, :created, :archived, "
-                       ":position, :parent, :worktree, :base_repo, :archived_at, :start_commit)", row)
+                       "base_repo, archived_at, start_commit, repo_id) VALUES (:id, :name, :tool, :cwd, :grp, :created, :archived, "
+                       ":position, :parent, :worktree, :base_repo, :archived_at, :start_commit, :repo_id)", row)
         return row
 
     def all(self, archived: bool = False) -> list[dict]:
