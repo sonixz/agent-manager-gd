@@ -10,7 +10,7 @@
   <meta property="og:description" content="Every coding agent. One control room. Your Second Brain in every session.">
   <meta property="og:image" content="assets/showcase/hero-grid.webp">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=2026-11-09">
+  <link rel="stylesheet" href="css/style.css?v=2026-11-09b">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -42,70 +42,353 @@
     <section class="page-head">
       <div class="container">
         <p class="overline">Docs</p>
-        <h1>Agent Manager GD docs</h1>
-        <p>Everything about installing, using and connecting Agent Manager GD. Being written now (Loop 20); until
-          then, the repository's <code>README.md</code> and <code>docs/</code> folder have it all.</p>
+        <h1>How Agent Manager GD works</h1>
+        <p>The reference: install it, what each part does, where your data lives, how it connects to git, your Second
+          Brain and the cloud, and what to do when something does not work. To learn by doing, start with the
+          <a href="howto.html">How-to guides</a>.</p>
       </div>
     </section>
     <div class="container with-toc">
       <nav class="toc" aria-label="Docs">
-          <p class="group">Start</p>
-          <a href="#install">Install (Windows with WSL, Linux)</a>
-          <a href="#concepts">Sessions, tmux and the engine</a>
-          <a href="#data">Where your data lives</a>
-          <p class="group">Use</p>
-          <a href="#sessions">Sessions and states</a>
-          <a href="#views">Views, themes, shortcuts</a>
-          <a href="#history">Resume, fork, history</a>
-          <a href="#review">Review</a>
-          <a href="#voice">Voice</a>
-          <p class="group">Connect</p>
-          <a href="#brain">The Second Brain</a>
-          <a href="#mcp">Agent Manager's MCP server</a>
-          <a href="#repos">Repositories and deploy keys</a>
-          <a href="#sandboxes">Cloud sandboxes and costs</a>
-          <a href="#remote">Remote Control</a>
-          <p class="group">Reference</p>
-          <a href="#keys">Keys and secrets</a>
-          <a href="#api">Local HTTP API</a>
-          <a href="#security">Security and privacy</a>
-          <a href="#troubleshooting">Troubleshooting</a>
+        <p class="group">Start</p>
+        <a href="#install">Install</a>
+        <a href="#setup-check">Setup check</a>
+        <a href="#concepts">How it fits together</a>
+        <a href="#data">Where your data lives</a>
+        <p class="group">Use</p>
+        <a href="#states">Sessions and live states</a>
+        <a href="#terminal">The terminal, copy and paste</a>
+        <a href="#views">Views and themes</a>
+        <a href="#shortcuts">Shortcuts and the palette</a>
+        <a href="#history">History, resume, fork</a>
+        <a href="#worktrees">A git branch per session</a>
+        <a href="#review">Review</a>
+        <a href="#context">Wrap up and Brief</a>
+        <a href="#voice">Voice</a>
+        <a href="#usage">Usage</a>
+        <p class="group">Connect</p>
+        <a href="#brain">The Second Brain</a>
+        <a href="#mcp">Agent Manager's MCP server</a>
+        <a href="#repos">Repositories and deploy keys</a>
+        <a href="#remote-control">Remote Control</a>
+        <a href="#sandboxes">Cloud sandboxes and costs</a>
+        <p class="group">Reference</p>
+        <a href="#keys">Keys and secrets</a>
+        <a href="#api">Local engine and settings</a>
+        <a href="#security">Security and privacy</a>
+        <a href="#troubleshooting">Troubleshooting</a>
       </nav>
+
       <article class="doc">
-          <h2 id="install">Install (Windows with WSL, Linux)</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="concepts">Sessions, tmux and the engine</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="data">Where your data lives</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="sessions">Sessions and states</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="views">Views, themes, shortcuts</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="history">Resume, fork, history</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="review">Review</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="voice">Voice</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="brain">The Second Brain</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="mcp">Agent Manager's MCP server</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="repos">Repositories and deploy keys</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="sandboxes">Cloud sandboxes and costs</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="remote">Remote Control</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="keys">Keys and secrets</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="api">Local HTTP API</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="security">Security and privacy</h2>
-          <p class="muted">Being written (Loop 20).</p>
-          <h2 id="troubleshooting">Troubleshooting</h2>
-          <p class="muted">Being written (Loop 20).</p>
+        <h2 id="install">Install</h2>
+        <p>Agent Manager GD is two parts: a <b>Godot app</b> (the window) and a small <b>Python engine</b> that runs where
+          tmux lives: inside WSL on Windows, directly on Linux.</p>
+        <table>
+          <tr><th></th><th>Windows</th><th>Linux</th></tr>
+          <tr><td>The window</td><td>the release build (<code>AgentManagerGD.exe</code>)</td><td>Godot 4.7 on <code>app/</code> (no Linux release build yet)</td></tr>
+          <tr><td>The engine</td><td>inside WSL: <code>python3</code> 3.10+, <code>tmux</code>, <code>git</code>, <code>ssh</code></td><td>the same, directly</td></tr>
+          <tr><td>Agents (optional)</td><td>Claude Code and Codex installed and signed in <b>inside WSL</b></td><td>the same</td></tr>
+          <tr><td>Cloud sandboxes (optional)</td><td colspan="2">flyctl (the app asks before downloading it: pinned version, checksum checked) and a Fly.io token in Keys</td></tr>
+        </table>
+        <h3>Windows, step by step</h3>
+        <ol>
+          <li>Unzip <code>AgentManagerGD-&lt;version&gt;-win64.zip</code> anywhere.</li>
+          <li>Right-click <code>install.ps1</code> → <i>Run with PowerShell</i>. It installs to
+            <code>%LOCALAPPDATA%\Programs\AgentManagerGD</code> for your user only, <b>without administrator rights</b>,
+            adds a Start menu shortcut, and downloads nothing. Options: <code>-Target &lt;folder&gt;</code>,
+            <code>-NoShortcut</code>.</li>
+          <li>Start it. If something is missing, the <a href="#setup-check">Setup check</a> says what and how. WSL itself
+            is Microsoft's: <code>wsl --install</code> once, in an administrator PowerShell; the rest installs inside WSL
+            with your package manager (<code>sudo apt install python3 tmux git openssh-client</code>).</li>
+        </ol>
+        <p><b>Update</b>: close the app (sessions keep running), run the new <code>install.ps1</code>. <b>Remove</b>:
+          <code>uninstall.ps1</code> in the install folder; your sessions, keys and settings stay until you delete them
+          (<a href="#data">Where your data lives</a>).</p>
+        <h3>Linux, from the source</h3>
+        <p>Build the terminal extension once (<code>tools/build_native.sh</code>), then open <code>app/</code> with
+          Godot 4.7 and run it. The app starts the engine itself.</p>
+
+        <h2 id="setup-check">Setup check</h2>
+        <p><b>··· › Setup check</b> (and on its own at the first launch when the engine cannot start) lists what Agent
+          Manager needs and what it found: python3 (3.10+), tmux, git, ssh, and the optional Claude Code, Codex and
+          flyctl, each with its version and path, or the command to install it. <b>It only looks</b>: it installs and
+          downloads nothing; you run the commands yourself.</p>
+
+        <h2 id="concepts">How it fits together</h2>
+        <div class="arch">
+          <div class="box"><h3>Godot app</h3><p>The window, the native terminal (libghostty-vt), the views, the voice.</p></div>
+          <div class="box"><h3>Local engine</h3><p><code>python3 -m engine</code>, standard library only, on 127.0.0.1 with a token.</p></div>
+          <div class="box"><h3>tmux</h3><p>A private server, <code>tmux -L agmgd</code>: one tmux session per Agent Manager session.</p></div>
+          <div class="box"><h3>Your tools</h3><p>Claude Code, Codex, git, ssh, flyctl, Second Brain GD: found, never bundled.</p></div>
+        </div>
+        <p>Every session is a real terminal running in its own tmux session on a private tmux server. The app only
+          <i>shows</i> it: close the app, and the agents keep working; reopen it, and they are where you left them. Even
+          after a reboot, a session's conversation can be <a href="#history">resumed</a>.</p>
+        <p>Agents are launched as <b>your own installed tools</b>, with your login and your configuration. Agent
+          Manager adds, for that session only, the hooks that report its state, its MCP servers, and (when asked) a
+          short system note: never a change to your global settings, and it never reads, copies or relays your
+          subscription tokens.</p>
+
+        <h2 id="data">Where your data lives</h2>
+        <table>
+          <tr><th>What</th><th>Where</th></tr>
+          <tr><td>Sessions, groups, history, summaries (the engine's database), state files, hooks settings per session</td><td><code>~/.local/share/agent-manager-gd/</code> (inside WSL on Windows)</td></tr>
+          <tr><td>The engine's token</td><td><code>~/.local/share/agent-manager-gd/runtime/api_token</code></td></tr>
+          <tr><td>Your API keys</td><td>the data folder, encrypted for your Windows user (DPAPI) on Windows; file permissions (0600) on Linux</td></tr>
+          <tr><td>Repository deploy keys</td><td><code>~/.local/share/agent-manager-gd/keys/&lt;id&gt;/</code> (0600)</td></tr>
+          <tr><td>The window's settings (theme, view, shortcuts)</td><td>Godot's user folder: <code>%APPDATA%\Godot\app_userdata\Agent Manager GD</code> on Windows</td></tr>
+          <tr><td>Agents' own conversations</td><td>where the agents keep them (<code>~/.claude</code>, <code>~/.codex</code>): Agent Manager only remembers their ids</td></tr>
+        </table>
+
+        <h2 id="states">Sessions and live states</h2>
+        <p><b>+ New session</b>: a name, the tool (Claude Code, Codex or a shell), the group, where (this computer or a
+          <a href="#sandboxes">cloud sandbox</a>), a <a href="#repos">connected repository</a> or a folder, and options:
+          its own <a href="#worktrees">git branch</a>, the <a href="#brain">Second Brain</a>, a journal in the Brain,
+          <a href="#context">Brief</a>, <a href="#remote-control">Remote Control</a>.</p>
+        <table>
+          <tr><th>State</th><th>Means</th><th>From</th></tr>
+          <tr><td><span class="light working"></span> working</td><td>the agent is on a turn</td><td>its hooks (a prompt sent, a tool used)</td></tr>
+          <tr><td><span class="light ok"></span> waits for your OK</td><td>it asks permission (a command, a file)</td><td>its permission notification</td></tr>
+          <tr><td><span class="light asks"></span> waits for an answer</td><td>it asks you something</td><td>its notification</td></tr>
+          <tr><td><span class="light done"></span> done</td><td>the turn is over</td><td>its Stop hook (Codex: turn complete)</td></tr>
+          <tr><td>ready</td><td>started, nothing asked yet, or stopped</td><td>its session start, or a turn ended without Stop</td></tr>
+        </table>
+        <p>Sessions waiting for you go up into <b>They wait for you</b>, first come first, with <b>Approve</b> /
+          <b>Refuse</b> (an OK) or <b>Reply…</b> (an answer), and <b>Open</b>. Approve presses the agent's highlighted
+          choice (<kbd>Enter</kbd>), Refuse presses <kbd>Escape</kbd>. A toast and, if you turn it on, your system's
+          voice tell you too. A shell has no state of its own.</p>
+        <p>Right click a session for the rest: rename, move to a group, show in Grid, restart, stop, wrap up, finish its
+          branch, archive, remove. Drag sessions to reorder them or move them between groups; fold a group you are not
+          watching.</p>
+
+        <h2 id="terminal">The terminal, copy and paste</h2>
+        <p>The terminal is our own: <b>libghostty-vt</b> (Ghostty's terminal core) drawn by Godot, in JetBrains Mono with
+          fallbacks for symbols, CJK and colour emoji. Accents, true colour, the mouse and full-screen programs work as in
+          a good desktop terminal. A change that degrades it is a bug.</p>
+        <ul>
+          <li><b>Copy</b>: select with the mouse, then <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. When the program
+            uses the mouse itself, hold <kbd>Shift</kbd> while dragging. A long line the program wrapped (a sign-in link)
+            is copied whole.</li>
+          <li><b>Paste</b>: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>.</li>
+          <li><b>Programs that copy</b> (Claude Code's « c to copy »): their OSC 52 copy reaches your clipboard, through
+            tmux too. Programs can write the clipboard, never read it.</li>
+        </ul>
+
+        <h2 id="views">Views and themes</h2>
+        <ul>
+          <li><b>Focus</b>: one session, full size, with its header (tool, folder, branch, Brain, state).</li>
+          <li><b>Grid</b>: up to four live terminals side by side (right click a session → Show in grid).</li>
+          <li><b>Board</b>: a tile per session with a live preview of its screen and its state.</li>
+          <li><b>History</b>, <b>Review</b>, <b>☁ Sandboxes</b>, <b>⎇ Repos</b>, and in <b>···</b>: Keys, Usage,
+            Shortcuts, Connect other tools, Setup check, Spoken status.</li>
+        </ul>
+        <p><b>◐</b> picks one of seven themes, the same as Second Brain's: Focus, Terminal, Neon, Evening, Forest,
+          Morning, Paper. The interface and the terminal's colours change together.</p>
+
+        <h2 id="shortcuts">Shortcuts and the palette</h2>
+        <p>Outside a terminal, <kbd>Ctrl</kbd> alone works. Inside a terminal, plain <kbd>Ctrl</kbd> keys belong to
+          its programs, so add <kbd>Shift</kbd>: with it, every shortcut works everywhere.</p>
+        <table>
+          <tr><th>Action</th><th>Keys</th></tr>
+          <tr><td>Command palette (every action and session, by name)</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd></td></tr>
+          <tr><td>New session</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td></tr>
+          <tr><td>Focus, Grid, Board</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> / <kbd>G</kbd> / <kbd>B</kbd></td></tr>
+          <tr><td>History, Review</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> / <kbd>R</kbd></td></tr>
+          <tr><td>Next, previous session</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> / <kbd>↑</kbd></td></tr>
+          <tr><td>Approve the first session waiting for an OK</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd></td></tr>
+          <tr><td>Dictate, voice command (hold)</td><td><kbd>F8</kbd>, <kbd>F9</kbd></td></tr>
+        </table>
+        <p>Change any of them in <b>··· › Shortcuts</b>: click one, press the new keys (<kbd>Escape</kbd> cancels).</p>
+
+        <h2 id="history">History, resume, fork</h2>
+        <p>Every session keeps every conversation id it ever had: Claude Code gets its id from Agent Manager at launch;
+          Codex reports its own. <b>History</b> lists every session ever made, archived ones included, with its
+          conversations, searchable by name, folder, group or id.</p>
+        <ul>
+          <li><b>Resume</b> starts a session again on its latest conversation; <b>Resume this one</b> on any older one.</li>
+          <li><b>Fork…</b> opens a new session on a copy of a conversation; the original stays as it was.</li>
+          <li><b>Archive</b> puts a session away; <b>Restore</b> brings it back. Removing a session keeps its history.</li>
+        </ul>
+
+        <h2 id="worktrees">A git branch per session</h2>
+        <p>Tick <b>In its own git branch</b> in New session: the session works in a git worktree,
+          <code>&lt;repository&gt;-worktrees/&lt;name&gt;</code>, on branch <code>am/&lt;name&gt;</code>, so several agents can
+          work on one repository without stepping on each other. <b>Finish its git branch…</b> (right click) shows what
+          is ahead and uncommitted, can merge it into the repository's current branch (a conflicting merge is undone),
+          and removes the worktree. Uncommitted work blocks it; the branch is deleted only once merged.</p>
+
+        <h2 id="review">Review</h2>
+        <p><b>Review</b> shows the selected session's changes, file by file (arrow keys), coloured, with line numbers:
+          uncommitted changes, everything since the session started, or its branch against its target. Click a line to
+          comment on it, or comment the whole file. <b>Send review</b> sends the open comments to the agent as one
+          numbered request (file:line, your comment, the line's code). Sent comments stay visible until you mark them
+          <b>Handled</b>.</p>
+
+        <h2 id="context">Wrap up and Brief</h2>
+        <p><b>Wrap up</b> (right click) asks the agent to write its own summary: what was done, decisions, files touched,
+          what is left, how to continue. When the session shares the Second Brain, it also proposes it there. The summary
+          is kept with the session (History, searchable, <b>Read</b>) and the session is archived. A new session in the
+          same folder can start from it: <b>Brief it with the latest summary of this folder</b> sends a short first
+          message pointing to that summary.</p>
+
+        <h2 id="voice">Voice</h2>
+        <ul>
+          <li><b>Dictation</b>: hold <kbd>F8</kbd> and speak; on release, the text is written into the active session's
+            prompt like a paste, never with <kbd>Enter</kbd>: you read it and send it. Transcription by OpenAI with your
+            own key (about $0.003 a minute, shown).</li>
+          <li><b>Commands</b>: hold <kbd>F9</kbd> and say <i>approve …</i>, <i>refuse …</i>, <i>go to …</i>, <i>grid view</i>,
+            <i>who is waiting?</i>, <i>wrap up …</i>, <i>new session …</i>, in English or French. Understood by plain
+            rules, no model. Approving, refusing and wrapping up always ask first. What is not a command is dictation for
+            the active session.</li>
+          <li><b>Spoken status</b> (···, off by default): short notices in your system's own voice, offline and free:
+            « Sparks is done ».</li>
+        </ul>
+        <p>If your OpenAI project does not allow a transcription model, Agent Manager tries the next one
+          (gpt-4o-transcribe, gpt-4o-mini-transcribe, whisper-1…) and says what to allow in the project's limits.</p>
+
+        <h2 id="usage">Usage</h2>
+        <p><b>··· › Usage</b>: tokens per session, per day and per tool, read from the agents' own logs on this computer
+          (Claude Code, Codex). No money amount for agents: their logs carry none, and subscriptions have no per-token
+          price. Cloud sandbox costs are in <a href="#sandboxes">Sandboxes</a>.</p>
+
+        <h2 id="brain">The Second Brain</h2>
+        <p>When <a href="https://github.com/sonixz/second-brain-gd" rel="noopener">Second Brain GD</a> runs on the same
+          computer, the status bar says <i>✦ Second Brain connected</i>, and each Claude Code or Codex session can share
+          it:</p>
+        <ul>
+          <li><b>A key per session</b>, named <i>Agent Manager · &lt;session&gt;</i>, at the « propose » level: it reads and
+            searches the Brain; what it proposes waits for the Brain's archivist and your rules. The key is given at
+            launch only, through the Brain's own relay. A fork gets its own key; removing the session revokes it.</li>
+          <li><b>Who proposed what</b>: the Brain's timeline names the session behind each change, and any change can be
+            undone there.</li>
+          <li><b>Sessions that document themselves</b> (<i>↳ Document this session in the Brain as it works</i>, Claude
+            Code): the agent orients in the Brain first (project card, last session journal, open questions, recent
+            decisions, your documentation guidelines), checks them against <code>git log</code> and the live sessions, then
+            proposes your words, decisions and a session journal at each milestone.</li>
+          <li><b>Keys</b>: <b>··· › Keys</b> lists every Brain key Agent Manager made and what uses it; unused ones can be
+            revoked, one by one or all at once, always confirmed.</li>
+          <li><b>In the cloud</b>: a sandbox reaches the Brain through its SSH tunnel and the engine, with a secret of its
+            own; the Brain's keys never leave your computer.</li>
+        </ul>
+        <p>Turn it off with <code>AGMGD_BRAIN=off</code> in the engine's environment.</p>
+
+        <h2 id="mcp">Agent Manager's MCP server</h2>
+        <p>Every agent session is offered Agent Manager's own MCP server, <code>agent-manager</code>:</p>
+        <table>
+          <tr><th>Tool</th><th>Does</th><th>On</th></tr>
+          <tr><td><code>list_sessions</code></td><td>every session and its state</td><td>any session</td></tr>
+          <tr><td><code>session_status</code></td><td>working, waits, asks, done</td><td>any session</td></tr>
+          <tr><td><code>read_screen</code></td><td>what a terminal shows now</td><td>any session</td></tr>
+          <tr><td><code>start_session</code></td><td>a child session: Claude Code, Codex or a shell</td><td>new, shown « ↳ parent »</td></tr>
+          <tr><td><code>send_to_session</code></td><td>write to a session</td><td>its own children only</td></tr>
+          <tr><td><code>wait_for_session</code></td><td>until a child is done or waits</td><td>its own children only</td></tr>
+        </table>
+        <p>No tool presses keys in someone else's session: an agent never approves on another's behalf.
+          <b>··· › Connect other tools</b> gives the command to plug the same server into Claude Code, Codex or any MCP
+          client outside the app; such a tool can list, read and start sessions, never type into one or approve.</p>
+
+        <h2 id="repos">Repositories and deploy keys</h2>
+        <p><b>⎇ Repos</b>: add a repository's SSH address (<code>git@github.com:owner/repo.git</code>) and its folder
+          (your own clone, or Agent Manager clones it in its data folder). Agent Manager makes an <b>ed25519 deploy key
+          for that repository only</b> and shows its public half: copy it, open GitHub's Deploy keys page, paste it, tick
+          <b>Allow write access</b>, then <b>Check</b>.</p>
+        <p>Sessions on that repository use that key only, through <code>GIT_SSH_COMMAND</code> with
+          <code>IdentitiesOnly=yes</code> and a known_hosts of their own: nothing goes into your <code>~/.ssh</code> or the
+          repository's git config, and the agent is told how git authenticates. A session opened in the repository's
+          folder, a subfolder or a worktree gets the key too.</p>
+        <ul>
+          <li><b>Rotate the key</b>: a new key replaces the old one; add the new one on GitHub and delete the old one
+            there (its fingerprint is shown).</li>
+          <li><b>Disconnect</b>: the key is deleted here; delete the deploy key on GitHub too.</li>
+          <li>The private key (<code>keys/&lt;id&gt;/id_ed25519</code>, 0600) is never printed, logged or sent.</li>
+        </ul>
+        <div class="note">To check access, use <code>git ls-remote origin</code> in the session. A bare
+          <code>ssh -T git@github.com</code> ignores the session's key and shows your own account.</div>
+
+        <h2 id="remote-control">Remote Control</h2>
+        <p>On by default for Claude Code: the session is started with Claude Code's own Remote Control under the name
+          <i>Group · Session</i>, so you can follow and answer it from claude.ai/code or the Claude app. Its card shows
+          <i>⇄ claude.ai</i>. It needs a Claude account with Remote Control; untick it for sessions that should stay on
+          this computer only.</p>
+
+        <h2 id="sandboxes">Cloud sandboxes and costs</h2>
+        <p>A cloud sandbox is a throw-away <b>Fly.io machine for one session</b>, with your Fly token (Keys). The
+          <b>☁ Sandboxes</b> tab works in steps:</p>
+        <ol>
+          <li><b>The image</b>: Ubuntu 24.04, tmux, git and OpenSSH, an SSH server with keys only, Node, Python, Claude
+            Code and Codex. Deployed once to your organisation's private registry; <b>Rebuild</b> for newer agents.</li>
+          <li><b>Deploy</b>: the estimate first (per hour running, per day if left on, per month paused), then a shell or
+            an agentic coding session. Ready in about 30 seconds; its terminal opens like any session.</li>
+          <li><b>Costs</b>: today, this month and a chart against your budget, measured from Fly's machine history × the
+            published price (Fly's invoice stays on its dashboard).</li>
+        </ol>
+        <p>Each sandbox has a live card: time on, the SSH tunnel and its latency, the Second Brain through the tunnel, the
+          branch, files not committed and commits not pushed, and its cost. <b>Budget</b>: a monthly amount (a warning
+          past 80 %, no new sandbox at 100 %) and two caps you can turn on that only <i>pause</i>: a sandbox idle for N
+          minutes, or all of them once the budget is reached. <b>Stop everything</b> pauses every running sandbox.</p>
+        <div class="note warn">Agent Manager never destroys a sandbox on its own. <b>Destroy</b> is yours, confirmed,
+          after it showed the work not pushed. Machines it does not know are listed, never touched unless you destroy
+          them.</div>
+
+        <h2 id="keys">Keys and secrets</h2>
+        <p><b>··· › Keys</b> holds your own API keys: OpenAI (voice dictation; Codex in sandboxes), Fly.io (sandboxes),
+          Anthropic (Claude Code in sandboxes). On Windows each one is encrypted with DPAPI for your Windows user; on
+          Linux the file is protected by its permissions (0600), and the screen says so. A key is never shown again,
+          never written to a log, and read only when a feature needs it. Below them, the
+          <a href="#brain">Second Brain keys</a> Agent Manager made.</p>
+        <p>Agents' own logins (your Claude or ChatGPT subscription) stay with the agents: Agent Manager never reads,
+          copies or relays them.</p>
+
+        <h2 id="api">Local engine and settings</h2>
+        <p>The engine listens on <code>127.0.0.1:8790</code> only, and every call needs the bearer token in
+          <code>runtime/api_token</code> (JSON in, JSON out; request logs never hold the token). The app is its main
+          client; the MCP server and the hooks use it too. Resources: <code>/sessions</code>, <code>/groups</code>,
+          <code>/tree</code>, <code>/history</code>, <code>/summaries</code>, <code>/repos</code>, <code>/keys</code>,
+          <code>/brain</code>, <code>/usage</code>, <code>/voice</code>, <code>/sandboxes</code>, <code>/health</code>.</p>
+        <table>
+          <tr><th>Environment</th><th>Effect</th></tr>
+          <tr><td><code>AGMGD_HOME</code></td><td>the data folder (default <code>~/.local/share/agent-manager-gd</code>)</td></tr>
+          <tr><td><code>AGMGD_PORT</code></td><td>the engine's port (default 8790)</td></tr>
+          <tr><td><code>AGMGD_TMUX_SOCKET</code></td><td>the private tmux server's name (default <code>agmgd</code>)</td></tr>
+          <tr><td><code>AGMGD_BRAIN=off</code></td><td>no Second Brain; <code>AGMGD_BRAIN_HOME</code>, <code>AGMGD_BRAIN_REPO</code> point to it when it is not found</td></tr>
+          <tr><td><code>AGMGD_CLAUDE_DIR</code>, <code>AGMGD_CODEX_DIR</code></td><td>where Usage reads the agents' logs</td></tr>
+          <tr><td><code>AGMGD_VOICE_MODEL</code></td><td>the transcription model to try first</td></tr>
+        </table>
+
+        <h2 id="security">Security and privacy</h2>
+        <ul>
+          <li><b>Local-first</b>: nothing leaves your computer unless you ask (a transcription, a sandbox, a push).</li>
+          <li><b>Your agents, your login</b>: agents run as you installed them; their subscription tokens are never read.</li>
+          <li><b>No administrator rights</b>: installs for your user only.</li>
+          <li><b>No silent downloads</b>: third-party binaries only with your OK, pinned and checked against a published
+            checksum.</li>
+          <li><b>Keys</b>: encrypted (Windows) or 0600 (Linux), never shown again, never logged. Deploy keys open one
+            repository each.</li>
+          <li><b>Agents among themselves</b>: through MCP they can read any screen but write only to their own children,
+            and never approve.</li>
+          <li><b>The Brain</b>: agents only propose; the archivist and your rules decide, and nothing is ever erased.</li>
+        </ul>
+
+        <h2 id="troubleshooting">Troubleshooting</h2>
+        <details class="trouble" open><summary>The app says the engine is not running</summary><ul>
+          <li>Open the <a href="#setup-check">Setup check</a>: WSL, python3 3.10+ and tmux are needed. If a test run left
+            an engine on the port: <code>pkill -f "^python3 -m engine --port 8790"</code>.</li></ul></details>
+        <details class="trouble" open><summary>A session's state is wrong or stuck</summary><ul>
+          <li>States come from the agent's hooks, installed per session at launch: a session started before an update
+            needs <b>Restart</b>. A turn ended with <kbd>Escape</kbd> shows <i>ready</i> after about 15 seconds.</li></ul></details>
+        <details class="trouble" open><summary>Git asks for a password or uses another account</summary><ul>
+          <li>Use the SSH address (<code>git@…</code>), not <code>https://</code>. Check the deploy key with <b>Check</b>,
+            and from the session with <code>git ls-remote origin</code>. Push refused: tick <i>Allow write access</i> on
+            GitHub.</li></ul></details>
+        <details class="trouble" open><summary>The Second Brain shows as not connected</summary><ul>
+          <li>Start Second Brain GD on the same computer; the status bar gives the reason. Sessions started before it
+            ran need a restart to get their key.</li></ul></details>
+        <details class="trouble" open><summary>Voice does nothing</summary><ul>
+          <li>Check the OpenAI key in Keys, the microphone permission, and the toast's message. A 403 means the key's
+            project does not allow a transcription model: allow one in its limits.</li></ul></details>
+        <details class="trouble" open><summary>Something in the terminal looks wrong</summary><ul>
+          <li>Accents, colours, keys or speed: that is a bug, and a regression for us. Please report it with what you
+            ran.</li></ul></details>
       </article>
     </div>
   </main>
@@ -116,6 +399,6 @@
       <span><a href="index.html">Home</a> · <a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
     </div>
   </footer>
-  <script src="js/main.js?v=2026-11-09"></script>
+  <script src="js/main.js?v=2026-11-09b"></script>
 </body>
 </html>

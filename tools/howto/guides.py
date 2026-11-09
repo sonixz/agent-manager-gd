@@ -49,7 +49,7 @@ guide(
       "Close the app if you like: the session lives on in its own terminal server. Open the app again and every "
       "agent is where you left it."),
      ],
-    [("Claude Code is not found.", "Open <b>⋯ › Setup check</b>: it says what is missing and the command to run "
+    [("Claude Code is not found.", "Open <b>··· › Setup check</b>: it says what is missing and the command to run "
       "yourself (<a href=\"docs.html#setup-check\">Setup check</a>)."),
      ("The state stays on <i>ready</i> while the agent works.", "States come from the agent's own hooks, which "
       "Agent Manager installs for that session only. A session started before an update needs <b>Restart</b>."),
@@ -98,7 +98,7 @@ guide(
       "Type a few letters of any action or session name: <i>gr</i> finds Grid view and the sessions in a group."),
      ],
     [("A shortcut does nothing in a terminal.", "In a terminal, plain <kbd>Ctrl</kbd> keys belong to its programs: "
-      "add <kbd>Shift</kbd>. You can change any shortcut in <b>⋯ › Shortcuts</b>.")],
+      "add <kbd>Shift</kbd>. You can change any shortcut in <b>··· › Shortcuts</b>.")],
     [("Views", "docs.html#views"), ("Shortcuts", "docs.html#shortcuts")], real=True)
 
 guide(
@@ -168,10 +168,10 @@ guide(
 guide(
     "voice", "Talk to your agents", "Voice", 4,
     "Dictate into a terminal with F8, and drive the app with F9: approve, go to a session, ask who waits.",
-    ["An OpenAI key in <b>⋯ › Keys</b>, for the transcription (<a href=\"docs.html#keys\">Keys</a>)"],
-    [("Open <b>⋯ › Keys</b> and paste your OpenAI key.",
-      "It is encrypted on this computer, never shown again, never written to a log. Your Second Brain keys are "
-      "listed below it."),
+    ["An OpenAI key in <b>··· › Keys</b>, for the transcription (<a href=\"docs.html#keys\">Keys</a>)"],
+    [("Open <b>··· › Keys</b> and paste your OpenAI key.",
+      "On Windows it is encrypted for your Windows user (DPAPI); on Linux, the file is readable by you only. It is "
+      "never shown again, never written to a log. Your Second Brain keys are listed below it."),
      ("In a session, hold <kbd>F8</kbd> and speak. Release it when you are done.",
       "A listening overlay with a level meter. On release, what you said is written into the terminal, as if you had "
       "typed it: read it, then press <kbd>Enter</kbd>."),
@@ -182,7 +182,7 @@ guide(
       "The OK goes to that agent, and it carries on. With <b>Spoken status</b> on, your system's own voice tells you "
       "when an agent is done or waits for you, offline."),
      ],
-    [("Nothing is written after F8.", "Check the key in <b>⋯ › Keys</b>, and that the microphone is allowed for "
+    [("Nothing is written after F8.", "Check the key in <b>··· › Keys</b>, and that the microphone is allowed for "
       "Agent Manager. The toast says what went wrong."),
      ("F9 typed my words into the terminal.", "When what you say is not a command, it is dictation: it goes to the "
       "active session.")],
@@ -205,7 +205,7 @@ guide(
      ],
     [("The agent says it has no such tool.", "The session was started before the MCP server was offered: "
       "<b>Restart</b> it."),
-     ("You want the same tools outside the app.", "<b>⋯ › Connect other tools</b> gives the command for Claude "
+     ("You want the same tools outside the app.", "<b>··· › Connect other tools</b> gives the command for Claude "
       "Code, Codex or any MCP client.")],
     [("The MCP server", "docs.html#mcp")])
 
@@ -223,7 +223,7 @@ guide(
       "Its card shows <i>✦ Brain</i> and its header <i>shares the Second Brain</i>. Before changing anything, the "
       "agent reads the project card, the last journal and the open questions, and checks them against "
       "<code>git log</code>."),
-     ("Open <b>⋯ › Keys</b>.",
+     ("Open <b>··· › Keys</b>.",
       "Under <i>Second Brain keys made by Agent Manager</i>, one key per session, with its calls. A key nothing uses "
       "any more can be revoked; removing a session revokes its key."),
      ("In your Second Brain, open <b>AI tools and your Brain</b>.",
@@ -253,7 +253,7 @@ guide(
 guide(
     "sandbox", "Run an agent in a cloud sandbox", "Cloud", 6,
     "Give an agent a throw-away machine on Fly.io, see what it costs as it runs, and keep a budget that only pauses.",
-    ["A Fly.io account and its API token in <b>⋯ › Keys</b>",
+    ["A Fly.io account and its API token in <b>··· › Keys</b>",
      "An Anthropic API key (Claude Code) or OpenAI key (Codex) in Keys, for the agent in the cloud"],
     [("Open <b>☁ Sandboxes</b>.",
       "Three steps: the image (what it holds: Ubuntu, tmux, git, Claude Code, Codex), deploy with an estimate first, "
@@ -277,7 +277,7 @@ guide(
     [],
     [("Click <b>◐</b> at the top, or type <span class=\"say\">theme</span> in the command palette.",
       "Seven themes, the same as Second Brain's: interface and terminal colours change together. Here, Neon."),
-     ("Open <b>⋯ › Shortcuts</b>, click an action, and press the new key.",
+     ("Open <b>··· › Shortcuts</b>, click an action, and press the new key.",
       "Every shortcut, and the voice keys (hold to talk). With <kbd>Shift</kbd> added, they also work inside a "
       "terminal."),
      ],

@@ -500,3 +500,21 @@ Owner: « Oui, cadence-toi pour Loop 19 et 20. »
   - The Setup check page: in the demo it would show the showcase's own tool paths.
 - Checked: every guide has its screenshots (`guides.py --check`), the personal-text check is clean, and the page was
   rendered with Edge headless. Site: 5.3 MB.
+
+## Loop 20: the Docs (2026-11-09)
+
+- **`public/docs.html`**: the reference, with a side menu in four groups.
+  - Start: install, Setup check, how it fits together, where your data lives.
+  - Use: states, the terminal and copy, views, shortcuts, History, worktrees, Review, Wrap up and Brief, voice, usage.
+  - Connect: the Second Brain, the MCP server and its six tools, repositories and deploy keys, Remote Control, cloud
+    sandboxes and costs.
+  - Reference: keys, the local engine and its settings, security and privacy, troubleshooting.
+- Written from README.md, docs/INSTALL.md, docs/REPOSITORIES.md and the code (environment variables, key protection,
+  API resources).
+- Every link with an anchor, across the three pages, was checked by a script: all resolve. That includes every
+  « More in the Docs » link in the guides.
+- **Corrections**:
+  - On Linux, API keys are protected by file permissions (0600), not encrypted. Only Windows encrypts them (DPAPI).
+    The voice guide said « encrypted »: fixed.
+  - The « ⋯ » menu glyph showed as « --- » in the site's fonts: written « ··· » now.
+- Rendered with Edge headless.
