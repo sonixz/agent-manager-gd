@@ -429,3 +429,29 @@ automatic SSH keys, the native voice, and the Second Brain. Plan: docs/brief/PLA
 - Checked: every capture regenerated in one run (`tools/showcase.sh hero new-session agents repos brain-keys review
   voice sandboxes palette`, 15 images, the personal-text check clean); the page rendered with Edge headless at 1440 px.
   Engine untouched: the test suite was not re-run this loop. Site: 2.3 MB.
+
+## Loop 18b: Agent Manager in action in the hero (2026-11-09)
+
+Owner: « Je voyais une animation dynamique… clean, animée, rapide… juste sur l'index, dans le hero. » Not a video.
+- **`public/js/live.js`**: a live control room in the hero, in HTML and CSS, no dependency, no network, a few KB. A
+  faithful reconstruction (the app's Focus colours, labels, cards, « They wait for you », toasts) with the agents' real
+  recorded screens as text. The loop takes about 22 seconds:
+  - Claude Code writes the gift card.
+  - « Flaky tests » waits for your OK, and a cursor clicks Approve.
+  - « Rate limiter » asks a question, gets opened, and gets answered with the arrow keys.
+  - Sparks is done.
+  - Release lead starts two helpers through MCP (↳ in the tree).
+  - Checkout flow is done, and a ✦ toast says « Session journal proposed to the Second Brain ».
+- **Interaction and modes**:
+  - Visitors can click Approve themselves.
+  - A Pause/Play button.
+  - It pauses off screen and in a hidden tab.
+  - With reduced motion it is a still picture (several states at once).
+  - « The real app, full size → » opens the real screenshot.
+- **Sizes**: everything follows the frame's width (container units).
+- **Pitfalls**:
+  - The tag `<s>` for strings drew them struck through, so the colour tags are now non-HTML names.
+  - Edge headless with `--virtual-time-budget` freezes CSS transitions, so a cursor or a fade looks stuck in its
+    captures, though it moves in a real browser.
+  - Edge headless will not go below 477 px wide: a 390 px screenshot is cropped and only looks like an overflow. Measured
+    in the page, nothing is wider than the screen.

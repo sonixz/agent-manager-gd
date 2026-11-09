@@ -62,9 +62,25 @@
             <li><b>7</b> themes</li>
           </ul>
         </div>
-        <figure class="screen">
-          <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="light working"></span>4 agents · Grid view</div>
-          <img src="assets/showcase/hero-grid.webp" width="1920" height="1200" alt="Agent Manager GD in Grid view: Claude Code writing a gift card feature, another Claude Code waiting for permission to run a command, a third asking a multiple-choice question about rate limits, and a shell running the test suite. On the left, the sessions in groups, with « They wait for you » on top.">
+        <figure class="screen live-wrap">
+          <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Agent Manager GD<span class="bar-right"><button class="live-pause" type="button" aria-pressed="false">❚❚ Pause</button></span></div>
+          <div class="live" role="img" aria-label="Agent Manager at work: Claude Code sessions in groups change state live; one waits for your OK and is approved from the list, another asks a question and gets an answer, a lead agent starts two helpers, and a finished session proposes its journal to the Second Brain.">
+            <div class="lv-app" aria-hidden="true">
+              <aside class="lv-side">
+                <div class="lv-brand"><b>◆ AGENT MANAGER</b><span>GD</span></div>
+                <div class="lv-queue"></div>
+                <div class="lv-tree"></div>
+                <p class="lv-status">✦ Second Brain connected · Ctrl+K for commands</p>
+              </aside>
+              <section class="lv-main">
+                <div class="lv-top"><div class="lv-head"></div><div class="lv-views"><span class="on">Focus</span><span>Grid</span><span>Board</span><span>Review</span></div></div>
+                <div class="lv-term"></div>
+              </section>
+              <div class="lv-toasts"></div>
+              <svg class="lv-cursor" viewBox="0 0 16 22" width="16" height="22"><path d="M1 1l0 17 4.5-4 3 7 3-1.4-3-6.8 6-.3z" fill="#fff" stroke="#0d1d26" stroke-width="1.3" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <figcaption class="live-cap">A live reconstruction with the agents' real screens. <a href="assets/showcase/hero-grid.webp" class="live-real">The real app, full size →</a></figcaption>
         </figure>
       </div>
     </section>
@@ -409,5 +425,6 @@
     </div>
   </footer>
   <script src="js/main.js?v=2026-11-09"></script>
+  <script src="js/live.js?v=2026-11-09"></script>
 </body>
 </html>

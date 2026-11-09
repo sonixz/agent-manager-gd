@@ -39,6 +39,10 @@
     img.addEventListener("click", () => { big.src = img.currentSrc || img.src; big.alt = img.alt; box.classList.add("open"); });
   });
 
+  document.querySelectorAll("a.live-real").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault(); big.src = a.href; big.alt = "Agent Manager GD in Grid view, the real app"; box.classList.add("open");
+  }));
+
   // Hero ticker: what the left column tells you, as it happens
   const ticker = document.querySelector(".ticker");
   if (ticker) {
