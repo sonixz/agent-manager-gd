@@ -97,7 +97,8 @@ p { margin: 0 0 1em; }
 
 /* Hero */
 .hero { position: relative; padding: clamp(48px, 7vw, 92px) 0 clamp(56px, 8vw, 100px); overflow: hidden; }
-.hero-matrix { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
+.hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(rgba(159, 182, 200, .16) 1px, transparent 1.3px); background-size: 28px 28px; background-position: -14px -14px; -webkit-mask-image: radial-gradient(ellipse 75% 70% at 62% 42%, #000 15%, transparent 78%); mask-image: radial-gradient(ellipse 75% 70% at 62% 42%, #000 15%, transparent 78%); }
+.hero-matrix { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; -webkit-mask-image: radial-gradient(ellipse 80% 75% at 60% 45%, #000 25%, transparent 80%); mask-image: radial-gradient(ellipse 80% 75% at 60% 45%, #000 25%, transparent 80%); }
 .hero::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 70% 40%, rgba(143, 227, 239, .10), transparent 60%), linear-gradient(180deg, transparent 70%, var(--bg)); pointer-events: none; }
 .hero-grid { position: relative; z-index: 1; max-width: 1360px; margin: 0 auto; padding: 0 16px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(28px, 4vw, 56px); align-items: center; }
 .hero h1 { font-family: var(--mono); font-size: clamp(2.3rem, 5.4vw, 4.1rem); letter-spacing: .02em; margin-bottom: .2em; }
@@ -329,7 +330,7 @@ p { margin: 0 0 1em; }
 .lv-views { display: flex; gap: .3cqw; white-space: nowrap; font-size: 1.23cqw; color: var(--muted); }
 .lv-views span { border: 1px solid var(--border); border-radius: .5cqw; padding: .35cqw .6cqw; background: var(--panel); }
 .lv-views span.on { border-color: var(--mint); color: var(--text); }
-.lv-term { flex: 1; margin: 1.2cqw; padding: 1.2cqw 1.4cqw; background: #142030; border: 1px solid var(--border); border-radius: .8cqw; font-family: "JetBrains Mono", var(--mono); font-size: 1.46cqw; line-height: 1.55; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+.lv-term { flex: 1; margin: 1.2cqw; padding: 1.2cqw 1.4cqw; background: #121d2b; border: 1px solid var(--border); border-radius: .8cqw; box-shadow: inset 0 0 4cqw rgba(0, 0, 0, .25); transition: border-color .4s, box-shadow .4s; font-family: "JetBrains Mono", var(--mono); font-size: 1.52cqw; line-height: 1.55; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
 .lv-term .ln { white-space: pre; overflow: hidden; text-overflow: ellipsis; animation: lv-type .25s ease; }
 .lv-term .prompt { color: #e8f1f7; background: rgba(255, 255, 255, .06); white-space: pre-wrap; padding: .2cqw .4cqw; }
 .lv-term .tool { color: #e8f1f7; } .lv-term .tool::first-letter { color: var(--green); }
@@ -385,6 +386,22 @@ p { margin: 0 0 1em; }
 .lv-voice .said { grid-column: 1 / -1; font-family: "JetBrains Mono", var(--mono); font-weight: 500; font-size: 1.5cqw; color: var(--mint-soft); min-height: 1.5em; }
 .live.calm .lv-cursor { transition: opacity .01s; }
 .lv-term .typed { color: var(--text); }
+/* Hero terminal, closer to Claude Code: welcome box, diff lines, a breathing spinner, the test run */
+.lv-main:has(.lv-pill.st-working) .lv-term { border-color: rgba(147, 207, 245, .35); box-shadow: inset 0 0 4cqw rgba(0, 0, 0, .25), 0 0 2.4cqw rgba(147, 207, 245, .08); }
+.lv-welcome { align-self: flex-start; display: flex; flex-direction: column; gap: .2cqw; margin-bottom: auto; padding: .9cqw 1.6cqw .9cqw 1.2cqw; border: 1px solid #d77757; border-radius: .7cqw; color: var(--muted); animation: lv-type .4s ease; }
+.lv-welcome b { color: var(--text); font-weight: 600; margin-bottom: .6cqw; } .lv-welcome b i { font-style: normal; color: #d77757; }
+.lv-welcome .cwd { margin-top: .6cqw; color: var(--faint); }
+.lv-term .add { background: rgb(27, 58, 38); color: #d8f3e2; }
+.lv-term .del { background: rgb(66, 31, 38); color: #f6d6db; }
+.lv-term .add, .lv-term .del { margin: 0 -.4cqw; padding: 0 .4cqw; }
+.lv-term .good { color: var(--green); }
+.lv-term b.ok { color: var(--green); font-weight: 600; }
+.lv-term .spin .g { display: inline-block; width: 1em; text-align: center; color: #e98a6c; }
+.lv-term .spin .verb { color: #e98a6c; background: linear-gradient(90deg, #e98a6c 0%, #e98a6c 40%, #ffd3c2 50%, #e98a6c 60%, #e98a6c 100%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: lv-shimmer 1.8s linear infinite; }
+.lv-term .spin .meta { color: var(--faint); }
+.lv-term .foot { display: flex; justify-content: space-between; }
+.lv-term .foot .ctx { color: var(--violet); opacity: .8; }
+@keyframes lv-shimmer { from { background-position: 100% 0; } to { background-position: -50% 0; } }
 @media (max-width: 600px) {
   .guide-cards { gap: 10px; }
   .guide-card { flex-direction: row; align-items: center; }

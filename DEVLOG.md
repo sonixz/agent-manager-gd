@@ -538,3 +538,13 @@ Owner: « Go pour 21. »
 - Home page: 33 loops. README: a « The website » section.
 - Tests: 76, one skipped. One run out of five had a failure that did not come back in four reruns. It is noted as
   flaky, but the test is not identified.
+
+## Loop 21b: a lighter hero, a better terminal (2026-11-09)
+The owner liked the site, found the hero's background heavy ("plein de terminal") and wanted the hero's terminal
+pushed further. The wall of tiny terminals is gone: a faint dot grid (CSS) fading toward the edges, and on it a few
+soft lights in the sessions' state colours that come and go, now and then linked by an elbow like a branch of the
+session tree (main.js). The hero's terminal now looks closer to Claude Code: a welcome box on a fresh session, a
+breathing spinner (· ✢ ✳ ✶ ✻ ✽) with a shimmering verb and seconds and tokens that count, the rate limiter's change
+as a real diff (dark green and red lines), the test run before the summary, the agent's answer streamed a few
+characters at a time, a soft glow while it works (live.js, style.css). Checked with Edge renders at six moments of
+the loop and `tools/site.sh --check` (all green, 5.4 MB).

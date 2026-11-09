@@ -1,5 +1,5 @@
 // The hero's live control room: a faithful, scripted reconstruction of Agent Manager at work (its colours, labels and
-// the agents' real recorded screens). No dependency, no network. Loops about every 26 seconds; pauses off screen, on
+// the agents' real recorded screens). No dependency, no network. Loops about every 36 seconds; pauses off screen, on
 // the pause button. With reduced motion it still plays, without anything sliding or fading.
 (() => {
   const root = document.querySelector(".live");
@@ -37,11 +37,14 @@
       ["code", "      7   <fn>expect</fn>(r.applied).<fn>toBe</fn>(<nu>50</nu>);"],
     ],
     checkoutDone: [
+      ["tool", "● Bash(npm test -- giftcard)"],
+      ["good", "  ⎿  ✓ tests/giftcard.test.ts (6 tests) 14ms"],
+      ["dim", "     Tests  <b class=\"ok\">6 passed</b> (6)"],
       ["", ""],
       ["text", "● Gift cards work at checkout, never above their balance."],
       ["text", "  3 files changed, 6 tests. Files only, as asked."],
       ["", ""],
-      ["spin done", "✻ Cooked for 41s · done"],
+      ["spin done", "✻ Cooked for 41s"],
     ],
     limiter: [
       ["dim", "  with your question tool: should the limit be per API key or per IP address?"],
@@ -62,9 +65,12 @@
       ["prompt", "❯ 3. API key, IP fallback"],
       ["", ""],
       ["tool", "● Update(orbit/limits.py)"],
-      ["dim", "  ⎿  Added 14 lines, removed 3 lines"],
-      ["code", "     21 <kw>def</kw> <fn>client_id</fn>(request):"],
-      ["code", "     22     <kw>return</kw> request.api_key <kw>or</kw> request.remote_addr"],
+      ["dim", "  ⎿  Updated orbit/limits.py with 3 additions and 1 removal"],
+      ["code", "       20   <kw>def</kw> <fn>client_id</fn>(request):"],
+      ["del", "       21 -     <kw>return</kw> request.remote_addr"],
+      ["add", "       21 +     <kw>if</kw> request.api_key:"],
+      ["add", "       22 +         <kw>return</kw> <st>\"key:\"</st> + request.api_key"],
+      ["add", "       23 +     <kw>return</kw> <st>\"ip:\"</st> + request.remote_addr"],
     ],
   };
 
@@ -111,19 +117,30 @@
       <span class="lv-pill st-${cls}"><span class="lv-dot"></span>${label}</span>`;
   };
   const line = ([cls, text]) => {
-    const html = esc(text).replace(/&lt;(\/?)(kw|ty|fn|st|nu|b)&gt;/g, "<$1$2>");
+    const html = esc(text).replace(/&lt;(\/?)(kw|ty|fn|st|nu|b)&gt;/g, "<$1$2>").replace(/&lt;b class="(\w+)"&gt;/g, '<b class="$1">');
     return `<div class="ln ${cls}">${html || "&nbsp;"}</div>`;
   };
-  let spinT = 0, spinWord = "Boondoggling";
+  let spinT = 0, spinTok = 0, spinWord = "Boondoggling", welcome = false;
+  const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
+  const tokens = () => (spinTok < 1000 ? spinTok : (spinTok / 1000).toFixed(1) + "k");
+  const spinLine = () => `<div class="ln spin"><span class="g">${GLYPHS[0]}</span> <span class="verb">${spinWord}…</span> <span class="meta">(<span class="sec">${spinT}</span>s · ↓ <span class="tok">${tokens()}</span> tokens · esc to interrupt)</span></div>`;
+  const banner = () => `<div class="lv-welcome"><b><i>✻</i> Welcome to Claude Code</b><span>/help for help, /status for your current setup</span><span class="cwd">cwd: /home/dev/code/${esc(S(selected).where)}</span></div>`;
   const setScreen = (lines, spin, input = "") => {
-    term.innerHTML = lines.map(line).join("") + (spin ? `<div class="ln spin">✻ ${spinWord}… (<span class="sec">${spinT}</span>s · thinking)</div>` : "") +
-      `<div class="ln rule"></div><div class="ln in">❯ <span class="typed">${esc(input)}</span><span class="caret"></span></div><div class="ln rule"></div><div class="ln foot">⏵⏵ auto mode on · ← 2 agents</div>`;
+    term.innerHTML = (welcome ? banner() : "") + lines.map(line).join("") + (spin ? spinLine() : "") +
+      `<div class="ln rule"></div><div class="ln in">❯ <span class="typed">${esc(input)}</span><span class="caret"></span></div><div class="ln rule"></div><div class="ln foot"><span>⏵⏵ auto mode on · ← 2 agents</span><span class="ctx">✦ Second Brain</span></div>`;
+  };
+  const streamLast = async (lines, cps = 160) => { // the agent's answer arrives a few characters at a time
+    const last = lines[lines.length - 1], full = last[1];
+    for (let i = 0; i <= full.length; i += 3) { setScreen(lines.slice(0, -1).concat([[last[0], full.slice(0, i)]]), true); await wait(3000 / cps); }
   };
   const typeInput = async (lines, text, cps = 38) => { // someone typing at the prompt
     for (let i = 1; i <= text.length; i++) { setScreen(lines, false, text.slice(0, i)); await wait(1000 / cps * (text[i - 1] === " " ? 1.6 : 1)); }
   };
-  const typeScreen = async (lines, spin, delay = 140) => {
-    for (let i = 1; i <= lines.length; i++) { setScreen(lines.slice(0, i), spin && i === lines.length); await wait(delay); }
+  const typeScreen = async (lines, spin, delay = 140, from = 1) => { // lines before `from` are already on screen
+    for (let i = from; i <= lines.length; i++) {
+      if (lines[i - 1][0] === "text") await streamLast(lines.slice(0, i)); else setScreen(lines.slice(0, i), spin && i === lines.length);
+      await wait(delay);
+    }
   };
 
   // ------------------------------------------------------------------ motion helpers
@@ -162,7 +179,18 @@
   const select = (id) => { selected = id; drawSide(); drawHead(); };
 
   // ------------------------------------------------------------------ the script
-  const spinTick = setInterval(() => { if (!running) return; spinT++; const el = term.querySelector(".sec"); if (el) el.textContent = spinT; }, 1000);
+  let frame = 0;
+  const spinTick = setInterval(() => {
+    if (!running) return;
+    frame++;
+    if (frame % 8 === 0) spinT++;
+    spinTok += 9 + Math.floor(Math.random() * 30);
+    const g = term.querySelector(".spin .g");
+    if (!g) return;
+    g.textContent = GLYPHS[frame % GLYPHS.length];
+    term.querySelector(".sec").textContent = spinT;
+    term.querySelector(".tok").textContent = tokens();
+  }, 125);
   // Grid view: four live tiles
   const main = $(".lv-main"), grid = $(".lv-grid"), views = $(".lv-views"), voice = $(".lv-voice");
   const TILES = {
@@ -201,7 +229,7 @@
 
   const play = async (my) => {
     const alive = () => running && my === cycle;
-    reset(); spinT = 0; spinWord = "Boondoggling";
+    reset(); spinT = 0; spinTok = 0; spinWord = "Boondoggling"; welcome = true;
     setView("focus"); voice.classList.remove("on");
     cursor.classList.remove("on"); cursor.style.transform = `translate(${root.offsetWidth * 0.6}px, ${root.offsetHeight * 0.85}px)`;
     S("checkout").state = "ready"; drawSide(); drawHead();
@@ -209,7 +237,7 @@
     setScreen([], false); await wait(600);
     await typeInput([], "Add a gift card to the checkout, plus tests"); if (!alive()) return;
     await wait(350);
-    set("checkout", "working");
+    set("checkout", "working"); welcome = false;
     const chk = SCREENS.checkout.slice(2);
     setScreen([["prompt", "❯ Add a gift card to the checkout, plus tests"]], true);
     await wait(500);
@@ -235,7 +263,7 @@
       setScreen(lim, false); await wait(480);
     }
     if (!alive()) return;
-    set("limiter", "working"); spinT = 1; spinWord = "Thinking";
+    set("limiter", "working"); spinT = 1; spinTok = 0; spinWord = "Thinking";
     await typeScreen(SCREENS.limiterGo, true, 150); if (!alive()) return;
     await wait(500);
     // 4. Grid view: everyone at once
@@ -260,7 +288,7 @@
     // 5. back to Focus, and you just say what to do (F8)
     await click(await moveTo(".lv-card[data-id=checkout]")); if (!alive()) return;
     setView("focus"); select("checkout");
-    const done = SCREENS.checkout.slice(6).concat(SCREENS.checkoutDone);
+    const done = SCREENS.checkout.slice(10).concat(SCREENS.checkoutDone);
     setScreen(done, false);
     await wait(900); if (!alive()) return;
     voice.classList.add("on");
@@ -276,9 +304,9 @@
     voice.classList.remove("on");
     await typeInput(done, "commit this and push the branch", 60); if (!alive()) return;
     await wait(250);
-    set("checkout", "working"); spinT = 1; spinWord = "Committing";
-    const git = done.slice(-4).concat([["prompt", "❯ commit this and push the branch"], ["", ""], ["tool", "● Bash(git commit -am \"Gift cards at checkout\")"], ["dim", "  ⎿  [main 4f2a91c] Gift cards at checkout · 3 files changed"], ["tool", "● Bash(git push)"], ["dim", "  ⎿  main -> main (with this repository's own deploy key)"]]);
-    await typeScreen(git, true, 260); if (!alive()) return;
+    set("checkout", "working"); spinT = 1; spinTok = 0; spinWord = "Committing";
+    const git = done.slice(-9).concat([["prompt", "❯ commit this and push the branch"], ["", ""], ["tool", "● Bash(git commit -am \"Gift cards at checkout\")"], ["dim", "  ⎿  [main 4f2a91c] Gift cards at checkout · 3 files changed"], ["tool", "● Bash(git push)"], ["dim", "  ⎿  main -> main (with this repository's own deploy key)"]]);
+    await typeScreen(git, true, 260, 10); if (!alive()) return;
     set("checkout", "done"); setScreen(git.concat([["spin done", "✻ Done in 6s"]]), false);
     await wait(500);
     toast("✦ Session journal proposed to the Second Brain", "brain");

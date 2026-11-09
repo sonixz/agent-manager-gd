@@ -76,51 +76,57 @@
     setInterval(show, 2600);  // a text change, not a movement: it runs with reduced motion too
   }
 
-  // Hero background: a wall of tiny terminals, a few of them busy
+  // Hero background: a quiet dot grid (CSS) and, on it, a few soft lights in the sessions' state colours that come and
+  // go; now and then two of them link up, like an agent starting a helper
   const canvas = document.querySelector(".hero-matrix");
   if (canvas && canvas.getContext) {
     const ctx = canvas.getContext("2d");
-    let cells = [], w = 0, h = 0;
-    const colours = ["#93cff5", "#ff9e64", "#f5cf74", "#7dd3a8"];
+    const colours = ["147, 207, 245", "255, 158, 100", "245, 207, 116", "143, 227, 239", "200, 182, 255"];
+    const STEP = 28;
+    let w = 0, h = 0, lights = [], links = [];
+    const spot = () => ({ x: Math.round(Math.random() * w / STEP) * STEP, y: Math.round(Math.random() * h / STEP) * STEP });
+    const newLight = (now) => ({ ...spot(), c: colours[Math.floor(Math.random() * colours.length)], born: now - Math.random() * 4000, life: 3500 + Math.random() * 4000 });
     const resize = () => {
       const r = canvas.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       w = r.width; h = r.height;
       canvas.width = w * dpr; canvas.height = h * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      cells = [];
-      const cw = 92, ch = 58;
-      for (let y = 8; y < h; y += ch) for (let x = 8; x < w; x += cw) {
-        cells.push({ x, y, lines: 2 + Math.floor(Math.random() * 3), busy: Math.random() < .12, t: Math.random() * 100,
-          c: colours[Math.floor(Math.random() * colours.length)] });
-      }
+      const n = Math.max(6, Math.min(16, Math.round(w * h / 60000)));
+      lights = Array.from({ length: n }, () => newLight(performance.now()));
     };
     const draw = (now) => {
       ctx.clearRect(0, 0, w, h);
-      for (const c of cells) {
-        ctx.strokeStyle = "rgba(51, 80, 109, .55)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(c.x + .5, c.y + .5, 80, 46);
-        ctx.fillStyle = c.busy ? c.c : "rgba(97, 124, 146, .7)";
-        ctx.beginPath(); ctx.arc(c.x + 8, c.y + 8, 2.4, 0, Math.PI * 2); ctx.fill();
-        const phase = (now / 900 + c.t) % 6;
-        for (let l = 0; l < c.lines; l++) {
-          const len = 18 + ((c.t * 7 + l * 13) % 44);
-          const shown = c.busy && l === c.lines - 1 ? len * Math.min(1, phase / 3) : len;
-          ctx.fillStyle = l === 0 ? "rgba(143, 227, 239, .35)" : "rgba(159, 182, 200, .22)";
-          ctx.fillRect(c.x + 8, c.y + 17 + l * 7, shown, 2.5);
-        }
-        if (c.busy && Math.floor(now / 500) % 2 === 0) {
-          ctx.fillStyle = "rgba(201, 244, 249, .8)";
-          ctx.fillRect(c.x + 8, c.y + 17 + c.lines * 7, 5, 4);
-        }
+      for (let i = 0; i < lights.length; i++) {
+        const l = lights[i], t = (now - l.born) / l.life;
+        if (t >= 1) { lights[i] = newLight(now); lights[i].born = now; continue; }
+        const a = Math.sin(Math.PI * Math.max(0, t));  // fades in, then out
+        const g = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, 26);
+        g.addColorStop(0, `rgba(${l.c}, ${0.22 * a})`); g.addColorStop(1, `rgba(${l.c}, 0)`);
+        ctx.fillStyle = g; ctx.fillRect(l.x - 26, l.y - 26, 52, 52);
+        ctx.fillStyle = `rgba(${l.c}, ${0.75 * a})`;
+        ctx.beginPath(); ctx.arc(l.x, l.y, 1.8, 0, Math.PI * 2); ctx.fill();
+      }
+      links = links.filter((k) => now - k.born < 2600);
+      for (const k of links) {
+        const t = (now - k.born) / 2600, a = Math.sin(Math.PI * t) * 0.25, p = Math.min(1, t * 2.2);
+        ctx.strokeStyle = `rgba(${k.a.c}, ${a})`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(k.a.x, k.a.y);
+        ctx.lineTo(k.a.x, k.a.y + (k.b.y - k.a.y) * p);
+        if (p > 0.5) ctx.lineTo(k.a.x + (k.b.x - k.a.x) * (p - 0.5) * 2, k.b.y);  // an elbow, like a branch in the session tree
+        ctx.stroke();
       }
       if (!reduce) requestAnimationFrame(draw);
     };
     resize();
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", () => { resize(); if (reduce) requestAnimationFrame(draw); });
     requestAnimationFrame(draw);
-    if (!reduce) setInterval(() => { const c = cells[Math.floor(Math.random() * cells.length)]; if (c) c.busy = !c.busy; }, 700);
+    if (!reduce) setInterval(() => {
+      const a = lights[Math.floor(Math.random() * lights.length)];
+      const b = { ...a, x: a.x + STEP * (3 + Math.floor(Math.random() * 5)), y: a.y + STEP * (2 + Math.floor(Math.random() * 3)) };
+      if (b.x < w && b.y < h) { links.push({ a, b, born: performance.now() }); lights.push({ ...b, born: performance.now() + 1100, life: 3200 }); }
+      if (lights.length > 22) lights.splice(0, lights.length - 22);
+    }, 3200);
   }
 
   // Docs and How-to: highlight the section in view in the side navigation
