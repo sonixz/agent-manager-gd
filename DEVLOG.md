@@ -350,3 +350,10 @@ field was easy to miss, and a Windows path typed there was not converted. Now:
   pushed). Only copies in Agent Manager's repos folder can be removed, never the owner's.
 - The deploy key still goes to the sessions only (GIT_SSH_COMMAND): nothing is written in the owner's repository config,
   and his own pushes keep his usual credentials. A test checks it. Tests: 67.
+
+Owner's first push through Agent Manager (2026-11-08): the agent in the agent-manager-gd session looked for a key in
+~/.ssh, found none, and tried to create one (auto mode rightly refused editing ~/.ssh). The deploy key was there all
+along, given through GIT_SSH_COMMAND; the real blocker was a missing origin. The push then went through. Now a Claude
+Code session on a connected repository gets one paragraph appended to its instructions (`--append-system-prompt`, this
+launch only, never written into the repository): git already authenticates with the repository's deploy key, use plain
+git, never create SSH keys or edit ~/.ssh, and what a write refusal means. Codex sessions do not get it yet. Tests: 73.

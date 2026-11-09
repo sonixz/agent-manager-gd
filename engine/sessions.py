@@ -71,6 +71,20 @@ class Sessions:
         self.sandboxes = Sandboxes(store.path, self.home, self.keys_store)
 
     # ---------------------------------------------------------------- launching
+    def repo_note(self, rec: dict) -> str:
+        """For a session on a connected repository: one paragraph added to the agent's instructions (this launch
+        only, never written into the repository)."""
+        if not rec.get("repo_id"):
+            return ""
+        try:
+            r = self.repos.get(rec["repo_id"])
+        except KeyError:
+            return ""
+        return (f"Agent Manager: this session works in the connected repository « {r['name']} » ({r['url']}). git already "
+                "authenticates with that repository's own deploy key through the GIT_SSH_COMMAND environment variable: "
+                "use plain git fetch, pull and push. Never create SSH keys and never edit ~/.ssh. If a push is refused "
+                "for write access, tell the user to tick « Allow write access » on the repository's deploy key.")
+
     @staticmethod
     def remote_name(rec: dict) -> str:
         """The name Remote Control shows in claude.ai/code: « Group · Session », or the session's name alone."""
@@ -92,6 +106,9 @@ class Sessions:
             base = ["claude", "--settings", path] + self._claude_mcp(rec)
             if rec.get("remote_control"):  # seen and driven from claude.ai/code or the Claude app, under this name
                 base += ["--remote-control", self.remote_name(rec)]
+            note = self.repo_note(rec)
+            if note:  # how git already authenticates here: the agent never goes looking for a key in ~/.ssh
+                base += ["--append-system-prompt", note]
             if mode == "resume" and conversation:
                 return base + ["--resume", conversation]
             if mode == "fork" and conversation:

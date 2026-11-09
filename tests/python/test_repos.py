@@ -122,6 +122,19 @@ class OwnFolderTest(ReposTest):
         self.assertEqual(self.s.repos.ensure_clone(r["id"]), mine)            # no second copy
         self.assertNotIn("core.sshcommand", git(mine, "config", "--list").lower())   # the key never goes into the repo
 
+    def test_a_session_on_a_connected_repository_is_told_how_git_authenticates(self):
+        mine = self.own_repo()
+        r = self.s.repos.add("file://" + self.bare, local_path=mine)
+        rec = self.s.store.add("Work", "claude", mine, repo_id=r["id"])
+        cmd = self.s.command_for(rec)
+        note = cmd[cmd.index("--append-system-prompt") + 1]
+        self.assertIn("GIT_SSH_COMMAND", note)
+        self.assertIn("Never create SSH keys", note)
+        self.assertIn("--append-system-prompt", self.s.command_for(rec, "resume", "abc"))    # a restart keeps it
+        plain = self.s.store.add("Plain", "claude", mine)
+        self.assertNotIn("--append-system-prompt", self.s.command_for(plain))
+        self.assertFalse(os.path.exists(os.path.join(mine, "CLAUDE.md")))                # nothing written in the repo
+
     def test_another_origin_is_never_changed(self):
         mine = self.own_repo(origin="git@github.com:someone/else.git")
         r = self.s.repos.add("file://" + self.bare, local_path=mine)
