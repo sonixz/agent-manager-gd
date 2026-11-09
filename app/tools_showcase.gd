@@ -372,6 +372,147 @@ func _run() -> void:
 			await main._send_review()
 			await wait(0.8)
 			await hshot(g, 4)
+		"howto-history":
+			var g := "history"
+			main.set_view("history")
+			await wait(2.5)
+			await hshot(g, 1)
+			main.history_search.text = "acme"
+			await main._load_history()
+			await wait(1.5)
+			await hshot(g, 2)
+			main.set_view("focus")
+			main._fork(made["Checkout flow"])
+			await wait(0.5)
+			main.ask_dialog.hide()
+			var fk: Dictionary = await main.engine.call_api("POST", "/sessions/%s/fork" % made["Checkout flow"], {"name": "Checkout flow (fork)"})
+			_map(str(fk.get("id", "")), "checkout-working")
+			_state(str(fk.get("id", "")), "claude", WORKING)
+			await wait(1.0)
+			await main.refresh()
+			main.select(str(fk.get("id", "")))
+			await wait(3.0)
+			await hshot(g, 3)
+			var wt: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Tax rules", "tool": "claude", "cwd": code.path_join("acme-store"), "group": "Acme Store", "brain": true, "worktree": true})
+			_map(str(wt.get("id", "")), "idle-claude")
+			_state(str(wt.get("id", "")), "claude", {"hook_event_name": "SessionStart"})
+			await wait(2.0)
+			await main.refresh()
+			main.select(str(wt.get("id", "")))
+			await wait(2.5)
+			await hshot(g, 4)
+		"howto-connect-repo":
+			var g := "connect-repo"
+			main.set_view("repos")
+			await wait(2.0)
+			await hshot(g, 1)
+			for le in main.find_children("*", "LineEdit", true, false):
+				if (le as LineEdit).placeholder_text.begins_with("git@github.com"):
+					le.text = "git@github.com:acme/acme-store.git"
+				elif (le as LineEdit).placeholder_text.begins_with("your folder"):
+					le.text = "~/code/acme-store"
+			await wait(0.5)
+			await hshot(g, 2)
+			var r: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/acme-store.git", "local_path": code.path_join("acme-store")})
+			await main.engine.call_api("POST", "/repos/%s/check" % r["id"], {})
+			await main.refresh()
+			main.set_view("repos")
+			await wait(2.5)
+			await hshot(g, 3)
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			await wait(1.5)
+			await main._open_new("", "claude")
+			await wait(0.5)
+			for i in main.f_repo.item_count:
+				if str(main.f_repo.get_item_text(i)).contains("acme-store"):
+					main.f_repo.select(i)
+					main.f_repo.item_selected.emit(i)
+			main.f_name.text = "Release notes"
+			main.f_cwd.text = "~/code/acme-store"  # the app shows the full path; the demo's lives in a temporary folder
+			await wait(0.6)
+			await hshot(g, 4)
+			main.new_dialog.hide()
+		"howto-voice":
+			var g := "voice"
+			main.set_view("keys")
+			await wait(2.5)
+			await hshot(g, 1)
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			await wait(2.5)
+			main.voice_label.text = "🎙  Listening to you for « Checkout flow »…  release F8 to write it"
+			main.voice_meter.value = 0.58
+			main.voice_overlay.visible = true
+			main.voice_overlay.reset_size()
+			await wait(0.6)
+			await hshot(g, 2)
+			main.voice_overlay.visible = false
+			await main.run_voice_command("approve Flaky tests")
+			await wait(0.8)
+			await hshot(g, 3)
+			main.confirm_dialog.hide()
+			_state(made["Flaky tests"], "claude", WORKING)
+			await main.refresh()
+			main._toast("Approved: Flaky tests carries on")
+			await wait(0.8)
+			await hshot(g, 4)
+		"howto-agents":
+			var g := "agents"
+			var lead: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Release lead", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true})
+			_map(str(lead["id"]), "lead-done")
+			_state(str(lead["id"]), "claude", WORKING)
+			await wait(1.5)
+			await main.refresh()
+			main.select(str(lead["id"]))
+			await wait(2.5)
+			await hshot(g, 1)
+			var h1: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Helper · tests", "tool": "shell", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "parent": lead["id"]})
+			var h2: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Helper · changelog", "tool": "shell", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "parent": lead["id"]})
+			await wait(1.2)
+			await main.engine.call_api("POST", "/sessions/%s/send" % h1["id"], {"text": "clear; python3 -m unittest -v 2>&1"})
+			await main.engine.call_api("POST", "/sessions/%s/send" % h2["id"], {"text": "clear; git log --format='- %s (%h)' --color=always"})
+			await wait(1.5)
+			await main.refresh()
+			main.select(str(h1["id"]))
+			await wait(2.0)
+			await hshot(g, 2)
+			_state(str(lead["id"]), "claude", DONE)
+			main.grid_ids = [str(lead["id"]), str(h1["id"]), str(h2["id"]), made["Rate limiter"]]
+			main.selected = str(lead["id"])
+			main.set_view("grid")
+			await wait(3.5)
+			await main.refresh()
+			await hshot(g, 3)
+		"howto-brain-document":
+			var g := "brain-document"
+			main.select(made["Checkout flow"])
+			await wait(1.5)
+			await main._open_new("", "claude")
+			await wait(0.5)
+			main.f_name.text = "Shipping zones"
+			main.f_cwd.text = "~/code/acme-store"
+			main.f_brain.button_pressed = true
+			main.f_document.button_pressed = true
+			await wait(0.6)
+			await hshot(g, 1)
+			main.new_dialog.hide()
+			var d: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Shipping zones", "tool": "claude", "cwd": code.path_join("acme-store"), "group": "Acme Store", "brain": true, "document": true})
+			_map(str(d["id"]), "checkout-working")
+			_state(str(d["id"]), "claude", WORKING)
+			await wait(1.5)
+			await main.refresh()
+			main.select(str(d["id"]))
+			await wait(2.5)
+			await hshot(g, 2)
+			main.set_view("keys")
+			await wait(3.0)
+			await hshot(g, 3)
+			# the Brain's side: Second Brain's own screenshot (from its website), the same size as a step
+			var img := Image.load_from_file(ProjectSettings.globalize_path("res://").path_join("../public/assets/brain/mcp-proposals.webp"))
+			img.resize(1280, 800, Image.INTERPOLATE_LANCZOS)
+			img.save_webp(OS.get_environment("SHOW_HOWTO").path_join(g).path_join("04.webp"), true, 0.88)
+			report.append("howto %s 04 (Second Brain's own screenshot)" % g)
 	for x in main.sessions.duplicate():
 		await main.engine.call_api("DELETE", "/sessions/%s" % x["id"])
 	var f := FileAccess.open(OS.get_environment("SHOW_REPORTS").path_join("report-%s.txt" % OS.get_environment("SHOW_STEP")), FileAccess.WRITE)

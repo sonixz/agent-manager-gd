@@ -485,3 +485,8 @@ Owner: « Oui, cadence-toi pour Loop 19 et 20. »
   and send comments.
 - Pitfall: `tmux capture-pane -e` turns Claude Code's dark diff backgrounds into 256-colour green and red (22, 52),
   which look bright. The scenes and `record.sh` now map them back to dark tones. The terminal itself was right.
+- **5 more guides**: resume, fork and the History; connect a repository (deploy key); talk to your agents (F8, F9);
+  let an agent start helpers (MCP); a session that documents itself in the Brain. That last guide's Brain step is
+  Second Brain's own screenshot.
+- Pitfall: a repository picked in New session fills the folder with its full path. The demo's is a temporary folder,
+  so the capture shows `~/code/…`.

@@ -121,6 +121,119 @@ guide(
     [("Review", "docs.html#review"), ("Worktrees", "docs.html#worktrees")])
 
 
+guide(
+    "history", "Resume, fork and find any conversation", "Work", 4,
+    "Find an old session in the History, pick up its conversation where it stopped, or try another way on a copy.",
+    [],
+    [(f"Click <b>History</b> ({K('Ctrl', 'Shift', 'H')}).",
+      "Every session ever made, the archived ones too, with each conversation the agent had in it. Nothing is "
+      "forgotten: removing a session keeps its conversations here."),
+     ("Type in the search box: a name, a folder, a group or a conversation id.",
+      "The list narrows as you type. Each session shows its tool, folder and its conversations, newest first."),
+     ("Click <b>Fork…</b> on a Claude Code session and name the copy.",
+      "A new session starts on a copy of the conversation: the original stays as it was. Use it to try another "
+      "approach without losing the first one."),
+     ("To work without touching the main branch, tick <b>In its own git branch</b> in the New session dialog.",
+      "The session gets a worktree beside the repository, on its own branch: its header shows the branch. Review "
+      "shows only its changes."),
+     ],
+    [("Resume starts an empty conversation.", "The agent did not save that conversation (it ended before its "
+      "first message). Pick another one under the session: <b>Resume this one</b>.")],
+    [("History", "docs.html#history"), ("Worktrees", "docs.html#worktrees")])
+
+guide(
+    "connect-repo", "Connect a repository (SSH deploy key)", "Git", 5,
+    "Give a GitHub repository its own SSH key, made and checked by Agent Manager, so sessions push without your own "
+    "keys.",
+    ["A GitHub repository you can administer (to add a deploy key)"],
+    [("Click <b>⎇ Repos</b> at the top.",
+      "Connected repositories, and a form: the repository's SSH address, and whether to use your own clone or let "
+      "Agent Manager clone it."),
+     ("Paste the address (<code>git@github.com:owner/repo.git</code>), choose your folder, and click "
+      "<b>+ Add the repository</b>.",
+      "Agent Manager makes a deploy key for this repository alone. Its public half is shown with a button to copy it, "
+      "and the link to the repository's Deploy keys page on GitHub."),
+     ("On GitHub, add the key (tick <i>Allow write access</i> if sessions should push), then click <b>Check</b>.",
+      "The card says <i>connected</i> and <i>origin ✓</i>: the key reads and writes. It shows the key's "
+      "fingerprint, the folder, and buttons to copy the key again, rotate it or disconnect."),
+     ("Start a session on it: in New session, pick it under <b>Repository</b>.",
+      "The session's git uses this key only, through <code>GIT_SSH_COMMAND</code>. Nothing is written in your "
+      "<code>~/.ssh</code>, and the agent is told how git authenticates here."),
+     ],
+    [("Check says write is refused.", "On GitHub, the deploy key needs <i>Allow write access</i>."),
+     ("<code>ssh -T git@github.com</code> shows another account.", "That command ignores the session's key. Check "
+      "with <code>git ls-remote origin</code> instead.")],
+    [("Repositories and deploy keys", "docs.html#repos")], real=False)
+
+guide(
+    "voice", "Talk to your agents", "Voice", 4,
+    "Dictate into a terminal with F8, and drive the app with F9: approve, go to a session, ask who waits.",
+    ["An OpenAI key in <b>⋯ › Keys</b>, for the transcription (<a href=\"docs.html#keys\">Keys</a>)"],
+    [("Open <b>⋯ › Keys</b> and paste your OpenAI key.",
+      "It is encrypted on this computer, never shown again, never written to a log. Your Second Brain keys are "
+      "listed below it."),
+     ("In a session, hold <kbd>F8</kbd> and speak. Release it when you are done.",
+      "A listening overlay with a level meter. On release, what you said is written into the terminal, as if you had "
+      "typed it: read it, then press <kbd>Enter</kbd>."),
+     ("Hold <kbd>F9</kbd> and give a command: <span class=\"say\">approve Flaky tests</span>.",
+      "Agent Manager asks before acting, with what it heard: « Approve “Flaky tests”? ». Other commands: <i>go to "
+      "…</i>, <i>grid view</i>, <i>who is waiting</i>, <i>wrap up …</i>, <i>new session …</i>."),
+     ("Click <b>OK</b>.",
+      "The OK goes to that agent, and it carries on. With <b>Spoken status</b> on, your system's own voice tells you "
+      "when an agent is done or waits for you, offline."),
+     ],
+    [("Nothing is written after F8.", "Check the key in <b>⋯ › Keys</b>, and that the microphone is allowed for "
+      "Agent Manager. The toast says what went wrong."),
+     ("F9 typed my words into the terminal.", "When what you say is not a command, it is dictation: it goes to the "
+      "active session.")],
+    [("Voice", "docs.html#voice"), ("Keys", "docs.html#keys")], real=False)
+
+guide(
+    "agents", "Let an agent start helpers (MCP)", "Agents", 4,
+    "Have a lead agent split a job and start helper sessions of its own, which you can watch and take over.",
+    ["Claude Code or Codex (each session is offered Agent Manager's MCP server)"],
+    [("Ask a lead agent for a job that splits well: <span class=\"say\">prepare the release: run the tests in one "
+      "helper and draft the changelog in another</span>.",
+      "The agent sees Agent Manager's tools: list the sessions, read a screen, start a session, send to its own "
+      "children, wait for one."),
+     ("Watch the list.",
+      "Its helpers appear under it, marked <i>↳ Release lead</i>, in real terminals. Open any of them: you can type "
+      "in it, stop it, take over."),
+     ("Open the Grid view on the lead and its helpers.",
+      "The lead reads its helpers' screens and waits for them; it never types into a session that is not its own, "
+      "and never approves anything."),
+     ],
+    [("The agent says it has no such tool.", "The session was started before the MCP server was offered: "
+      "<b>Restart</b> it."),
+     ("You want the same tools outside the app.", "<b>⋯ › Connect other tools</b> gives the command for Claude "
+      "Code, Codex or any MCP client.")],
+    [("The MCP server", "docs.html#mcp")])
+
+guide(
+    "brain-document", "A session that documents itself in the Brain", "Second Brain", 4,
+    "Start an agent that reads where the project stands in your Second Brain, then proposes your words, its decisions "
+    "and a journal as it works.",
+    ["<a href=\"https://github.com/sonixz/second-brain-gd\" rel=\"noopener\">Second Brain GD</a> running on the same "
+     "computer: the status bar says <i>✦ Second Brain connected</i>"],
+    [("In New session, keep <b>Share the Second Brain</b> ticked and tick <b>↳ Document this session in the Brain as "
+      "it works</b>.",
+      "The session gets a Brain key of its own, at the « propose » level: it can read and search, and what it "
+      "proposes waits for the Brain's archivist."),
+     ("Start it.",
+      "Its card shows <i>✦ Brain</i> and its header <i>shares the Second Brain</i>. Before changing anything, the "
+      "agent reads the project card, the last journal and the open questions, and checks them against "
+      "<code>git log</code>."),
+     ("Open <b>⋯ › Keys</b>.",
+      "Under <i>Second Brain keys made by Agent Manager</i>, one key per session, with its calls. A key nothing uses "
+      "any more can be revoked; removing a session revokes its key."),
+     ("In your Second Brain, open <b>AI tools and your Brain</b>.",
+      "What sessions proposed: your directives, their decisions, a journal at each commit, each with who proposed it "
+      "and why. Approve, reject, or let the archivist file them with your rules."),
+     ],
+    [("The Brain options are greyed out.", "Second Brain is not running, or not found: the status bar says why."),
+     ("Document is greyed out.", "Claude Code only for now, on this computer.")],
+    [("Second Brain", "docs.html#brain")])
+
 def by_id(gid: str) -> dict:
     for g in GUIDES:
         if g["id"] == gid:

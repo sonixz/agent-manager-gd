@@ -66,6 +66,26 @@
           <img src="assets/howto/review/04.webp" width="1280" height="800" loading="lazy" alt="">
           <span><b>Review a diff and send comments</b><span>Read what an agent changed, file by file, comment on lines, and send your comments to it in one go.</span><small>4 min · 4 steps</small></span>
         </a>
+        <a class="guide-card" href="#history">
+          <img src="assets/howto/history/04.webp" width="1280" height="800" loading="lazy" alt="">
+          <span><b>Resume, fork and find any conversation</b><span>Find an old session in the History, pick up its conversation where it stopped, or try another way on a copy.</span><small>4 min · 4 steps</small></span>
+        </a>
+        <a class="guide-card" href="#connect-repo">
+          <img src="assets/howto/connect-repo/04.webp" width="1280" height="800" loading="lazy" alt="">
+          <span><b>Connect a repository (SSH deploy key)</b><span>Give a GitHub repository its own SSH key, made and checked by Agent Manager, so sessions push without your own keys.</span><small>5 min · 4 steps</small></span>
+        </a>
+        <a class="guide-card" href="#voice">
+          <img src="assets/howto/voice/04.webp" width="1280" height="800" loading="lazy" alt="">
+          <span><b>Talk to your agents</b><span>Dictate into a terminal with F8, and drive the app with F9: approve, go to a session, ask who waits.</span><small>4 min · 4 steps</small></span>
+        </a>
+        <a class="guide-card" href="#agents">
+          <img src="assets/howto/agents/03.webp" width="1280" height="800" loading="lazy" alt="">
+          <span><b>Let an agent start helpers (MCP)</b><span>Have a lead agent split a job and start helper sessions of its own, which you can watch and take over.</span><small>4 min · 3 steps</small></span>
+        </a>
+        <a class="guide-card" href="#brain-document">
+          <img src="assets/howto/brain-document/04.webp" width="1280" height="800" loading="lazy" alt="">
+          <span><b>A session that documents itself in the Brain</b><span>Start an agent that reads where the project stands in your Second Brain, then proposes your words, its decisions and a journal as it works.</span><small>4 min · 4 steps</small></span>
+        </a>
       </div>
     </section>
     <div class="container with-toc">
@@ -76,6 +96,15 @@
         <a href="#views">Focus, Grid and Board</a>
         <p class="group">Work</p>
         <a href="#review">Review a diff and send comments</a>
+        <a href="#history">Resume, fork and find any conversation</a>
+        <p class="group">Git</p>
+        <a href="#connect-repo">Connect a repository (SSH deploy key)</a>
+        <p class="group">Voice</p>
+        <a href="#voice">Talk to your agents</a>
+        <p class="group">Agents</p>
+        <a href="#agents">Let an agent start helpers (MCP)</a>
+        <p class="group">Second Brain</p>
+        <a href="#brain-document">A session that documents itself in the Brain</a>
       </nav>
       <div class="guides">
       <article class="guide" id="first-minutes">
@@ -190,8 +219,139 @@
         <p class="guide-next">More in the Docs: <a href="docs.html#review">Review</a> · <a href="docs.html#worktrees">Worktrees</a></p>
       </article>
 
+      <article class="guide" id="history">
+        <p class="guide-meta"><span>Work</span><span>4 min</span><span>4 steps</span><span class="badge real" title="The agents' screens are real Claude Code and Codex screens, recorded on a fictional project and replayed">Real screens</span></p>
+        <h2>Resume, fork and find any conversation</h2>
+        <p class="goal">Find an old session in the History, pick up its conversation where it stopped, or try another way on a copy.</p>
+        
+        <ol class="steps">
+          <li>
+            <div class="step-text"><p class="do">Click <b>History</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd>).</p><p class="see">Every session ever made, the archived ones too, with each conversation the agent had in it. Nothing is forgotten: removing a session keeps its conversations here.</p></div>
+            <figure class="shot"><img src="assets/howto/history/01.webp" width="1280" height="800" loading="lazy" alt="Resume, fork and find any conversation, step 1 of 4: Every session ever made, the archived ones too, with each conversation the agent had in it. Nothing is forgotten: removing a session keeps its conversations here."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Type in the search box: a name, a folder, a group or a conversation id.</p><p class="see">The list narrows as you type. Each session shows its tool, folder and its conversations, newest first.</p></div>
+            <figure class="shot"><img src="assets/howto/history/02.webp" width="1280" height="800" loading="lazy" alt="Resume, fork and find any conversation, step 2 of 4: The list narrows as you type. Each session shows its tool, folder and its conversations, newest first."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Click <b>Fork…</b> on a Claude Code session and name the copy.</p><p class="see">A new session starts on a copy of the conversation: the original stays as it was. Use it to try another approach without losing the first one.</p></div>
+            <figure class="shot"><img src="assets/howto/history/03.webp" width="1280" height="800" loading="lazy" alt="Resume, fork and find any conversation, step 3 of 4: A new session starts on a copy of the conversation: the original stays as it was. Use it to try another approach without losing the first one."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">To work without touching the main branch, tick <b>In its own git branch</b> in the New session dialog.</p><p class="see">The session gets a worktree beside the repository, on its own branch: its header shows the branch. Review shows only its changes.</p></div>
+            <figure class="shot"><img src="assets/howto/history/04.webp" width="1280" height="800" loading="lazy" alt="Resume, fork and find any conversation, step 4 of 4: The session gets a worktree beside the repository, on its own branch: its header shows the branch. Review shows only its changes."></figure>
+          </li>
+        </ol>
+        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>Resume starts an empty conversation.</b> The agent did not save that conversation (it ended before its first message). Pick another one under the session: <b>Resume this one</b>.</li></ul></details>
+        <p class="guide-next">More in the Docs: <a href="docs.html#history">History</a> · <a href="docs.html#worktrees">Worktrees</a></p>
+      </article>
+
+      <article class="guide" id="connect-repo">
+        <p class="guide-meta"><span>Git</span><span>5 min</span><span>4 steps</span><span class="badge" title="Only the app matters in this guide">App only</span></p>
+        <h2>Connect a repository (SSH deploy key)</h2>
+        <p class="goal">Give a GitHub repository its own SSH key, made and checked by Agent Manager, so sessions push without your own keys.</p>
+        <div class="note"><b>You need</b><ul><li>A GitHub repository you can administer (to add a deploy key)</li></ul></div>
+        <ol class="steps">
+          <li>
+            <div class="step-text"><p class="do">Click <b>⎇ Repos</b> at the top.</p><p class="see">Connected repositories, and a form: the repository's SSH address, and whether to use your own clone or let Agent Manager clone it.</p></div>
+            <figure class="shot"><img src="assets/howto/connect-repo/01.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (SSH deploy key), step 1 of 4: Connected repositories, and a form: the repository&#x27;s SSH address, and whether to use your own clone or let Agent Manager clone it."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Paste the address (<code>git@github.com:owner/repo.git</code>), choose your folder, and click <b>+ Add the repository</b>.</p><p class="see">Agent Manager makes a deploy key for this repository alone. Its public half is shown with a button to copy it, and the link to the repository's Deploy keys page on GitHub.</p></div>
+            <figure class="shot"><img src="assets/howto/connect-repo/02.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (SSH deploy key), step 2 of 4: Agent Manager makes a deploy key for this repository alone. Its public half is shown with a button to copy it, and the link to the repository&#x27;s Deploy keys page on GitHub."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">On GitHub, add the key (tick <i>Allow write access</i> if sessions should push), then click <b>Check</b>.</p><p class="see">The card says <i>connected</i> and <i>origin ✓</i>: the key reads and writes. It shows the key's fingerprint, the folder, and buttons to copy the key again, rotate it or disconnect.</p></div>
+            <figure class="shot"><img src="assets/howto/connect-repo/03.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (SSH deploy key), step 3 of 4: The card says connected and origin ✓: the key reads and writes. It shows the key&#x27;s fingerprint, the folder, and buttons to copy the key again, rotate it or disconnect."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Start a session on it: in New session, pick it under <b>Repository</b>.</p><p class="see">The session's git uses this key only, through <code>GIT_SSH_COMMAND</code>. Nothing is written in your <code>~/.ssh</code>, and the agent is told how git authenticates here.</p></div>
+            <figure class="shot"><img src="assets/howto/connect-repo/04.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (SSH deploy key), step 4 of 4: The session&#x27;s git uses this key only, through GIT_SSH_COMMAND. Nothing is written in your ~/.ssh, and the agent is told how git authenticates here."></figure>
+          </li>
+        </ol>
+        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>Check says write is refused.</b> On GitHub, the deploy key needs <i>Allow write access</i>.</li><li><b><code>ssh -T git@github.com</code> shows another account.</b> That command ignores the session's key. Check with <code>git ls-remote origin</code> instead.</li></ul></details>
+        <p class="guide-next">More in the Docs: <a href="docs.html#repos">Repositories and deploy keys</a></p>
+      </article>
+
+      <article class="guide" id="voice">
+        <p class="guide-meta"><span>Voice</span><span>4 min</span><span>4 steps</span><span class="badge" title="Only the app matters in this guide">App only</span></p>
+        <h2>Talk to your agents</h2>
+        <p class="goal">Dictate into a terminal with F8, and drive the app with F9: approve, go to a session, ask who waits.</p>
+        <div class="note"><b>You need</b><ul><li>An OpenAI key in <b>⋯ › Keys</b>, for the transcription (<a href="docs.html#keys">Keys</a>)</li></ul></div>
+        <ol class="steps">
+          <li>
+            <div class="step-text"><p class="do">Open <b>⋯ › Keys</b> and paste your OpenAI key.</p><p class="see">It is encrypted on this computer, never shown again, never written to a log. Your Second Brain keys are listed below it.</p></div>
+            <figure class="shot"><img src="assets/howto/voice/01.webp" width="1280" height="800" loading="lazy" alt="Talk to your agents, step 1 of 4: It is encrypted on this computer, never shown again, never written to a log. Your Second Brain keys are listed below it."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">In a session, hold <kbd>F8</kbd> and speak. Release it when you are done.</p><p class="see">A listening overlay with a level meter. On release, what you said is written into the terminal, as if you had typed it: read it, then press <kbd>Enter</kbd>.</p></div>
+            <figure class="shot"><img src="assets/howto/voice/02.webp" width="1280" height="800" loading="lazy" alt="Talk to your agents, step 2 of 4: A listening overlay with a level meter. On release, what you said is written into the terminal, as if you had typed it: read it, then press Enter."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Hold <kbd>F9</kbd> and give a command: <span class="say">approve Flaky tests</span>.</p><p class="see">Agent Manager asks before acting, with what it heard: « Approve “Flaky tests”? ». Other commands: <i>go to …</i>, <i>grid view</i>, <i>who is waiting</i>, <i>wrap up …</i>, <i>new session …</i>.</p></div>
+            <figure class="shot"><img src="assets/howto/voice/03.webp" width="1280" height="800" loading="lazy" alt="Talk to your agents, step 3 of 4: Agent Manager asks before acting, with what it heard: « Approve “Flaky tests”? ». Other commands: go to …, grid view, who is waiting, wrap up …, new session …."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Click <b>OK</b>.</p><p class="see">The OK goes to that agent, and it carries on. With <b>Spoken status</b> on, your system's own voice tells you when an agent is done or waits for you, offline.</p></div>
+            <figure class="shot"><img src="assets/howto/voice/04.webp" width="1280" height="800" loading="lazy" alt="Talk to your agents, step 4 of 4: The OK goes to that agent, and it carries on. With Spoken status on, your system&#x27;s own voice tells you when an agent is done or waits for you, offline."></figure>
+          </li>
+        </ol>
+        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>Nothing is written after F8.</b> Check the key in <b>⋯ › Keys</b>, and that the microphone is allowed for Agent Manager. The toast says what went wrong.</li><li><b>F9 typed my words into the terminal.</b> When what you say is not a command, it is dictation: it goes to the active session.</li></ul></details>
+        <p class="guide-next">More in the Docs: <a href="docs.html#voice">Voice</a> · <a href="docs.html#keys">Keys</a></p>
+      </article>
+
+      <article class="guide" id="agents">
+        <p class="guide-meta"><span>Agents</span><span>4 min</span><span>3 steps</span><span class="badge real" title="The agents' screens are real Claude Code and Codex screens, recorded on a fictional project and replayed">Real screens</span></p>
+        <h2>Let an agent start helpers (MCP)</h2>
+        <p class="goal">Have a lead agent split a job and start helper sessions of its own, which you can watch and take over.</p>
+        <div class="note"><b>You need</b><ul><li>Claude Code or Codex (each session is offered Agent Manager's MCP server)</li></ul></div>
+        <ol class="steps">
+          <li>
+            <div class="step-text"><p class="do">Ask a lead agent for a job that splits well: <span class="say">prepare the release: run the tests in one helper and draft the changelog in another</span>.</p><p class="see">The agent sees Agent Manager's tools: list the sessions, read a screen, start a session, send to its own children, wait for one.</p></div>
+            <figure class="shot"><img src="assets/howto/agents/01.webp" width="1280" height="800" loading="lazy" alt="Let an agent start helpers (MCP), step 1 of 3: The agent sees Agent Manager&#x27;s tools: list the sessions, read a screen, start a session, send to its own children, wait for one."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Watch the list.</p><p class="see">Its helpers appear under it, marked <i>↳ Release lead</i>, in real terminals. Open any of them: you can type in it, stop it, take over.</p></div>
+            <figure class="shot"><img src="assets/howto/agents/02.webp" width="1280" height="800" loading="lazy" alt="Let an agent start helpers (MCP), step 2 of 3: Its helpers appear under it, marked ↳ Release lead, in real terminals. Open any of them: you can type in it, stop it, take over."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Open the Grid view on the lead and its helpers.</p><p class="see">The lead reads its helpers' screens and waits for them; it never types into a session that is not its own, and never approves anything.</p></div>
+            <figure class="shot"><img src="assets/howto/agents/03.webp" width="1280" height="800" loading="lazy" alt="Let an agent start helpers (MCP), step 3 of 3: The lead reads its helpers&#x27; screens and waits for them; it never types into a session that is not its own, and never approves anything."></figure>
+          </li>
+        </ol>
+        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>The agent says it has no such tool.</b> The session was started before the MCP server was offered: <b>Restart</b> it.</li><li><b>You want the same tools outside the app.</b> <b>⋯ › Connect other tools</b> gives the command for Claude Code, Codex or any MCP client.</li></ul></details>
+        <p class="guide-next">More in the Docs: <a href="docs.html#mcp">The MCP server</a></p>
+      </article>
+
+      <article class="guide" id="brain-document">
+        <p class="guide-meta"><span>Second Brain</span><span>4 min</span><span>4 steps</span><span class="badge real" title="The agents' screens are real Claude Code and Codex screens, recorded on a fictional project and replayed">Real screens</span></p>
+        <h2>A session that documents itself in the Brain</h2>
+        <p class="goal">Start an agent that reads where the project stands in your Second Brain, then proposes your words, its decisions and a journal as it works.</p>
+        <div class="note"><b>You need</b><ul><li><a href="https://github.com/sonixz/second-brain-gd" rel="noopener">Second Brain GD</a> running on the same computer: the status bar says <i>✦ Second Brain connected</i></li></ul></div>
+        <ol class="steps">
+          <li>
+            <div class="step-text"><p class="do">In New session, keep <b>Share the Second Brain</b> ticked and tick <b>↳ Document this session in the Brain as it works</b>.</p><p class="see">The session gets a Brain key of its own, at the « propose » level: it can read and search, and what it proposes waits for the Brain's archivist.</p></div>
+            <figure class="shot"><img src="assets/howto/brain-document/01.webp" width="1280" height="800" loading="lazy" alt="A session that documents itself in the Brain, step 1 of 4: The session gets a Brain key of its own, at the « propose » level: it can read and search, and what it proposes waits for the Brain&#x27;s archivist."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Start it.</p><p class="see">Its card shows <i>✦ Brain</i> and its header <i>shares the Second Brain</i>. Before changing anything, the agent reads the project card, the last journal and the open questions, and checks them against <code>git log</code>.</p></div>
+            <figure class="shot"><img src="assets/howto/brain-document/02.webp" width="1280" height="800" loading="lazy" alt="A session that documents itself in the Brain, step 2 of 4: Its card shows ✦ Brain and its header shares the Second Brain. Before changing anything, the agent reads the project card, the last journal and the open questions, and checks them against git log."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Open <b>⋯ › Keys</b>.</p><p class="see">Under <i>Second Brain keys made by Agent Manager</i>, one key per session, with its calls. A key nothing uses any more can be revoked; removing a session revokes its key.</p></div>
+            <figure class="shot"><img src="assets/howto/brain-document/03.webp" width="1280" height="800" loading="lazy" alt="A session that documents itself in the Brain, step 3 of 4: Under Second Brain keys made by Agent Manager, one key per session, with its calls. A key nothing uses any more can be revoked; removing a session revokes its key."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">In your Second Brain, open <b>AI tools and your Brain</b>.</p><p class="see">What sessions proposed: your directives, their decisions, a journal at each commit, each with who proposed it and why. Approve, reject, or let the archivist file them with your rules.</p></div>
+            <figure class="shot"><img src="assets/howto/brain-document/04.webp" width="1280" height="800" loading="lazy" alt="A session that documents itself in the Brain, step 4 of 4: What sessions proposed: your directives, their decisions, a journal at each commit, each with who proposed it and why. Approve, reject, or let the archivist file them with your rules."></figure>
+          </li>
+        </ol>
+        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>The Brain options are greyed out.</b> Second Brain is not running, or not found: the status bar says why.</li><li><b>Document is greyed out.</b> Claude Code only for now, on this computer.</li></ul></details>
+        <p class="guide-next">More in the Docs: <a href="docs.html#brain">Second Brain</a></p>
+      </article>
+
         <h2 class="coming-title">Coming next</h2>
-        <ul class="coming"><li><span>Work</span>Resume, fork and work in a branch</li><li><span>Git</span>Connect a repository (SSH deploy key)</li><li><span>Voice</span>Dictate and command by voice</li><li><span>Agents</span>Let an agent start helpers (MCP)</li><li><span>Agents</span>Follow a session from your phone</li><li><span>Second Brain</span>A session that documents itself in the Brain</li><li><span>Cloud</span>Run an agent in a cloud sandbox</li><li><span>Cloud</span>Usage, costs and budgets</li><li><span>Work</span>Copy from a terminal</li></ul>
+        <ul class="coming"><li><span>Work</span>Resume, fork and work in a branch</li><li><span>Voice</span>Dictate and command by voice</li><li><span>Agents</span>Follow a session from your phone</li><li><span>Cloud</span>Run an agent in a cloud sandbox</li><li><span>Cloud</span>Usage, costs and budgets</li><li><span>Work</span>Copy from a terminal</li></ul>
       </div>
     </div>
   </main>
