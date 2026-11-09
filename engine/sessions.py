@@ -82,8 +82,10 @@ class Sessions:
             return ""
         return (f"Agent Manager: this session works in the connected repository « {r['name']} » ({r['url']}). git already "
                 "authenticates with that repository's own deploy key through the GIT_SSH_COMMAND environment variable: "
-                "use plain git fetch, pull and push. Never create SSH keys and never edit ~/.ssh. If a push is refused "
-                "for write access, tell the user to tick « Allow write access » on the repository's deploy key.")
+                "use plain git fetch, pull and push. To check access, run `git ls-remote origin` (a bare `ssh -T "
+                "git@github.com` ignores GIT_SSH_COMMAND and shows another key). Never create SSH keys, never edit ~/.ssh "
+                "and never look into Agent Manager's key folder. If a push is refused for write access, tell the user to "
+                "tick « Allow write access » on the repository's deploy key.")
 
     @staticmethod
     def remote_name(rec: dict) -> str:

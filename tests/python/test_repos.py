@@ -130,6 +130,7 @@ class OwnFolderTest(ReposTest):
         note = cmd[cmd.index("--append-system-prompt") + 1]
         self.assertIn("GIT_SSH_COMMAND", note)
         self.assertIn("Never create SSH keys", note)
+        self.assertIn("git ls-remote origin", note)                                     # the right way to check
         self.assertIn("--append-system-prompt", self.s.command_for(rec, "resume", "abc"))    # a restart keeps it
         plain = self.s.store.add("Plain", "claude", mine)
         self.assertNotIn("--append-system-prompt", self.s.command_for(plain))
