@@ -77,12 +77,12 @@
   let sessions, selected, timers = [], running = false, cycle = 0;
   const reset = () => {
     sessions = [
-      { id: "checkout", name: "Checkout flow", tool: "claude", g: "acme", state: "working", where: "acme-store", brain: true },
+      { id: "checkout", name: "Checkout flow", tool: "claude", g: "acme", state: "working", where: "acme-store", brain: true, doc: true },
       { id: "flaky", name: "Flaky tests", tool: "claude", g: "acme", state: "working", where: "acme-store", brain: true },
       { id: "docs", name: "Docs refresh", tool: "codex", g: "acme", state: "done", where: "acme-store", brain: true, quote: "Updated README.md: cart, Quebec sales tax…" },
       { id: "limiter", name: "Rate limiter", tool: "claude", g: "orbit", state: "working", where: "orbit-api", brain: true },
       { id: "lead", name: "Release lead", tool: "claude", g: "orbit", state: "working", where: "orbit-api", brain: true },
-      { id: "sparks", name: "Sparks", tool: "claude", g: "pixel", state: "working", where: "pixel-forge", brain: true },
+      { id: "sparks", name: "Sparks", tool: "claude", g: "pixel", state: "working", where: "pixel-forge", brain: true, doc: true },
     ];
     selected = "checkout";
   };
@@ -94,7 +94,7 @@
     const [icon, tool] = TOOLS[s.tool];
     return `<div class="lv-card st-${cls}${s.id === selected ? " sel" : ""}${s.fresh ? " fresh" : ""}" data-id="${s.id}">
       <span class="lv-icon t-${s.tool}">${icon}</span>
-      <span class="lv-body"><b>${esc(s.name)}${s.brain ? ` <em>✦</em>` : ""}</b><i class="lv-state">${s.parent ? "↳ " + esc(S(s.parent).name) + " · " : tool + " · "}${label}</i></span>
+      <span class="lv-body"><b>${esc(s.name)}${s.brain ? ` <em class="${s.doc ? "" : "soft"}" title="${s.doc ? "Second Brain: its own key, documents its work" : "Second Brain: its own key"}">✦</em>` : ""}</b><i class="lv-state">${s.parent ? "↳ " + esc(S(s.parent).name) + " · " : tool + " · "}${label}</i></span>
       <span class="lv-dot"></span></div>`;
   };
   const drawSide = () => {
@@ -115,6 +115,7 @@
     const [cls, label] = STATE[s.state];
     head.innerHTML = `<span class="lv-title"><b>${esc(s.name)}</b><small>${TOOLS[s.tool][1]} · ~/code/${s.where} · ⎇ main · ✦ shares the Second Brain</small></span>
       <span class="lv-pill st-${cls}"><span class="lv-dot"></span>${label}</span>`;
+    head.querySelector("small").innerHTML = head.querySelector("small").innerHTML.replace("✦ shares the Second Brain", s.doc ? "✦ Brain · documents" : "✦ Brain");
   };
   const line = ([cls, text]) => {
     const html = esc(text).replace(/&lt;(\/?)(kw|ty|fn|st|nu|b)&gt;/g, "<$1$2>").replace(/&lt;b class="(\w+)"&gt;/g, '<b class="$1">');
@@ -175,6 +176,14 @@
     await wait(220);
     cursor.classList.remove("click"); el.classList.remove("pressed");
   };
+  // The Second Brain badge and the sessions' ✦ lights: a pulse when a session uses the Brain
+  const brainBox = $(".lv-brain"), todayEl = $(".lv-today");
+  let today = 2;
+  const brainPulse = (id, proposed = false) => {
+    if (proposed) { today++; todayEl.textContent = today; }
+    const em = tree.querySelector(`.lv-card[data-id=${id}] em`);
+    [brainBox, em].forEach((el) => { if (!el) return; el.classList.add("glow"); const t = setTimeout(() => el.classList.remove("glow"), 650); timers.push(t); });
+  };
   const set = (id, state, quote) => { const s = S(id); s.state = state; s.quote = quote; drawSide(); if (id === selected) drawHead(); };
   const select = (id) => { selected = id; drawSide(); drawHead(); };
 
@@ -229,7 +238,7 @@
 
   const play = async (my) => {
     const alive = () => running && my === cycle;
-    reset(); spinT = 0; spinTok = 0; spinWord = "Boondoggling"; welcome = true;
+    reset(); today = 2; todayEl.textContent = today; spinT = 0; spinTok = 0; spinWord = "Boondoggling"; welcome = true;
     setView("focus"); voice.classList.remove("on");
     cursor.classList.remove("on"); cursor.style.transform = `translate(${root.offsetWidth * 0.6}px, ${root.offsetHeight * 0.85}px)`;
     S("checkout").state = "ready"; drawSide(); drawHead();
@@ -237,7 +246,7 @@
     setScreen([], false); await wait(600);
     await typeInput([], "Add a gift card to the checkout, plus tests"); if (!alive()) return;
     await wait(350);
-    set("checkout", "working"); welcome = false;
+    set("checkout", "working"); welcome = false; brainPulse("checkout");
     const chk = SCREENS.checkout.slice(2);
     setScreen([["prompt", "❯ Add a gift card to the checkout, plus tests"]], true);
     await wait(500);
@@ -276,6 +285,8 @@
       await wait(380); if (!alive()) return;
       pump(["checkout", "flaky", "limiter"][step % 3]);
       if (step === 2) { set("sparks", "done"); setTileState("sparks"); for (let k = 0; k < 5; k++) pump("sparks"); toast("Sparks is done · 3 files changed", "done"); }
+      if (step === 4) brainPulse("sparks", true);   // its session journal goes to the Brain
+      if (step === 9) brainPulse("lead");            // the lead reads the project card
       if (step === 7) {
         sessions.splice(sessions.indexOf(S("lead")) + 1, 0,
           { id: "h1", name: "Helper · tests", tool: "shell", g: "orbit", state: "ready", where: "orbit-api", parent: "lead", fresh: true },
@@ -309,7 +320,7 @@
     await typeScreen(git, true, 260, 10); if (!alive()) return;
     set("checkout", "done"); setScreen(git.concat([["spin done", "✻ Done in 6s"]]), false);
     await wait(500);
-    toast("✦ Session journal proposed to the Second Brain", "brain");
+    toast("✦ Session journal proposed to the Second Brain", "brain"); brainPulse("checkout", true);
     await wait(3400); if (!alive()) return;
     root.classList.add("fade"); await wait(450); root.classList.remove("fade");
     if (alive()) play(my);

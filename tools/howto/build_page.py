@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "public" / "assets" / "howto"
 PAGE = ROOT / "public" / "howto.html"
-VERSION = "2026-11-09c"
+VERSION = "2026-11-09d"
 
 spec = importlib.util.spec_from_file_location("guides", ROOT / "tools" / "howto" / "guides.py")
 guides = importlib.util.module_from_spec(spec)

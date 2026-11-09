@@ -565,3 +565,10 @@ Brain was one line of grey text checked once at start (it could say « connected
   proposals with their outcome, Brain keys…, Check now. A key is given when a session starts (its MCP setup), so the
   panel has no « give a key » to a running session.
 - Captures: the stand-in Brain answers proposals; new step `brain-visible` (brain-lights, brain-panel). Tests 77 OK.
+
+## Loop 22 done: the website shows the Brain too (2026-11-09)
+The hero's sidebar ends on the same badge as the app (« Second Brain ● connected, 5 of 5 agents linked, N proposals
+today »); the ✦ next to each session is full violet when it documents, soft otherwise, and badge and ✦ pulse when a
+session uses the Brain (Checkout flow orients, Sparks and Checkout flow propose their journal and the count goes up).
+The Brain section shows the new panel capture; the Docs describe the badge and the lights. `tools/site.sh` captures
+`brain-visible` too; `--check` all green (5.7 MB). Edge renders checked.

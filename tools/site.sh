@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ "${1:-}" != "--check" ]]; then
   # the home page's screenshots, then one run per How-to guide
-  tools/showcase.sh hero new-session agents repos brain-keys review voice sandboxes palette
+  tools/showcase.sh hero new-session agents repos brain-keys brain-visible review voice sandboxes palette
   tools/showcase.sh $(python3 tools/howto/guides.py --ids | tr ' ' '\n' | sed 's/^/howto-/')
   python3 tools/howto/build_page.py
 fi

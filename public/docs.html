@@ -10,7 +10,7 @@
   <meta property="og:description" content="Every coding agent. One control room. Your Second Brain in every session.">
   <meta property="og:image" content="assets/showcase/hero-grid.webp">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=2026-11-09b">
+  <link rel="stylesheet" href="css/style.css?v=2026-11-09d">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -253,8 +253,8 @@
 
         <h2 id="brain">The Second Brain</h2>
         <p>When <a href="https://github.com/sonixz/second-brain-gd" rel="noopener">Second Brain GD</a> runs on the same
-          computer, the status bar says <i>✦ Second Brain connected</i>, and each Claude Code or Codex session can share
-          it:</p>
+          computer, the badge at the bottom left says <i>✦ Second Brain ● connected</i>, with how many agents are linked
+          and how many proposals they made today, and each Claude Code or Codex session can share it:</p>
         <ul>
           <li><b>A key per session</b>, named <i>Agent Manager · &lt;session&gt;</i>, at the « propose » level: it reads and
             searches the Brain; what it proposes waits for the Brain's archivist and your rules. The key is given at
@@ -265,6 +265,12 @@
             Code): the agent orients in the Brain first (project card, last session journal, open questions, recent
             decisions, your documentation guidelines), checks them against <code>git log</code> and the live sessions, then
             proposes your words, decisions and a session journal at each milestone.</li>
+          <li><b>The ✦ light</b> on each card, Grid tile and in the header: <i>✧</i> faint, no Brain; soft violet, a key
+            of its own; violet, it documents; amber, it documents but has proposed nothing for a while (ask it for its
+            journal); soft red, its key no longer works or the Brain stopped. It pulses when the session just used the
+            Brain; hover it for its calls and proposals. The badge is checked every 10 seconds and opens a small panel:
+            every session's light, the latest proposals and how they ended. Agent Manager reads these counts from the
+            Brain and keeps only titles and numbers, never a key.</li>
           <li><b>Keys</b>: <b>··· › Keys</b> lists every Brain key Agent Manager made and what uses it; unused ones can be
             revoked, one by one or all at once, always confirmed.</li>
           <li><b>In the cloud</b>: a sandbox reaches the Brain through its SSH tunnel and the engine, with a secret of its
@@ -399,6 +405,6 @@
       <span><a href="index.html">Home</a> · <a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
     </div>
   </footer>
-  <script src="js/main.js?v=2026-11-09b"></script>
+  <script src="js/main.js?v=2026-11-09d"></script>
 </body>
 </html>
