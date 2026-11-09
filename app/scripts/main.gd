@@ -870,12 +870,20 @@ func _small(text: String, cb: Callable, tip := "") -> Button:
 	return b
 
 
+## A folder under the home folder is shown as ~/… (Linux, where the app and the engine share HOME).
+func short_path(p: String) -> String:
+	var home := OS.get_environment("HOME") if OS.get_name() != "Windows" else ""
+	if home != "" and home != "/" and (p == home or p.begins_with(home + "/")):
+		return "~" + p.substr(home.length())
+	return p
+
+
 func _render_header() -> void:
 	var s := _session(selected)
 	header_name.text = str(s.get("name", "Agent Manager GD"))
 	var meta := ""
 	if s:
-		meta = "%s  ·  %s" % [s["tool_label"], s["cwd"]]
+		meta = "%s  ·  %s" % [s["tool_label"], short_path(str(s["cwd"]))]
 		if str(s.get("branch", "")) != "":
 			meta += "  ·  ⎇ " + str(s["branch"])
 		if s.get("brain", false):
@@ -1232,7 +1240,7 @@ func _history_row(h: Dictionary) -> Control:
 	elif archived:
 		top.add_child(_small("Restore", func() -> void: _resume(id, ""), "Back to the sidebar, a fresh shell"))
 	var meta := Label.new()
-	meta.text = "%s  ·  %s%s  ·  made %s%s" % [h["tool_label"], h["cwd"], ("  ·  " + str(h["grp"])) if str(h["grp"]) != "" else "", _date(float(h["created"])), ("  ·  fork of " + str(h["parent"])) if str(h.get("parent", "")) != "" else ""]
+	meta.text = "%s  ·  %s%s  ·  made %s%s" % [h["tool_label"], short_path(str(h["cwd"])), ("  ·  " + str(h["grp"])) if str(h["grp"]) != "" else "", _date(float(h["created"])), ("  ·  fork of " + str(h["parent"])) if str(h.get("parent", "")) != "" else ""]
 	meta.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 	meta.add_theme_font_size_override("font_size", 12)
 	v.add_child(meta)
@@ -2207,7 +2215,7 @@ func _repo_folder_row(r: Dictionary) -> Control:
 	var f: Dictionary = r.get("folder", {})
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var shown := _win_path(str(f.get("path", "")))
+	var shown := short_path(_win_path(str(f.get("path", ""))))
 	var label := ""
 	if shown == "":
 		label = "Folder: Agent Manager clones it on first use"

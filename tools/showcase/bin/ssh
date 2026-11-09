@@ -1,0 +1,12 @@
+#!/bin/sh
+# Website screenshots only: git's SSH for the fictional git@github.com:acme/<project>.git repositories, served from
+# their local bare copies ($SHOWCASE_REMOTES). Anything else is refused; nothing reaches the network.
+cmd=""; for a in "$@"; do cmd="$a"; done
+case "$cmd" in
+  git-upload-pack*|git-receive-pack*)
+    prog=${cmd%% *}
+    name=$(basename "$(printf '%s' "${cmd#* }" | tr -d "'\"")")
+    exec "$prog" "$SHOWCASE_REMOTES/$name" ;;
+esac
+echo "showcase ssh: only git is served here" >&2
+exit 255

@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Manager GD</title>
+  <meta name="description" content="Agent Manager GD: every AI coding agent in one control room. Claude Code, Codex and shells in real terminals that never die, live states, an MCP server so agents pilot agents, a git manager with automatic deploy keys, native voice, cloud sandboxes, and your Second Brain in every session.">
+  <meta name="theme-color" content="#172331">
+  <meta property="og:title" content="Agent Manager GD">
+  <meta property="og:description" content="Every coding agent. One control room. Your Second Brain in every session.">
+  <meta property="og:image" content="assets/showcase/hero-grid.webp">
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css?v=2026-11-09">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <nav class="nav" aria-label="Main">
+      <a class="brand" href="#top" aria-label="Agent Manager GD, back to top">
+        <img src="assets/logo.svg" alt="" width="30" height="30">
+        <span>AGENT MANAGER <b>GD</b></span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links">
+        <span class="sr-only">Menu</span><span aria-hidden="true">☰</span>
+      </button>
+      <ul id="nav-links" class="nav-links">
+        <li><a href="#control-room">Control room</a></li>
+        <li><a href="#brain">Second Brain</a></li>
+        <li><a href="#mcp">MCP</a></li>
+        <li><a href="#git">Git &amp; SSH</a></li>
+        <li><a href="#voice">Voice</a></li>
+        <li><a href="#cloud">Cloud</a></li>
+        <li><a href="howto.html">How-to</a></li>
+        <li><a href="docs.html">Docs</a></li>
+        <li><a href="https://github.com/sonixz/agent-manager-gd" class="nav-cta" rel="noopener">GitHub</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main">
+    <!-- HERO -->
+    <section class="hero" id="top">
+      <canvas class="hero-matrix" aria-hidden="true"></canvas>
+      <div class="hero-grid">
+        <div>
+          <p class="overline">AI-native · Voice · Local-first · Open source</p>
+          <h1>AGENT MANAGER <span class="accent">GD</span></h1>
+          <p class="tagline">Every coding agent. One control room.</p>
+          <p class="lead">Run Claude Code, Codex and your shells side by side in real terminals that never die. See at a
+            glance who is working, who waits for your OK and who has a question. Agents start agents, git handles its
+            own keys, you talk to it, and your Second Brain is in every session.</p>
+          <div class="ticker" aria-live="off"></div>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="docs.html#install">Get started</a>
+            <a class="btn" href="howto.html">How-to guides</a>
+          </div>
+          <ul class="stats" aria-label="Project facts">
+            <li><b>76</b> engine tests</li>
+            <li><b>28</b> loops shipped</li>
+            <li><b>6</b> MCP tools</li>
+            <li><b>7</b> themes</li>
+          </ul>
+        </div>
+        <figure class="screen">
+          <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="light working"></span>4 agents · Grid view</div>
+          <img src="assets/showcase/hero-grid.webp" width="1920" height="1200" alt="Agent Manager GD in Grid view: Claude Code writing a gift card feature, another Claude Code waiting for permission to run a command, a third asking a multiple-choice question about rate limits, and a shell running the test suite. On the left, the sessions in groups, with « They wait for you » on top.">
+        </figure>
+      </div>
+    </section>
+
+    <!-- CONTROL ROOM -->
+    <section id="control-room" class="section section-alt">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="overline">The control room</p>
+          <h2>Ten agents, and you still know who needs you</h2>
+          <p>Every session is a real terminal (the Ghostty terminal engine, drawn by Godot) running in its own tmux:
+            close the app, reboot, come back, and every agent is where you left it.</p>
+        </div>
+
+        <div class="feature reveal">
+          <div>
+            <span class="tag">Live states</span>
+            <h3>They wait for you, on top</h3>
+            <p>Claude Code and Codex report what they are doing, through their own hooks. Agent Manager turns it into
+              lights you read from across the room.</p>
+            <ul>
+              <li><span class="light working"></span><b>working</b> · <span class="light ok"></span><b>waits for your OK</b> · <span class="light asks"></span><b>asks you something</b> · <span class="light done"></span><b>done</b></li>
+              <li><b>Approve</b>, <b>Refuse</b> or <b>Reply…</b> from the list, without opening the session.</li>
+              <li>A toast when someone starts waiting; <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> approves the first one.</li>
+            </ul>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/focus-working.webp" width="1920" height="1200" loading="lazy" alt="Focus view: a Claude Code session writing tests for a gift card, its state « working » in the header; the left column shows two sessions waiting, one for an OK and one for an answer.">
+          </figure>
+        </div>
+
+        <div class="feature flip reveal">
+          <div>
+            <span class="tag">Views</span>
+            <h3>Focus, Grid, Board</h3>
+            <p>One terminal full screen, four side by side, or a live tile per session with a preview of its screen.
+              Groups by project, drag to reorder, fold what you are not watching.</p>
+            <ul>
+              <li><b>Command palette</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>): every action, by name.</li>
+              <li><b>Seven themes</b> for the interface and the terminal colours.</li>
+              <li><b>Never lose a conversation</b>: Resume, Fork…, History of every session ever made.</li>
+            </ul>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/board.webp" width="1920" height="1200" loading="lazy" alt="Board view: a tile per session with a live preview of its terminal and its state.">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECOND BRAIN -->
+    <section id="brain" class="section">
+      <div class="container">
+        <div class="section-head center reveal">
+          <p class="overline">Better together</p>
+          <h2>Your Second Brain, in every session</h2>
+          <p>Agents forget everything when their window closes. Agent Manager wires each one to
+            <a href="https://github.com/sonixz/second-brain-gd" rel="noopener">Second Brain GD</a>, so what one agent
+            learns, the next one knows, and so do you.</p>
+        </div>
+
+        <div class="together reveal">
+          <div class="side">
+            <h3>◆ Agent Manager GD</h3>
+            <p class="muted">Runs the agents. Gives each one its own Brain key at launch, says how to document the
+              work, and keeps each session's summary.</p>
+          </div>
+          <div class="bridge" aria-hidden="true">
+            <span>MCP · one key per session</span>
+            <span>⇄</span>
+            <span>proposals · never writes</span>
+          </div>
+          <div class="side brain">
+            <h3>✦ Second Brain GD</h3>
+            <p class="muted">Keeps the project: vision, decisions, the owner's words, where things stand. Its
+              archivist files every proposal with your rules, and you see who proposed what.</p>
+          </div>
+        </div>
+
+        <div class="cards reveal" style="margin-top: 28px">
+          <article class="card"><h3><span class="icon">✦</span>A key per session</h3>
+            <p>Each Claude Code or Codex session gets its own MCP key, named after it, at the « propose » level: it
+              reads and searches your Brain, and what it proposes waits for the archivist. A fork gets its own key;
+              removing the session revokes it.</p></article>
+          <article class="card"><h3><span class="icon">↳</span>Sessions that document themselves</h3>
+            <p>Tick « Document this session in the Brain »: the agent orients in the Brain first (project card,
+              last journal, open questions), checks it against <code>git log</code>, then proposes your words,
+              decisions and a session journal at each milestone.</p></article>
+          <article class="card"><h3><span class="icon">⟲</span>Context that survives</h3>
+            <p><b>Wrap up</b> asks the agent for its own summary (done, decisions, files, what is left, how to
+              continue), proposed to the Brain. The next session in that folder starts from it in one click.</p></article>
+          <article class="card"><h3><span class="icon">☁</span>Even in the cloud</h3>
+            <p>A cloud sandbox reaches your Brain through its SSH tunnel and the engine, with a secret of its own.
+              The Brain's keys never leave your computer.</p></article>
+        </div>
+
+        <div class="feature reveal" style="margin-top: clamp(48px, 7vw, 80px)">
+          <div>
+            <span class="tag">New session</span>
+            <h3>Two ticks, and the agent knows the project</h3>
+            <p>Name it, pick the tool and the folder (or a connected repository), and choose what it gets: the
+              Second Brain, a journal of its own work, its own git branch, Remote Control from your phone.</p>
+            <p class="small muted">Everything goes through the Brain's archivist. Nothing is written behind your back,
+              nothing is ever erased.</p>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/new-session.webp" width="1920" height="1200" loading="lazy" alt="The New session dialog: name, tool (Claude Code), folder, « Share the Second Brain » and « Document this session in the Brain as it works » ticked, « In its own git branch », Remote Control.">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- MCP -->
+    <section id="mcp" class="section section-alt">
+      <div class="container">
+        <div class="feature reveal">
+          <div>
+            <p class="overline">MCP server</p>
+            <h2>Agents pilot agents</h2>
+            <p class="muted">Every agent session is offered Agent Manager's own MCP server. A lead agent can look at
+              any session and start helpers of its own: they show up in your list, « ↳ Lead », in real terminals you
+              can take over at any time.</p>
+            <div class="term" role="img" aria-label="The six MCP tools"><span class="c"># agent-manager, offered to every agent</span>
+<span class="k">list_sessions</span>      every session, its tool, folder, state
+<span class="k">session_status</span>     working · waits for OK · asks · done
+<span class="k">read_screen</span>        what any terminal shows right now
+<span class="k">start_session</span>      a child session: Claude Code, Codex, shell
+<span class="k">send_to_session</span>    <span class="s">its own children only</span>
+<span class="k">wait_for_session</span>   until a child is done or waits</div>
+            <p class="small muted" style="margin-top: 14px">No tool presses keys in someone else's session: an agent
+              never approves on another's behalf. « Connect other tools » gives the same server to any MCP client
+              outside the app, read and start only.</p>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/agents.webp" width="1920" height="1200" loading="lazy" alt="A lead Claude Code session and two helper sessions it started through the MCP server, shown in a grid, each marked « ↳ Lead » in the list.">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- GIT & SSH -->
+    <section id="git" class="section">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="overline">Git manager · SSH, handled</p>
+          <h2>Git that sets up its own keys</h2>
+          <p>Connect a repository and Agent Manager makes an SSH deploy key for it alone, checks it, and gives it to
+            the sessions on that repository. No <code>~/.ssh</code> to edit, no key shared between projects.</p>
+        </div>
+
+        <div class="feature reveal">
+          <div>
+            <span class="tag">Connected repositories</span>
+            <h3>One repository, one key</h3>
+            <ul>
+              <li><b>Add the SSH address</b>: an ed25519 deploy key is made for it, its public half shown to paste in
+                GitHub's <i>Deploy keys</i>.</li>
+              <li><b>Checked for you</b>: read access, write access, the right <code>origin</code>.</li>
+              <li><b>Passed through <code>GIT_SSH_COMMAND</code></b> to that repository's sessions only (its own
+                known_hosts, <code>IdentitiesOnly</code>). Nothing written to <code>~/.ssh</code> or to the repository's config.</li>
+              <li><b>Your own clone</b>: « I already have it », or « clone it » where you choose. Rotate or disconnect any time.</li>
+            </ul>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/repos.webp" width="1920" height="1200" loading="lazy" alt="The Repos tab: connected repositories with their deploy key fingerprint, the check result (read and write OK), the local folder and the sessions using each one.">
+          </figure>
+        </div>
+
+        <div class="feature flip reveal">
+          <div>
+            <span class="tag">Review</span>
+            <h3>Review what the agent did, line by line</h3>
+            <p>The session's changes file by file, coloured, with line numbers: uncommitted, since the session
+              started, or its branch against the target. Click a line to comment it; <b>Send review</b> hands the
+              agent one numbered request.</p>
+            <ul>
+              <li><b>A branch per session</b>: <code>am/&lt;name&gt;</code> in its own worktree, so agents never step on each other.</li>
+              <li><b>Finish its git branch…</b>: what is ahead, merge it (a conflicting merge is undone), remove the worktree.</li>
+            </ul>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/review.webp" width="1920" height="1200" loading="lazy" alt="The Review view: the gift card change, file by file, with two comments on lines of code waiting to be sent to the agent.">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- VOICE -->
+    <section id="voice" class="section section-alt">
+      <div class="container">
+        <div class="feature reveal">
+          <div>
+            <p class="overline">Native voice</p>
+            <h2>Talk to your agents</h2>
+            <p class="muted">Hold <kbd>F8</kbd> and speak: your words land in the active agent's prompt, as a paste,
+              never sent until you press Enter. Hold <kbd>F9</kbd> to run the control room by voice, in English or
+              French.</p>
+            <div class="cards" style="grid-template-columns: 1fr 1fr; margin: 18px 0">
+              <article class="card"><h3><span class="icon">F8</span>Dictation</h3><p>Into the prompt of the active session. About $0.003 a minute with your OpenAI key, shown.</p></article>
+              <article class="card"><h3><span class="icon">F9</span>Commands</h3><p>« approve Flaky tests », « who is waiting? », « grid view », « wrap up Docs ». Plain rules, no model.</p></article>
+            </div>
+            <p class="small muted">Approving, refusing and wrapping up always ask for a visible confirmation.
+              <b>Spoken status</b> (off by default) uses your system's own voice, offline: « Sparks is done ».</p>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/voice.webp" width="1920" height="1200" loading="lazy" alt="Dictation: the listening overlay with a level meter above a Claude Code session, « release F8 to write it ».">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLOUD -->
+    <section id="cloud" class="section">
+      <div class="container">
+        <div class="feature flip reveal">
+          <div>
+            <p class="overline">Cloud sandboxes</p>
+            <h2>A throw-away machine per agent</h2>
+            <p class="muted">Give a risky task its own Fly.io machine, ready in about 30 seconds, with your Fly token.
+              Its terminal opens like any session; the same SSH connection carries the tunnel to your Second Brain.</p>
+            <ul class="muted">
+              <li><b>The image, explained</b>: Ubuntu, tmux, git, SSH by keys only, Node, Python, Claude Code, Codex.</li>
+              <li><b>The cost before you deploy</b>, then measured from the machine's history, with a chart and a budget.</li>
+              <li><b>Caps that only pause</b>; nothing is ever destroyed except by you, after seeing what is not pushed.</li>
+            </ul>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/sandboxes.webp" width="1920" height="1200" loading="lazy" alt="The Sandboxes tab: the image and what it holds, deploy with an estimate first, this month's costs with a chart against the budget.">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- MORE -->
+    <section class="section section-alt">
+      <div class="container">
+        <div class="section-head center reveal">
+          <p class="overline">And also</p>
+          <h2>The small things that make it home</h2>
+        </div>
+        <div class="cards reveal">
+          <article class="card"><h3><span class="icon">📱</span>Remote Control</h3><p>On by default for Claude Code: follow and drive a session from claude.ai/code or the Claude app, named « Group · Session ».</p></article>
+          <article class="card"><h3><span class="icon">▤</span>An impeccable terminal</h3><p>Accents, true colour, emoji, mouse, OSC 52 copy (sign-in links copy whole). A change that degrades it is a bug.</p></article>
+          <article class="card"><h3><span class="icon">Σ</span>Usage</h3><p>Tokens per session, per day and per tool, read from the agents' own logs on your computer.</p></article>
+          <article class="card"><h3><span class="icon">⌨</span>Your shortcuts</h3><p>Change any of them. With Shift they work everywhere, since a terminal keeps plain Ctrl keys for its programs.</p></article>
+          <article class="card"><h3><span class="icon">✓</span>Setup check</h3><p>What is found, what is missing, and the command to run yourself. Nothing downloaded behind your back.</p></article>
+          <article class="card"><h3><span class="icon">⚿</span>Your keys, encrypted</h3><p>OpenAI, Fly.io, Anthropic: encrypted for your Windows user (DPAPI), never shown again, never logged.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRINCIPLES -->
+    <section class="section">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="overline">Principles</p>
+          <h2>Your tools, your login, your computer</h2>
+        </div>
+        <div class="principles reveal">
+          <article class="card"><h3>Local-first</h3><p>Nothing leaves your computer unless you ask. The engine listens on 127.0.0.1 with a token.</p></article>
+          <article class="card"><h3>Your own agents</h3><p>Claude Code and Codex run as you installed them, with your login and your config. Agent Manager never reads, copies or relays a subscription token.</p></article>
+          <article class="card"><h3>No admin, no surprises</h3><p>Installs for your user only. Third-party binaries only with your OK, pinned and checked against a published checksum.</p></article>
+          <article class="card"><h3>Open source</h3><p>MIT licence. Godot in front, Python's standard library behind, tmux underneath.</p></article>
+        </div>
+
+        <div class="section-head reveal" style="margin-top: clamp(56px, 8vw, 96px)">
+          <p class="overline">Architecture</p>
+          <h2>Godot in front, Python behind, tmux underneath</h2>
+        </div>
+        <div class="arch reveal">
+          <div class="box"><h3>Godot app</h3><p>The window, the native terminal (libghostty-vt), views, voice. Windows or Linux.</p></div>
+          <div class="box"><h3>Local engine</h3><p><code>python3 -m engine</code>, standard library only: sessions, hooks, keys, git, MCP, sandboxes.</p></div>
+          <div class="box"><h3>tmux</h3><p>A private server (<code>tmux -L agmgd</code>): sessions outlive the app, in WSL on Windows.</p></div>
+          <div class="box"><h3>Your tools</h3><p>Claude Code, Codex, git, ssh, flyctl, Second Brain GD: found, never bundled.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt">
+      <div class="container narrow center reveal">
+        <h2>Ready when you are</h2>
+        <p class="muted">Windows (with WSL) or Linux. Unzip, run the installer for your user, and the Setup check
+          tells you what is missing.</p>
+        <div class="hero-actions" style="justify-content: center">
+          <a class="btn btn-primary" href="docs.html#install">Install it</a>
+          <a class="btn" href="howto.html#first-minutes">Your first five minutes</a>
+          <a class="btn" href="https://github.com/sonixz/second-brain-gd" rel="noopener">✦ Second Brain GD</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <span>Agent Manager GD · MIT licence · part of <a href="https://github.com/sonixz/gd-project" rel="noopener">GD Project</a></span>
+      <span><a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
+    </div>
+  </footer>
+  <script src="js/main.js?v=2026-11-09"></script>
+</body>
+</html>

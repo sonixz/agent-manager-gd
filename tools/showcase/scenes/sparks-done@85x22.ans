@@ -1,0 +1,23 @@
+          amount = _base_amount * mult
+          speed_scale = _base_speed_scale * mult
+          restart()
+
+  - [1mNormal values come from the scene.[0m In [38;5;153m_ready()[39m the script saves the spark count
+    and speed the node starts with. Each burst works from those saved values, so a
+    crit followed by a normal strike goes back to normal instead of doubling again.
+  - [1mSpeed-up method:[0m I made the sparks faster with [38;5;153mspeed_scale[39m. That also makes them
+    burn out in half the time. If you'd rather they travel faster but last just as
+    long, I can raise their launch velocity instead.
+  - [1mEffect on [38;5;153mcool_down()[39m:[0m it still sets the count to 8, but the next burst now
+    resets the count to the scene's starting value. If cool-down is meant to keep
+    later strikes smaller, that's worth checking.
+  - [1mHooking it up:[0m nothing in the project calls [38;5;153mburst()[39m yet, so the strike code needs
+    to call [38;5;153mburst(true)[39m on a crit.
+
+[38;5;246m✻[39m [38;5;246mCooked for 19s · done 11:20 PM[39m
+
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────
+[39m❯ [2mcommit this[0m
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────
+[39m  [38;5;220m⏵⏵ auto mode on[38;5;246m (shift+tab to cycle) · ← 2 agents[39m
+

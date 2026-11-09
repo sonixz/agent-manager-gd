@@ -382,3 +382,34 @@ project up later (vision, decisions, the owner's words, where things stand) whil
   the first full run and passed five times alone and in the next full run: the known intermittent one.
 - Open: how the Brain accepts an update of an existing item (the directive asks for one; to check with the Brain).
 
+
+## Loop 17: the website's foundations and its showcase (2026-11-08)
+
+Owner's request: a site like Second Brain's (`second-brain-gd/public`), with a touch of Agent Manager's own, beautiful
+screenshots, How-to and Docs first, and « un index de feu » that puts forward the MCP server, the git manager, the
+automatic SSH keys, the native voice, and the Second Brain. Plan: docs/brief/PLAN.md, Loops 17–21.
+- **`public/`**: `index.html` (hero « Every coding agent. One control room. », control room, Second Brain « Better
+  together », MCP, Git & SSH, voice, cloud, the small things, principles, architecture), `howto.html` and `docs.html`
+  as honest « being written » pages (Loops 19 and 20), `css/style.css` on the app's Focus palette, `js/main.js` (no
+  dependency, no network: reveal, lightbox, the hero's live state ticker, a background wall of tiny terminals, the docs'
+  scroll-spy), `assets/logo.svg`, `.gdignore`. 2.1 MB.
+- **`tools/showcase.sh [step…]`**: the real app on a private Xvfb at 1920×1200, a fresh fictional workspace per step
+  (`tools/showcase/make_workspace.sh`: user « dev », its own HOME and prompt, projects acme-store / orbit-api /
+  pixel-forge in `~/code` with commits by `dev@example.com`), Brain off, demo Fly, its own port, data and tmux socket.
+  Steps in `app/tools_showcase.gd`: hero (grid, focus, board), new-session, agents, repos, review, voice, sandboxes,
+  palette (and three themes). Screenshots saved as webp by Godot itself (nothing to download); reports in
+  `build/showcase/` (ignored).
+- **Agent screens are real**: `tools/showcase/record.sh` ran the owner's own Claude Code and Codex on the fictional
+  projects (small tasks: a gift card, a flaky test, a rate-limit question, sparks, a README, a release plan), saved
+  each screen at the two terminal sizes the views use (174×50 Focus, 85×22 Grid) with the paths scrubbed to `~/code`
+  (padded inside boxes so they keep their columns) and a check for anything personal. In the showcase, `claude` and
+  `codex` are `tools/showcase/bin/agent-replay`, which shows the recorded screen that fits and redraws on resize.
+- **Connected repositories without network**: the projects' origins are `git@github.com:acme/<p>.git`; in the showcase
+  only, `tools/showcase/bin/ssh` serves them from local bare copies, so « connected » and « origin ✓ » are real checks.
+- **App**: a folder under HOME shows as `~/…` in the header, History and the Repos tab (Linux; unchanged on Windows).
+- Pitfalls: a pipe after Godot hangs because the engine outlives it (write to a file); `[[ … ]] && …` as the last line
+  of a function under `set -e` ends the script; `url.insteadOf` also rewrites `git remote get-url` (origin looked
+  « another repository »); the recording Codex asked to self-update (skipped; `-c check_for_update_on_startup=false`);
+  the first recording Claude ran `npx vitest` in the scratch project (later prompts say « read and write files only »).
+- Tests: 76 (one skipped). The voice overlay's microphone emoji shows as a box on the virtual display (no emoji font
+  there).

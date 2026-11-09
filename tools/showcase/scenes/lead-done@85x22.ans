@@ -1,0 +1,23 @@
+    returns placeholder data. The changelog entry says so plainly and lists the
+    missing pieces as known limitations.
+  - [1mOption B: ship what the commits promise.[0m Six things block the release: real pass
+    computation, the HTTP endpoint, enforcing the 1–72 hour range, longitude
+    validation, the 60 requests/min limit, and a version string.
+
+  The file also has a test checklist: boundary values, ordering of pass times,
+  checking results against a known pass, 429 responses from the rate limit, and HTTP
+  status codes. It includes a draft changelog entry for each option and the release
+  steps.
+
+  You asked me to stick to reading and writing files, so I didn't run the test suite.
+
+  Which option you take decides what goes in the changelog. I'd go with A if the date
+  is fixed and B if it can slip.
+
+[38;5;246m✻[39m [38;5;246mBrewed for 35s · done 11:32 PM[39m
+
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────
+[39m❯ [2mgo with Option A[0m
+[38;5;244m─────────────────────────────────────────────────────────────────────────────────────
+[39m  [38;5;220m⏵⏵ auto mode on[38;5;246m (shift+tab to cycle) · ← 2 agents[39m
+

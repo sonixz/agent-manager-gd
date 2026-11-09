@@ -1,0 +1,51 @@
+
+[38;5;246m[48;5;237m❯ [38;5;231mYou lead the 0.5 release of this API. Read the code and git log, then write a short release plan in RELEASE.md: what ships, what to test, and the changelog entry. Read and[39m
+  [38;5;231mwrite files only.[39m
+
+[49m  [38;5;246mRan [1m2[0m[38;5;246m shell commands [39m
+
+[38;5;114m●[39m [1mWrite[0m(]8;id=16kodcj;file:///home/dev/code/orbit-api/RELEASE.md\RELEASE.md]8;;\)
+[38;5;246m  ⎿  [39mWrote [1m92[0m lines to [1m]8;id=16kodcj;file:///home/dev/code/orbit-api/RELEASE.md\RELEASE.md[0m]8;;\
+     [2m[38;5;231m  1 [0m[38;5;231m# Orbit API 0.5 — Release Plan[39m
+     [2m[38;5;231m  2 [0m
+     [2m[38;5;231m  3 [0m[38;5;231mStatus: **not ready to ship as described.** Three commits are on `main` since the[39m
+     [2m[38;5;231m  4 [0m[38;5;231mproject started (`2ea3176`, `850a39f`, `b24010a`). Their commit messages describe[39m
+     [2m[38;5;231m  5 [0m[38;5;231mmore than the code actually does. This plan sets out what is really there.[39m
+     [2m[38;5;231m  6 [0m
+     [2m[38;5;231m  7 [0m[38;5;231m## What the code actually contains
+[39m     [2m[38;5;231m  8 [0m
+     [2m[38;5;231m  9 [0m[38;5;231m| Commit | Message | What is in the code |[39m
+     [2m[38;5;231m 10 [0m[38;5;231m|---|---|---|[39m
+     [38;5;246m… +82 lines [39m
+
+[38;5;231m●[39m I wrote [38;5;153mRELEASE.md[39m. Most of what the commit messages describe isn't in the code yet, so I don't think 0.5 is ready to ship as "endpoint + 72-hour predictions + rate
+  limits."
+
+  [1mWhat's actually on [38;5;153mmain[39m:[0m
+  - [1m"Pass predictions endpoint" ([38;5;153m2ea3176[39m):[0m [38;5;153mnext_passes()[39m checks the latitude, then returns one hardcoded pass. There's no HTTP layer at all, even though the README says "over
+    HTTP."
+  - [1m"Rate limits, first draft" ([38;5;153m850a39f[39m):[0m [38;5;153morbit/limits.py[39m is a single comment. Nothing is implemented.
+  - [1m"Predictions up to 72 hours" ([38;5;153mb24010a[39m):[0m it adds [38;5;153mMAX_HOURS = 72[39m, but nothing reads it. The [38;5;153mhours[39m argument is ignored too.
+  - [1mOther gaps:[0m longitude isn't validated, there's no version string, and there's no changelog yet. The three existing tests pass against the hardcoded result, so they don't
+    show the predictions are right.
+
+  [1mThe plan offers two options:[0m
+  - [1mOption A: ship now.[0m Release [38;5;153mnext_passes()[39m as an experimental function that returns placeholder data. The changelog entry says so plainly and lists the missing pieces as
+    known limitations.
+  - [1mOption B: ship what the commits promise.[0m Six things block the release: real pass computation, the HTTP endpoint, enforcing the 1–72 hour range, longitude validation, the
+    60 requests/min limit, and a version string.
+
+  The file also has a test checklist: boundary values, ordering of pass times, checking results against a known pass, 429 responses from the rate limit, and HTTP status
+  codes. It includes a draft changelog entry for each option and the release steps.
+
+  You asked me to stick to reading and writing files, so I didn't run the test suite.
+
+  Which option you take decides what goes in the changelog. I'd go with A if the date is fixed and B if it can slip.
+
+[38;5;246m✻[39m [38;5;246mBrewed for 35s · done 11:32 PM[39m
+
+[38;5;244m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m❯ [2mgo with Option A[0m
+[38;5;244m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m  [38;5;220m⏵⏵ auto mode on[38;5;246m (shift+tab to cycle) · ← 2 agents[39m
+

@@ -1,0 +1,51 @@
+
+[38;5;246m  ⎿  [39m scripts/sparks.gd | 14 +++++++++++++-
+      1 file changed, 13 insertions(+), 1 deletion(-)
+[38;5;246m  ⎿  [39mUpdated [1mscripts/sparks.gd[0m [38;5;246m(+13 -1)[39m
+     [2m[38;5;231m  1 [0m[38;5;231m extends GPUParticles2D[39m
+     [2m[38;5;231m  2 [0m[38;5;231m [39m
+     [38;5;167m[48;5;52m  3 -[38;5;231mfunc burst() -> void:                                                                                                                                        [39m[49m
+     [38;5;77m[48;5;22m  3 +[38;5;231mconst CRIT_MULTIPLIER := 2                                                                                                                                   [39m[49m
+     [38;5;77m[48;5;22m  4 +[38;5;231m                                                                                                                                                             [39m[49m
+     [38;5;77m[48;5;22m  5 +[38;5;231mvar _base_amount: int                                                                                                                                        [39m[49m
+     [38;5;77m[48;5;22m  6 +[38;5;231mvar _base_speed_scale: float                                                                                                                                 [39m[49m
+     [38;5;77m[48;5;22m  7 +[38;5;231m                                                                                                                                                             [39m[49m
+     [38;5;77m[48;5;22m  8 +[38;5;231mfunc _ready() -> void:                                                                                                                                       [39m[49m
+     [38;5;77m[48;5;22m  9 +[38;5;231m        _base_amount = amount                                                                                                                                [39m[49m
+     [38;5;77m[48;5;22m 10 +[38;5;231m        _base_speed_scale = speed_scale                                                                                                                      [39m[49m
+     [38;5;77m[48;5;22m 11 +[38;5;231m                                                                                                                                                             [39m[49m
+     [38;5;77m[48;5;22m 12 +[38;5;231mfunc burst(crit: bool = false) -> void:                                                                                                                      [39m[49m
+     [38;5;77m[48;5;22m 13 +[38;5;231m        var mult := CRIT_MULTIPLIER if crit else 1                                                                                                           [39m[49m
+     [38;5;77m[48;5;22m 14 +[38;5;231m        amount = _base_amount * mult                                                                                                                         [39m[49m
+     [38;5;77m[48;5;22m 15 +[38;5;231m        speed_scale = _base_speed_scale * mult                                                                                                               [39m[49m
+     [2m[38;5;231m 16 [0m[38;5;231m         restart()[39m
+     [2m[38;5;231m 17 [0m[38;5;231m [39m
+     [2m[38;5;231m 18 [0m[38;5;231m func cool_down() -> void:[39m
+[38;5;246m  ⎿  (files that changed while this command ran, by the command or by another process; a convenience view, not a review or audit of the command)[39m
+
+
+[38;5;231m●[39m I added a [38;5;153mcrit[39m flag to [38;5;153mburst()[39m in [38;5;153mscripts/sparks.gd[39m. [38;5;153mburst(true)[39m now fires twice as many sparks at twice the speed. Plain [38;5;153mburst()[39m works exactly as before, so nothing that
+  already calls it needs to change. I didn't run Godot, as you said.
+
+  [2mgdscript[0m
+  func burst(crit: bool = false) -> void:
+          var mult := CRIT_MULTIPLIER if crit else 1
+          amount = _base_amount * mult
+          speed_scale = _base_speed_scale * mult
+          restart()
+
+  - [1mNormal values come from the scene.[0m In [38;5;153m_ready()[39m the script saves the spark count and speed the node starts with. Each burst works from those saved values, so a crit
+    followed by a normal strike goes back to normal instead of doubling again.
+  - [1mSpeed-up method:[0m I made the sparks faster with [38;5;153mspeed_scale[39m. That also makes them burn out in half the time. If you'd rather they travel faster but last just as long, I
+    can raise their launch velocity instead.
+  - [1mEffect on [38;5;153mcool_down()[39m:[0m it still sets the count to 8, but the next burst now resets the count to the scene's starting value. If cool-down is meant to keep later strikes
+    smaller, that's worth checking.
+  - [1mHooking it up:[0m nothing in the project calls [38;5;153mburst()[39m yet, so the strike code needs to call [38;5;153mburst(true)[39m on a crit.
+
+[38;5;246m✻[39m [38;5;246mCooked for 19s · done 11:20 PM[39m
+
+[38;5;244m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m❯ [2mcommit this[0m
+[38;5;244m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m  [38;5;220m⏵⏵ auto mode on[38;5;246m (shift+tab to cycle) · ← 2 agents[39m
+

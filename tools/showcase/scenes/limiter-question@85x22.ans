@@ -1,0 +1,23 @@
+[48;5;237m  [38;5;231mwith your question tool: should the limit be per API key or per IP address, and [39m
+  [38;5;231mwhat happens when a client goes over it?[39m
+[38;5;246m[49m─────────────────────────────────────────────────────────────────────────────────────
+← [38;5;16m[48;5;153m ☐ Client key [39m[49m ☐ Over limit  ✔ Submit  →
+
+[2m│[0m [1m[38;5;231mFor the per-client rate limits in orbit/limits.py, how should a "client" be [0m
+[2m│[0m [1m[38;5;231midentified?[0m
+
+[38;5;153m❯[39m [38;5;246m1.[39m [38;5;153mPer API key[39m
+     [38;5;246mEach API key gets its own bucket. Fair to shared-IP users (NAT, offices), but [39m
+     [38;5;246mneeds every request to be authenticated.[39m
+  [38;5;246m2.[39m Per IP address
+     [38;5;246mBucket by client IP. Works for anonymous traffic, but users behind NAT share a [39m
+     [38;5;246mlimit and a proxy needs X-Forwarded-For handling.[39m
+  [38;5;246m3.[39m API key, IP fallback
+     [38;5;246mUse the API key when one is present, otherwise fall back to the client IP for [39m
+     [38;5;246munauthenticated requests.[39m
+  [38;5;246m4. Type something.[39m
+[38;5;246m─────────────────────────────────────────────────────────────────────────────────────
+[39m  5. Chat about this
+
+[38;5;246mEnter to select · Tab/Arrow keys to navigate · Esc to cancel[39m
+

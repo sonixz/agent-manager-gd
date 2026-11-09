@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Website screenshots only: stands in for an agent CLI and shows a recorded real screen (tools/showcase/scenes).
+The scene comes from $SHOWCASE_MAP/<session id> (written by app/tools_showcase.gd), or idle-<tool>. Each scene is
+recorded at the terminal sizes the screenshots use (<scene>@<cols>x<rows>.ans); the one that fits is shown, again
+whenever the terminal is resized."""
+import glob, os, re, select, shutil, signal, sys, time
+
+tool = os.path.basename(sys.argv[1] if len(sys.argv) > 1 else "claude")
+sid = os.environ.get("AGMGD_SESSION", "")
+scenes = os.environ.get("SHOWCASE_SCENES", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scenes"))
+mp = os.path.join(os.environ.get("SHOWCASE_MAP", "/nonexistent"), sid)
+scene = ""
+for _ in range(150):
+    if sid and os.path.exists(mp):
+        scene = open(mp).read().strip()
+        break
+    time.sleep(0.1)
+
+
+def variants(name):
+    found = []
+    for p in glob.glob(os.path.join(scenes, name + "@*.ans")):
+        m = re.search(r"@(\d+)x(\d+)\.ans$", p)
+        if m:
+            found.append((int(m.group(1)), int(m.group(2)), p))
+    return found
+
+
+def pick():
+    cols, rows = shutil.get_terminal_size((80, 24))
+    vs = variants(scene) or variants(f"idle-{tool}")
+    if not vs:
+        return None
+    fit = [v for v in vs if v[0] <= cols and v[1] <= rows]
+    return (max(fit, key=lambda v: v[0] * v[1]) if fit else min(vs, key=lambda v: v[0] * v[1]))[2]
+
+
+def draw(*_):
+    p = pick()
+    data = open(p, "rb").read() if p else f"{tool}: no recorded scene\n".encode()
+    out = sys.stdout.buffer
+    out.write(b"\x1b[H\x1b[2J\x1b[?25l")
+    out.write(data.rstrip(b"\n").replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    out.flush()
+
+
+sys.stdout.buffer.write(b"\x1b[?1049h")
+signal.signal(signal.SIGWINCH, draw)
+draw()
+while True:  # keystrokes are ignored; the screen stays as recorded
+    try:
+        r, _, _ = select.select([sys.stdin], [], [], 3600)
+        if r:
+            os.read(0, 1024)
+    except InterruptedError:
+        pass
+    except OSError:
+        time.sleep(1)
