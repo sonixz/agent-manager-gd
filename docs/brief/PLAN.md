@@ -178,3 +178,8 @@ Détails : `docs/brief/SANDBOX.md`. Mêmes règles qu'avant (tests, captures, ra
 - Chaque carte : compteur « on for … » en direct, pastilles machine / terminal / tunnel SSH (latence) / MCP Second
   Brain, la branche, les fichiers non commités et les commits non poussés, l'état de l'agent, ses coûts.
 - Règle : une sandbox a toujours sa session à gauche ; archiver ou « wrap up » est refusé tant qu'elle existe.
+
+### À venir · Sécurité des agents locaux (consigné, rien de construit)
+- Le propriétaire veut encadrer ce qu'un agent local peut toucher (fichiers hors du projet, installations de paquets,
+  code lancé ailleurs). Constat, options (règles de Claude Code, sandbox bubblewrap, sandbox de Codex) et proposition
+  d'un réglage « Accès » par session : docs/brief/AGENT-SECURITY.md. À discuter avant toute construction.
