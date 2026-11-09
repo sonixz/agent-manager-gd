@@ -518,3 +518,23 @@ Owner: « Oui, cadence-toi pour Loop 19 et 20. »
     The voice guide said « encrypted »: fixed.
   - The « ⋯ » menu glyph showed as « --- » in the site's fonts: written « ··· » now.
 - Rendered with Edge headless.
+
+## Loop 21: the website's finish (2026-11-09)
+
+Owner: « Go pour 21. »
+- **One command**: `tools/site.sh` remakes the whole site. It runs the home page's screenshots, one run per How-to
+  guide, then the generated How-to page, then the checks. `tools/site.sh --check` runs the checks only:
+  - every guide step has its screenshot;
+  - every link to a section leads somewhere, and every page linked exists;
+  - every image file exists and has a text alternative;
+  - nothing personal in the capture reports;
+  - the weight is under 10 MB.
+  Run in full once: 58 screenshots, everything green, 5.4 MB.
+- **Accessibility**: the screenshots open full size from the keyboard too (Tab, then Enter or Space). Escape closes
+  the lightbox and gives the focus back to the screenshot. Each page has one h1, `lang`, a skip link, and alt text on
+  every image (checked).
+- **Mobile**: measured in the page at 477, 781 and 1241 px on the three pages: nothing is wider than the screen.
+  Below 600 px, the How-to guide cards are compact (thumbnail beside the title).
+- Home page: 33 loops. README: a « The website » section.
+- Tests: 76, one skipped. One run out of five had a failure that did not come back in four reruns. It is noted as
+  flaky, but the test is not identified.

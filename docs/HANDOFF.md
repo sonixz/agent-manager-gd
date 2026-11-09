@@ -41,9 +41,9 @@ with AGENTS.md (the rules), README.md (what the app does), DEVLOG.md (every loop
 - His last test round (the list he got on 2026-11-08): repos « Change folder… » to C:\git-2026\gd-project + « Add it
   as origin », Remote Control in claude.ai/code (untested for real), stale state after Esc, voice F8/F9, copy, a real
   sandbox (its live health checks never ran on a real machine yet), Remove and forget's confirmation.
-- Website (docs/brief/PLAN.md « Le site public », asked by the owner on 2026-11-08): Loops 17–20 done (public/, captures
+- Website (docs/brief/PLAN.md « Le site public », asked by the owner on 2026-11-08): Loops 17–21 done (public/, captures
   with `tools/showcase.sh`, a stand-in Brain for them; How-to: `tools/howto/guides.py` → `python3 tools/howto/build_page.py`,
-  screenshots with `tools/showcase.sh howto-<guide>`). Docs: `public/docs.html` (hand-written). Next: Loop 21 polish.
+  screenshots with `tools/showcase.sh howto-<guide>`). Docs: `public/docs.html` (hand-written). All of it: `tools/site.sh` (checks only: `--check`). Waits on the owner: his read-through; English only and nothing published are defaults he has not confirmed.
 - Proposed, not started: the ✦ Brain tab (formerly « Loop 17 »: a ✦ Brain tab: connection, who holds a key, proposals from our sessions, timeline,
   settings; a first-run « Are you using Second Brain? »; « Resume all » after a reboot). Agent security:
   docs/brief/AGENT-SECURITY.md, recorded only, **do not build until he asks**.

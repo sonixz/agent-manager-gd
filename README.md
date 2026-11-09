@@ -7,7 +7,7 @@ shows its live state, revives on its own conversation, forks, and works in its o
 wired to your [Second Brain](https://github.com/sonixz/second-brain-gd) over MCP, so what one agent learns, the next
 one knows.
 
-Status: **alpha.** Open source under the MIT licence (`LICENSE`). Loops 1 to 15 of the plan (`docs/brief/PLAN.md`) are done; the story is in `DEVLOG.md`.
+Status: **alpha.** Open source under the MIT licence (`LICENSE`). The plan is `docs/brief/PLAN.md`; the story, loop by loop, is in `DEVLOG.md`.
 
 ## Install (Windows)
 
@@ -110,6 +110,13 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   Ctrl keys for its programs): Ctrl+Shift+K command palette · Ctrl+Shift+N new session · Ctrl+Shift+F / G / B Focus,
   Grid, Board · Ctrl+Shift+↑ / ↓ previous / next session · Ctrl+Shift+A approve the first waiting session.
   In a terminal: Ctrl+Shift+C / V copy and paste, Shift+drag selects even when the program uses the mouse.
+
+## The website
+
+`public/` is the project's website: the home page, 12 How-to guides with a real screenshot per step, and the Docs.
+Open `public/index.html` in a browser. It is not published anywhere. `tools/site.sh` remakes it all in one command:
+every screenshot from the real app on a private virtual display (a fictional workspace, the agents' real recorded
+screens), the How-to page from `tools/howto/guides.py`, then the checks (links, images, nothing personal, weight).
 
 Tests: `python3 -m unittest discover -s tests/python -t .`; the app end to end on a virtual display:
 `tools/app_shots.sh <out-dir> [a folder Claude Code already trusts]`.

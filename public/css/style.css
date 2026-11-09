@@ -385,3 +385,10 @@ p { margin: 0 0 1em; }
 .lv-voice .said { grid-column: 1 / -1; font-family: "JetBrains Mono", var(--mono); font-weight: 500; font-size: 1.5cqw; color: var(--mint-soft); min-height: 1.5em; }
 .live.calm .lv-cursor { transition: opacity .01s; }
 .lv-term .typed { color: var(--text); }
+@media (max-width: 600px) {
+  .guide-cards { gap: 10px; }
+  .guide-card { flex-direction: row; align-items: center; }
+  .guide-card img { width: 38%; flex: none; border-bottom: 0; border-right: 1px solid var(--border); }
+  .guide-card > span { padding: 10px 12px; }
+  .guide-card span span { display: none; }
+}

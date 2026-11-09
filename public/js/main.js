@@ -32,15 +32,22 @@
   const big = document.createElement("img");
   box.appendChild(big);
   document.body.appendChild(box);
-  const close = () => box.classList.remove("open");
+  const close = () => { if (!box.classList.contains("open")) return; box.classList.remove("open"); if (opener) opener.focus(); };
   box.addEventListener("click", close);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  let opener = null;  // where the keyboard focus goes back when the lightbox closes
+  const openBox = (src, alt, from) => { big.src = src; big.alt = alt; box.classList.add("open"); opener = from; box.focus(); };
+  box.tabIndex = -1;
   document.querySelectorAll(".screen img, .shot img").forEach((img) => {
-    img.addEventListener("click", () => { big.src = img.currentSrc || img.src; big.alt = img.alt; box.classList.add("open"); });
+    img.tabIndex = 0;  // screenshots open full size from the keyboard too
+    img.setAttribute("role", "button");
+    img.setAttribute("aria-label", "Open full size: " + (img.alt || "screenshot"));
+    img.addEventListener("click", () => openBox(img.currentSrc || img.src, img.alt, img));
+    img.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openBox(img.currentSrc || img.src, img.alt, img); } });
   });
 
   document.querySelectorAll("a.live-real").forEach((a) => a.addEventListener("click", (e) => {
-    e.preventDefault(); big.src = a.href; big.alt = "Agent Manager GD in Grid view, the real app"; box.classList.add("open");
+    e.preventDefault(); openBox(a.href, "Agent Manager GD in Grid view, the real app", a);
   }));
 
   // Hero ticker: what the left column tells you, as it happens

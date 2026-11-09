@@ -222,5 +222,5 @@ terminaux vivants), une section « Better together » avec Second Brain, les deu
 - Référence avec menu latéral : installation, concepts, chaque fonction, clés et dotenvx, dépôts et deploy keys,
   sandboxes, voix, Second Brain, outils MCP, API HTTP locale, sécurité et vie privée, dépannage.
 
-### Loop 21 · Finition
+### Loop 21 · Finition (fait le 2026-11-09 ; Loops 17 à 21 faites, reste la relecture du propriétaire)
 - Liens, accessibilité, mobile, poids (< 10 Mo), toutes les captures en une commande, relecture avec le propriétaire.
