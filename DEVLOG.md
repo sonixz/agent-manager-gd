@@ -469,7 +469,7 @@ Owner: « Je voyais une animation dynamique… clean, animée, rapide… juste s
     prompt: « commit this and push the branch », then the commit and the push with the repository's own deploy key.
   - The ✦ journal is proposed to the Brain.
 
-## Loop 19: How-to, the guides (2026-11-09, in progress)
+## Loop 19: How-to, the guides (2026-11-09)
 
 Owner: « Oui, cadence-toi pour Loop 19 et 20. »
 - **Guides as data**: `tools/howto/guides.py` holds each guide's goal, what you need, and its steps (what you do,
@@ -490,3 +490,13 @@ Owner: « Oui, cadence-toi pour Loop 19 et 20. »
   Second Brain's own screenshot.
 - Pitfall: a repository picked in New session fills the folder with its full path. The demo's is a temporary folder,
   so the capture shows `~/code/…`.
+- **3 more guides**: follow a session from your phone (Remote Control), run an agent in a cloud sandbox (demo Fly),
+  themes and shortcuts. That makes **12 guides and 42 screenshots**. The page puts guides in their groups' order, as
+  the side menu does.
+- Left out, on purpose:
+  - A copy guide: selecting with the mouse in the native terminal does not script well, so copying goes to the Docs.
+  - A sandbox step showing a session « in » a sandbox: the demo cannot attach a session to a demo machine, so it
+    would have been a false screenshot.
+  - The Setup check page: in the demo it would show the showcase's own tool paths.
+- Checked: every guide has its screenshots (`guides.py --check`), the personal-text check is clean, and the page was
+  rendered with Edge headless. Site: 5.3 MB.

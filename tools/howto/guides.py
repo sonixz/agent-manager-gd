@@ -234,6 +234,55 @@ guide(
      ("Document is greyed out.", "Claude Code only for now, on this computer.")],
     [("Second Brain", "docs.html#brain")])
 
+guide(
+    "remote-control", "Follow a session from your phone", "Agents", 2,
+    "Keep an eye on a Claude Code session, and answer it, from claude.ai/code or the Claude app while you are away.",
+    ["Claude Code signed in with a Claude account that has Remote Control"],
+    [("In New session, keep <b>Remote Control: also on claude.ai/code and the Claude app</b> ticked (it is on by "
+      "default for Claude Code).",
+      "The session is started with Claude Code's own Remote Control, under the name <i>Group · Session</i>, so you "
+      "recognise it on the other side."),
+     ("Start it, then open claude.ai/code or the Claude app on your phone.",
+      "Its card shows <i>⇄ claude.ai</i>. The same conversation is there, live: read it, answer it. Back at your "
+      "desk, the terminal shows what happened."),
+     ],
+    [("The session is not on claude.ai.", "Remote Control is Claude Code's own feature and needs your Claude "
+      "account to have it. Untick it for sessions that should stay on this computer only.")],
+    [("Remote Control", "docs.html#remote-control")])
+
+guide(
+    "sandbox", "Run an agent in a cloud sandbox", "Cloud", 6,
+    "Give an agent a throw-away machine on Fly.io, see what it costs as it runs, and keep a budget that only pauses.",
+    ["A Fly.io account and its API token in <b>⋯ › Keys</b>",
+     "An Anthropic API key (Claude Code) or OpenAI key (Codex) in Keys, for the agent in the cloud"],
+    [("Open <b>☁ Sandboxes</b>.",
+      "Three steps: the image (what it holds: Ubuntu, tmux, git, Claude Code, Codex), deploy with an estimate first, "
+      "and this month's costs against your budget. Below, a live card per sandbox: the machine, the SSH tunnel and "
+      "its latency, the branch, files not committed, commits not pushed, and what it cost today."),
+     ("Click <b>Deploy + agentic coding session</b>, or pick <b>☁ A cloud sandbox</b> under <b>Where</b> in New "
+      "session.",
+      "The same dialog as for this computer. The machine starts in about 30 seconds; the session's terminal is the "
+      "agent's terminal in the cloud, through an SSH tunnel. It reaches your Second Brain through that tunnel, with a "
+      "key of its own."),
+     ],
+    [("Deploy is refused.", "The month's budget is reached: raise it, or wait. Budgets and caps only pause machines, "
+      "never destroy them."),
+     ("Costs differ from Fly's invoice.", "Agent Manager measures running time from Fly's machine history × the "
+      "published price. The invoice stays on Fly's dashboard.")],
+    [("Cloud sandboxes", "docs.html#sandboxes"), ("Keys", "docs.html#keys")], real=False)
+
+guide(
+    "make-it-yours", "Themes and shortcuts", "Start", 2,
+    "Pick a look among seven themes and change any shortcut.",
+    [],
+    [("Click <b>◐</b> at the top, or type <span class=\"say\">theme</span> in the command palette.",
+      "Seven themes, the same as Second Brain's: interface and terminal colours change together. Here, Neon."),
+     ("Open <b>⋯ › Shortcuts</b>, click an action, and press the new key.",
+      "Every shortcut, and the voice keys (hold to talk). With <kbd>Shift</kbd> added, they also work inside a "
+      "terminal."),
+     ],
+    [], [("Shortcuts", "docs.html#shortcuts")], real=False)
+
 def by_id(gid: str) -> dict:
     for g in GUIDES:
         if g["id"] == gid:

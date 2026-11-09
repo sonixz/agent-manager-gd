@@ -513,6 +513,61 @@ func _run() -> void:
 			img.resize(1280, 800, Image.INTERPOLATE_LANCZOS)
 			img.save_webp(OS.get_environment("SHOW_HOWTO").path_join(g).path_join("04.webp"), true, 0.88)
 			report.append("howto %s 04 (Second Brain's own screenshot)" % g)
+		"howto-remote-control":
+			var g := "remote-control"
+			main.select(made["Checkout flow"])
+			await wait(1.5)
+			await main._open_new("", "claude")
+			await wait(0.5)
+			main.f_name.text = "Night run"
+			main.f_cwd.text = "~/code/orbit-api"
+			await wait(0.6)
+			await hshot(g, 1)
+			main.new_dialog.hide()
+			var rc: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Night run", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true, "remote": true})
+			_map(str(rc["id"]), "lead-done")
+			_state(str(rc["id"]), "claude", DONE)
+			await wait(1.5)
+			await main.refresh()
+			main.select(str(rc["id"]))
+			await wait(2.5)
+			await hshot(g, 2)
+		"howto-sandbox":
+			var g := "sandbox"
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
+			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
+			_map(str(a["id"]), "limiter-question")
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), OS.get_environment("AGMGD_HOME"), str(a["id"]), str(b["id"])], [])
+			await main.refresh()
+			main.set_view("sandboxes")
+			await wait(3.0)
+			await main._load_sandboxes()
+			await wait(2.5)
+			await hshot(g, 1)
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			await wait(1.5)
+			await main._open_new("", "claude")
+			await wait(0.5)
+			for i in main.f_where.item_count:
+				if str(main.f_where.get_item_text(i)).contains("cloud"):
+					main.f_where.select(i)
+					main.f_where.item_selected.emit(i)
+			main.f_name.text = "Load tests, round 2"
+			await wait(0.6)
+			await hshot(g, 2)
+			main.new_dialog.hide()
+		"howto-make-it-yours":
+			var g := "make-it-yours"
+			await main.set_theme_name("neon")
+			main.grid_ids = [made["Checkout flow"], made["Flaky tests"], made["Rate limiter"], made["Test runner"]]
+			main.set_view("grid")
+			await wait(3.0)
+			await hshot(g, 1)
+			await main.set_theme_name("focus")
+			main.set_view("shortcuts")
+			await wait(2.0)
+			await hshot(g, 2)
 	for x in main.sessions.duplicate():
 		await main.engine.call_api("DELETE", "/sessions/%s" % x["id"])
 	var f := FileAccess.open(OS.get_environment("SHOW_REPORTS").path_join("report-%s.txt" % OS.get_environment("SHOW_STEP")), FileAccess.WRITE)

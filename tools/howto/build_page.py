@@ -19,11 +19,7 @@ guides = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guides)  # type: ignore[union-attr]
 
 # Planned guides not written yet (shown as « coming » so the page says what it will hold)
-PLANNED = [("Resume, fork and work in a branch", "Work"), ("Connect a repository (SSH deploy key)", "Git"),
-           ("Dictate and command by voice", "Voice"), ("Let an agent start helpers (MCP)", "Agents"),
-           ("Follow a session from your phone", "Agents"), ("A session that documents itself in the Brain", "Second Brain"),
-           ("Run an agent in a cloud sandbox", "Cloud"), ("Usage, costs and budgets", "Cloud"),
-           ("Copy from a terminal", "Work")]
+PLANNED: list[tuple[str, str]] = []
 
 
 def esc(s: str) -> str:
@@ -155,7 +151,8 @@ def page(done: list[dict], coming: list[tuple[str, str]]) -> str:
 
 
 if __name__ == "__main__":
-    done = [g for g in guides.GUIDES if ready(g)]
+    order = list(dict.fromkeys(g["group"] for g in guides.GUIDES))  # groups in order of first appearance
+    done = sorted((g for g in guides.GUIDES if ready(g)), key=lambda g: order.index(g["group"]))
     missing = [g for g in guides.GUIDES if not ready(g)]
     titles = {g["title"] for g in guides.GUIDES}
     coming = [(g["title"], g["group"]) for g in missing] + [p for p in PLANNED if p[0] not in titles]

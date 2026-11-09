@@ -62,6 +62,10 @@
           <img src="assets/howto/views/04.webp" width="1280" height="800" loading="lazy" alt="">
           <span><b>Focus, Grid and Board</b><span>See one agent, four at once, or a live tile for every session, and move between them with the keyboard.</span><small>3 min · 4 steps</small></span>
         </a>
+        <a class="guide-card" href="#make-it-yours">
+          <img src="assets/howto/make-it-yours/02.webp" width="1280" height="800" loading="lazy" alt="">
+          <span><b>Themes and shortcuts</b><span>Pick a look among seven themes and change any shortcut.</span><small>2 min · 2 steps</small></span>
+        </a>
         <a class="guide-card" href="#review">
           <img src="assets/howto/review/04.webp" width="1280" height="800" loading="lazy" alt="">
           <span><b>Review a diff and send comments</b><span>Read what an agent changed, file by file, comment on lines, and send your comments to it in one go.</span><small>4 min · 4 steps</small></span>
@@ -82,9 +86,17 @@
           <img src="assets/howto/agents/03.webp" width="1280" height="800" loading="lazy" alt="">
           <span><b>Let an agent start helpers (MCP)</b><span>Have a lead agent split a job and start helper sessions of its own, which you can watch and take over.</span><small>4 min · 3 steps</small></span>
         </a>
+        <a class="guide-card" href="#remote-control">
+          <img src="assets/howto/remote-control/02.webp" width="1280" height="800" loading="lazy" alt="">
+          <span><b>Follow a session from your phone</b><span>Keep an eye on a Claude Code session, and answer it, from claude.ai/code or the Claude app while you are away.</span><small>2 min · 2 steps</small></span>
+        </a>
         <a class="guide-card" href="#brain-document">
           <img src="assets/howto/brain-document/04.webp" width="1280" height="800" loading="lazy" alt="">
           <span><b>A session that documents itself in the Brain</b><span>Start an agent that reads where the project stands in your Second Brain, then proposes your words, its decisions and a journal as it works.</span><small>4 min · 4 steps</small></span>
+        </a>
+        <a class="guide-card" href="#sandbox">
+          <img src="assets/howto/sandbox/02.webp" width="1280" height="800" loading="lazy" alt="">
+          <span><b>Run an agent in a cloud sandbox</b><span>Give an agent a throw-away machine on Fly.io, see what it costs as it runs, and keep a budget that only pauses.</span><small>6 min · 2 steps</small></span>
         </a>
       </div>
     </section>
@@ -94,6 +106,7 @@
         <a href="#first-minutes">Your first five minutes</a>
         <a href="#answer-fast">Answer without opening a terminal</a>
         <a href="#views">Focus, Grid and Board</a>
+        <a href="#make-it-yours">Themes and shortcuts</a>
         <p class="group">Work</p>
         <a href="#review">Review a diff and send comments</a>
         <a href="#history">Resume, fork and find any conversation</a>
@@ -103,8 +116,11 @@
         <a href="#voice">Talk to your agents</a>
         <p class="group">Agents</p>
         <a href="#agents">Let an agent start helpers (MCP)</a>
+        <a href="#remote-control">Follow a session from your phone</a>
         <p class="group">Second Brain</p>
         <a href="#brain-document">A session that documents itself in the Brain</a>
+        <p class="group">Cloud</p>
+        <a href="#sandbox">Run an agent in a cloud sandbox</a>
       </nav>
       <div class="guides">
       <article class="guide" id="first-minutes">
@@ -190,6 +206,25 @@
         </ol>
         <details class="trouble" open><summary>If it does not work</summary><ul><li><b>A shortcut does nothing in a terminal.</b> In a terminal, plain <kbd>Ctrl</kbd> keys belong to its programs: add <kbd>Shift</kbd>. You can change any shortcut in <b>⋯ › Shortcuts</b>.</li></ul></details>
         <p class="guide-next">More in the Docs: <a href="docs.html#views">Views</a> · <a href="docs.html#shortcuts">Shortcuts</a></p>
+      </article>
+
+      <article class="guide" id="make-it-yours">
+        <p class="guide-meta"><span>Start</span><span>2 min</span><span>2 steps</span><span class="badge" title="Only the app matters in this guide">App only</span></p>
+        <h2>Themes and shortcuts</h2>
+        <p class="goal">Pick a look among seven themes and change any shortcut.</p>
+        
+        <ol class="steps">
+          <li>
+            <div class="step-text"><p class="do">Click <b>◐</b> at the top, or type <span class="say">theme</span> in the command palette.</p><p class="see">Seven themes, the same as Second Brain's: interface and terminal colours change together. Here, Neon.</p></div>
+            <figure class="shot"><img src="assets/howto/make-it-yours/01.webp" width="1280" height="800" loading="lazy" alt="Themes and shortcuts, step 1 of 2: Seven themes, the same as Second Brain&#x27;s: interface and terminal colours change together. Here, Neon."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Open <b>⋯ › Shortcuts</b>, click an action, and press the new key.</p><p class="see">Every shortcut, and the voice keys (hold to talk). With <kbd>Shift</kbd> added, they also work inside a terminal.</p></div>
+            <figure class="shot"><img src="assets/howto/make-it-yours/02.webp" width="1280" height="800" loading="lazy" alt="Themes and shortcuts, step 2 of 2: Every shortcut, and the voice keys (hold to talk). With Shift added, they also work inside a terminal."></figure>
+          </li>
+        </ol>
+        
+        <p class="guide-next">More in the Docs: <a href="docs.html#shortcuts">Shortcuts</a></p>
       </article>
 
       <article class="guide" id="review">
@@ -323,6 +358,25 @@
         <p class="guide-next">More in the Docs: <a href="docs.html#mcp">The MCP server</a></p>
       </article>
 
+      <article class="guide" id="remote-control">
+        <p class="guide-meta"><span>Agents</span><span>2 min</span><span>2 steps</span><span class="badge real" title="The agents' screens are real Claude Code and Codex screens, recorded on a fictional project and replayed">Real screens</span></p>
+        <h2>Follow a session from your phone</h2>
+        <p class="goal">Keep an eye on a Claude Code session, and answer it, from claude.ai/code or the Claude app while you are away.</p>
+        <div class="note"><b>You need</b><ul><li>Claude Code signed in with a Claude account that has Remote Control</li></ul></div>
+        <ol class="steps">
+          <li>
+            <div class="step-text"><p class="do">In New session, keep <b>Remote Control: also on claude.ai/code and the Claude app</b> ticked (it is on by default for Claude Code).</p><p class="see">The session is started with Claude Code's own Remote Control, under the name <i>Group · Session</i>, so you recognise it on the other side.</p></div>
+            <figure class="shot"><img src="assets/howto/remote-control/01.webp" width="1280" height="800" loading="lazy" alt="Follow a session from your phone, step 1 of 2: The session is started with Claude Code&#x27;s own Remote Control, under the name Group · Session, so you recognise it on the other side."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Start it, then open claude.ai/code or the Claude app on your phone.</p><p class="see">Its card shows <i>⇄ claude.ai</i>. The same conversation is there, live: read it, answer it. Back at your desk, the terminal shows what happened.</p></div>
+            <figure class="shot"><img src="assets/howto/remote-control/02.webp" width="1280" height="800" loading="lazy" alt="Follow a session from your phone, step 2 of 2: Its card shows ⇄ claude.ai. The same conversation is there, live: read it, answer it. Back at your desk, the terminal shows what happened."></figure>
+          </li>
+        </ol>
+        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>The session is not on claude.ai.</b> Remote Control is Claude Code's own feature and needs your Claude account to have it. Untick it for sessions that should stay on this computer only.</li></ul></details>
+        <p class="guide-next">More in the Docs: <a href="docs.html#remote-control">Remote Control</a></p>
+      </article>
+
       <article class="guide" id="brain-document">
         <p class="guide-meta"><span>Second Brain</span><span>4 min</span><span>4 steps</span><span class="badge real" title="The agents' screens are real Claude Code and Codex screens, recorded on a fictional project and replayed">Real screens</span></p>
         <h2>A session that documents itself in the Brain</h2>
@@ -350,8 +404,25 @@
         <p class="guide-next">More in the Docs: <a href="docs.html#brain">Second Brain</a></p>
       </article>
 
-        <h2 class="coming-title">Coming next</h2>
-        <ul class="coming"><li><span>Work</span>Resume, fork and work in a branch</li><li><span>Voice</span>Dictate and command by voice</li><li><span>Agents</span>Follow a session from your phone</li><li><span>Cloud</span>Run an agent in a cloud sandbox</li><li><span>Cloud</span>Usage, costs and budgets</li><li><span>Work</span>Copy from a terminal</li></ul>
+      <article class="guide" id="sandbox">
+        <p class="guide-meta"><span>Cloud</span><span>6 min</span><span>2 steps</span><span class="badge" title="Only the app matters in this guide">App only</span></p>
+        <h2>Run an agent in a cloud sandbox</h2>
+        <p class="goal">Give an agent a throw-away machine on Fly.io, see what it costs as it runs, and keep a budget that only pauses.</p>
+        <div class="note"><b>You need</b><ul><li>A Fly.io account and its API token in <b>⋯ › Keys</b></li><li>An Anthropic API key (Claude Code) or OpenAI key (Codex) in Keys, for the agent in the cloud</li></ul></div>
+        <ol class="steps">
+          <li>
+            <div class="step-text"><p class="do">Open <b>☁ Sandboxes</b>.</p><p class="see">Three steps: the image (what it holds: Ubuntu, tmux, git, Claude Code, Codex), deploy with an estimate first, and this month's costs against your budget. Below, a live card per sandbox: the machine, the SSH tunnel and its latency, the branch, files not committed, commits not pushed, and what it cost today.</p></div>
+            <figure class="shot"><img src="assets/howto/sandbox/01.webp" width="1280" height="800" loading="lazy" alt="Run an agent in a cloud sandbox, step 1 of 2: Three steps: the image (what it holds: Ubuntu, tmux, git, Claude Code, Codex), deploy with an estimate first, and this month&#x27;s costs against your budget. Below, a live card per sandbox: the machine, the SSH tunnel and its latency, the branch, files not committed, commits not pushed, and what it cost today."></figure>
+          </li>
+          <li>
+            <div class="step-text"><p class="do">Click <b>Deploy + agentic coding session</b>, or pick <b>☁ A cloud sandbox</b> under <b>Where</b> in New session.</p><p class="see">The same dialog as for this computer. The machine starts in about 30 seconds; the session's terminal is the agent's terminal in the cloud, through an SSH tunnel. It reaches your Second Brain through that tunnel, with a key of its own.</p></div>
+            <figure class="shot"><img src="assets/howto/sandbox/02.webp" width="1280" height="800" loading="lazy" alt="Run an agent in a cloud sandbox, step 2 of 2: The same dialog as for this computer. The machine starts in about 30 seconds; the session&#x27;s terminal is the agent&#x27;s terminal in the cloud, through an SSH tunnel. It reaches your Second Brain through that tunnel, with a key of its own."></figure>
+          </li>
+        </ol>
+        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>Deploy is refused.</b> The month's budget is reached: raise it, or wait. Budgets and caps only pause machines, never destroy them.</li><li><b>Costs differ from Fly's invoice.</b> Agent Manager measures running time from Fly's machine history × the published price. The invoice stays on Fly's dashboard.</li></ul></details>
+        <p class="guide-next">More in the Docs: <a href="docs.html#sandboxes">Cloud sandboxes</a> · <a href="docs.html#keys">Keys</a></p>
+      </article>
+
       </div>
     </div>
   </main>
