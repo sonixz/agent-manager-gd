@@ -548,22 +548,33 @@ func _muted(t: String) -> Label:
 
 
 ## The folder picker (Windows' own dialog when available): it opens on the last folder chosen.
+var folder_target: Callable
+
+
 func _pick_folder() -> void:
+	_pick_folder_then(f_cwd.text, func(dir: String) -> void:
+		f_cwd.text = dir
+		_check_brief())
+
+
+## Opens the picker at `near` (or the last folder chosen) and gives the chosen folder (Windows form on Windows).
+func _pick_folder_then(near: String, done: Callable) -> void:
+	folder_target = done
 	if folder_dialog == null:
 		folder_dialog = FileDialog.new()
 		folder_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 		folder_dialog.access = FileDialog.ACCESS_FILESYSTEM
 		folder_dialog.use_native_dialog = true
-		folder_dialog.title = "Choose the session's folder"
+		folder_dialog.title = "Choose a folder"
 		folder_dialog.dir_selected.connect(func(dir: String) -> void:
-			f_cwd.text = dir.replace("/", "\\") if engine.on_windows else dir
 			_save("last_folder", dir)
-			_check_brief())
+			if folder_target.is_valid():
+				folder_target.call(dir.replace("/", "\\") if engine.on_windows else dir))
 		add_child(folder_dialog)
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS)
 	var start := str(cfg.get_value("ui", "last_folder", ""))
-	var typed := f_cwd.text.strip_edges()
+	var typed := near.strip_edges()
 	if typed.length() > 2 and (typed[1] == ":" or typed.begins_with("\\\\")):
 		start = typed
 	if start != "":
@@ -2114,21 +2125,39 @@ func _repos_view() -> Control:
 	url.placeholder_text = "git@github.com:owner/repo.git"
 	url.size_flags_horizontal = SIZE_EXPAND_FILL
 	form.add_child(url)
+	var where := OptionButton.new()
+	where.add_item("I already have it on this computer")
+	where.add_item("Clone it for me")
+	where.tooltip_text = "Your own clone is used as it is (no second copy); otherwise Agent Manager clones it in its data folder"
+	form.add_child(where)
+	var form2 := HBoxContainer.new()
+	form2.add_theme_constant_override("separation", 8)
+	v.add_child(form2)
 	var path := LineEdit.new()
-	path.placeholder_text = "local folder (optional: cloned on first use)"
-	path.custom_minimum_size = Vector2(340, 0)
-	form.add_child(path)
+	path.placeholder_text = "your folder: C:\\git-2026\\my-repo (its top folder)"
+	path.size_flags_horizontal = SIZE_EXPAND_FILL
+	form2.add_child(path)
+	var browse := _small("Browse…", func() -> void:
+		_pick_folder_then(path.text, func(dir: String) -> void: path.text = dir))
+	form2.add_child(browse)
+	where.item_selected.connect(func(i: int) -> void:
+		path.visible = i == 0
+		browse.visible = i == 0)
 	var add := Button.new()
-	add.text = "+ Add a repository"
+	add.text = "+ Add the repository"
 	add.pressed.connect(func() -> void:
-		var r := await engine.call_api("POST", "/repos", {"url": url.text.strip_edges(), "local_path": path.text.strip_edges()})
+		var own := where.selected == 0
+		if own and path.text.strip_edges() == "":
+			_toast("Choose your folder (Browse…), or « Clone it for me »")
+			return
+		var r := await engine.call_api("POST", "/repos", {"url": url.text.strip_edges(), "local_path": path.text.strip_edges() if own else ""})
 		if r.has("error"):
 			_toast(str(r["error"]))
 			return
 		url.text = ""
 		path.text = ""
 		await _load_repos())
-	form.add_child(add)
+	form2.add_child(add)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -2151,6 +2180,74 @@ func _load_repos() -> void:
 		repos_list.add_child(_repo_card(repo))
 	if repos_cache.is_empty():
 		repos_list.add_child(_muted("No repository yet."))
+
+
+## Where the repository lives on this computer: the owner's own clone or Agent Manager's copy, its origin, and
+## « Change folder… » (then the old copy can be removed, after showing what is in it).
+func _repo_folder_row(r: Dictionary) -> Control:
+	var rid := str(r["id"])
+	var f: Dictionary = r.get("folder", {})
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var shown := _win_path(str(f.get("path", "")))
+	var label := ""
+	if shown == "":
+		label = "Folder: Agent Manager clones it on first use"
+	elif bool(f.get("managed", false)):
+		label = "Folder: Agent Manager's copy · " + shown
+	else:
+		label = "Folder: yours · " + shown
+	var l := Label.new()
+	l.text = label
+	l.add_theme_font_size_override("font_size", 13)
+	row.add_child(l)
+	var o := str(f.get("origin_state", ""))
+	if o == "same":
+		var ok := _muted("origin ✓")
+		ok.add_theme_color_override("font_color", AmTheme.col("MINT"))
+		row.add_child(ok)
+	elif o == "missing":
+		var w := _muted("no remote yet")
+		w.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		row.add_child(w)
+		row.add_child(_small("Add it as origin", func() -> void:
+			var res := await engine.call_api("POST", "/repos/%s/origin" % rid, {})
+			_toast(str(res["error"]) if res.has("error") else "origin added: " + str(r["url"]))
+			await _load_repos(), "git remote add origin " + str(r["url"]) + " (nothing else is changed)"))
+	elif o == "other":
+		var x := _muted("origin is another repository: " + str(f.get("origin", "")))
+		x.add_theme_color_override("font_color", AmTheme.col("ERROR"))
+		row.add_child(x)
+	var change := _small("Change folder…", func() -> void:
+		_pick_folder_then(shown, func(dir: String) -> void:
+			var res := await engine.call_api("POST", "/repos/%s/folder" % rid, {"path": dir})
+			if res.has("error"):
+				_toast(str(res["error"]))
+				return
+			_toast("%s now uses %s" % [r["name"], dir])
+			if str(res.get("previous_copy", "")) != "":
+				await _offer_remove_copy(str(res["previous_copy"]))
+			await _load_repos()))
+	change.tooltip_text = "Use your own clone of this repository (a git repository's top folder, or an empty folder)"
+	row.add_child(change)
+	return row
+
+
+## On Windows, a WSL path of a Windows drive (/mnt/c/x) shown as the owner knows it (C:\x).
+func _win_path(p: String) -> String:
+	if engine.on_windows and p.length() > 6 and p.begins_with("/mnt/") and p[6] == "/":
+		return p[5].to_upper() + ":\\" + p.substr(7).replace("/", "\\")
+	return p
+
+
+func _offer_remove_copy(copy: String) -> void:
+	var c := await engine.call_api("POST", "/repos/copy/inspect", {"path": copy})
+	if c.has("error"):
+		return
+	var what := "Nothing in it would be lost." if c.get("clean", false) else ("It holds work that would be LOST:\n" + str(c.get("report", "")).left(800))
+	_confirm("Remove Agent Manager's old copy?\n%s\n\n%s" % [copy, what], func() -> void:
+		var d := await engine.call_api("POST", "/repos/copy/remove", {"path": copy, "confirmed": true})
+		_toast(str(d["error"]) if d.has("error") else "Old copy removed"))
 
 
 func _repo_card(r: Dictionary) -> Control:
@@ -2183,7 +2280,8 @@ func _repo_card(r: Dictionary) -> Control:
 				f_repo.select(i)
 				f_repo.item_selected.emit(i)
 		f_name.text = str(r["name"])))
-	var meta := _muted("%s   ·   %s   ·   key %s   ·   added %s%s" % [r["url"], (str(r["local_path"]) + (" (cloned)" if r["cloned"] else " (not cloned yet)")) if str(r["local_path"]) != "" else "cloned on first use", r["fingerprint"], _date(float(r["created"])), ("   ·   last used " + _date(float(r["last_used"]))) if float(r["last_used"]) > 0 else ""])
+	var meta := _muted("%s   ·   key %s   ·   added %s%s" % [r["url"], r["fingerprint"], _date(float(r["created"])), ("   ·   last used " + _date(float(r["last_used"]))) if float(r["last_used"]) > 0 else ""])
+	v.add_child(_repo_folder_row(r))
 	meta.add_theme_font_size_override("font_size", 12)
 	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(meta)

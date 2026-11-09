@@ -572,6 +572,18 @@ func _run() -> void:
 			for sb in ov.get("sandboxes", []):  # pause them: never destroyed by Agent Manager
 				await main.engine.call_api("POST", "/sandboxes/%s/stop" % sb["id"], {}, true, 120.0)
 			report.append("stopped (not destroyed): %d" % (ov.get("sandboxes", []) as Array).size())
+		"repos2":
+			# Loop 16d: the owner's own clone (no remote yet, like gd-project) and one cloned by Agent Manager
+			var mine := OS.get_environment("AGMGD_HOME").path_join("demo/gd-project")
+			OS.execute("bash", ["-c", "mkdir -p %s && cd %s && git init -q -b main && echo '<h1>GD Project</h1>' > index.html && git add . && git -c user.name=demo -c user.email=d@d commit -q -m site" % [mine, mine]])
+			var a: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:sonixz/gd-project.git", "local_path": mine})
+			var b: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:sonixz/second-brain-gd.git", "local_path": ""})
+			report.append("own folder: %s / origin %s" % [a.get("local_path", a.get("error", "")), a.get("folder", {}).get("origin_state", "")])
+			main.set_view("repos")
+			await wait(2.5)
+			await shot("53-repos-own-folder")
+			var o: Dictionary = await main.engine.call_api("POST", "/repos/%s/origin" % a["id"], {})
+			report.append("after Add it as origin: %s" % o.get("folder", {}).get("origin_state", o.get("error", "")))
 		"remote":
 			main._open_new("", "claude")
 			await wait(1.5)

@@ -88,16 +88,112 @@ class Repos:
     def env(self, rid: str) -> dict:
         return {"GIT_SSH_COMMAND": self.ssh_command(rid)}
 
+    # ---------------------------------------------------------------- the local folder (Loop 16d)
+    @staticmethod
+    def norm(path: str) -> str:
+        """A folder as the engine sees it: a Windows path (C:\\x, \\\\wsl.localhost\\…) becomes its WSL path."""
+        from .sessions import host_path
+        p = os.path.expanduser(host_path((path or "").strip()))
+        return p.rstrip("/") if len(p) > 1 else p
+
+    @staticmethod
+    def _git(path: str, *args: str) -> tuple[int, str]:
+        out = subprocess.run(["git", "-C", path, *args], capture_output=True, text=True, timeout=30)
+        return out.returncode, out.stdout.strip()
+
+    def check_folder(self, path: str) -> str:
+        """An existing git repository (its top folder), or an empty folder to clone into; anything else is refused."""
+        if not os.path.isdir(path):
+            raise ValueError(f"no such folder: {path}")
+        if os.path.isdir(os.path.join(path, ".git")):
+            return "git"
+        if not os.listdir(path):
+            return "empty"
+        rc, top = self._git(path, "rev-parse", "--show-toplevel")
+        hint = f" (its top folder is {top})" if rc == 0 and top else ""
+        raise ValueError(f"{path} is not the top folder of a git repository{hint}: choose that folder, or an empty one")
+
+    @staticmethod
+    def _same_remote(a: str, b: str) -> bool:
+        clean = lambda u: u.strip().lower().removesuffix("/").removesuffix(".git").replace("ssh://", "").replace("git@", "")  # noqa: E731
+        return clean(a).replace(":", "/") == clean(b).replace(":", "/")
+
+    def folder_state(self, r: dict) -> dict:
+        """What the folder holds: a git repository? its origin (the same address, none, another one), commits."""
+        path = r.get("local_path") or ""
+        st = {"path": path, "exists": bool(path) and os.path.isdir(path), "git": False, "origin": "", "origin_state": "",
+              "managed": bool(path) and os.path.abspath(path).startswith(os.path.join(self.home, "repos") + os.sep)}
+        if st["exists"] and os.path.isdir(os.path.join(path, ".git")):
+            st["git"] = True
+            rc, origin = self._git(path, "remote", "get-url", "origin")
+            st["origin"] = origin if rc == 0 else ""
+            st["origin_state"] = "same" if st["origin"] and self._same_remote(st["origin"], r["url"]) else ("missing" if not st["origin"] else "other")
+            rc, n = self._git(path, "rev-list", "--count", "--all")
+            st["commits"] = int(n) if rc == 0 and n.isdigit() else 0
+        return st
+
+    def set_folder(self, rid: str, path: str) -> dict:
+        """Points the repository at another folder (the owner's own clone); the previous copy is left as it is."""
+        r = self.get(rid)
+        new = self.norm(path)
+        self.check_folder(new)
+        self._set(rid, local_path=new)
+        out = self.get(rid)
+        old = r["local_path"]
+        if old and old != new and r["folder"]["managed"] and os.path.isdir(old):
+            out["previous_copy"] = old  # Agent Manager's own clone: the app offers to remove it, after showing it
+        return out
+
+    def set_origin(self, rid: str) -> dict:
+        """The owner's folder has no remote yet: add the repository's address as « origin » (only on their click)."""
+        r = self.get(rid)
+        st = r["folder"]
+        if not st["git"]:
+            raise ValueError("the folder is not a git repository")
+        if st["origin_state"] == "other":
+            raise ValueError(f"its origin is another repository ({st['origin']}): change it yourself if you mean to")
+        if st["origin_state"] == "missing":
+            rc, _ = self._git(st["path"], "remote", "add", "origin", r["url"])
+            if rc != 0:
+                raise ValueError("git could not add the origin")
+        return self.get(rid)
+
+    def inspect_copy(self, path: str) -> dict:
+        """One of Agent Manager's own clones: is there anything in it that would be lost?"""
+        path = self._managed_copy(path)
+        rc, dirty = self._git(path, "status", "--porcelain")
+        rc2, unpushed = self._git(path, "log", "--oneline", "--branches", "--not", "--remotes")
+        lines = [x for x in (dirty.splitlines() + unpushed.splitlines()) if x.strip()]
+        return {"path": path, "clean": rc == 0 and rc2 == 0 and not lines, "report": "\n".join(lines[:30])}
+
+    def remove_copy(self, path: str, confirmed: bool) -> dict:
+        if not confirmed:
+            raise ValueError("removing a copy needs the owner's confirmation")
+        path = self._managed_copy(path)
+        if any(r["local_path"] == path for r in self.all()):
+            raise ValueError("a connected repository still uses this folder")
+        shutil.rmtree(path)
+        return {"removed": path}
+
+    def _managed_copy(self, path: str) -> str:
+        path = os.path.abspath(self.norm(path))
+        if not path.startswith(os.path.join(self.home, "repos") + os.sep) or not os.path.isdir(path):
+            raise ValueError("only a copy Agent Manager made itself (in its repos folder) can be removed here")
+        return path
+
     # ---------------------------------------------------------------- records
     def add(self, url: str, local_path: str = "", name: str = "") -> dict:
         host, path = parse_url(url)
+        local = self.norm(local_path) if local_path.strip() else ""
+        if local:
+            self.check_folder(local)  # the owner's own clone (or an empty folder to clone into)
         rid = secrets.token_hex(4)
         name = (name or path.rsplit("/", 1)[-1]).strip()[:60]
         fp = self._make_key(rid, name)
         try:
             with closing(self._db()) as db, db:
                 db.execute("INSERT INTO repos (id, name, url, local_path, fingerprint, created) VALUES (?, ?, ?, ?, ?, ?)",
-                           (rid, name, url.strip(), os.path.expanduser(local_path.strip()), fp, time.time()))
+                           (rid, name, url.strip(), local, fp, time.time()))
         except sqlite3.IntegrityError:
             shutil.rmtree(os.path.dirname(self.key_path(rid)), ignore_errors=True)
             raise ValueError("this repository is already connected")
@@ -123,6 +219,7 @@ class Repos:
         r["deploy_keys_page"] = f"https://github.com/{path}/settings/keys/new" if host == "github.com" else ""
         r["public_key"] = self.public_key(r["id"]) if os.path.exists(self.key_path(r["id"]) + ".pub") else ""
         r["cloned"] = bool(r["local_path"]) and os.path.isdir(os.path.join(r["local_path"], ".git"))
+        r["folder"] = self.folder_state(r)
         return r
 
     def _set(self, rid: str, **f) -> None:

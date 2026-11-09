@@ -93,3 +93,67 @@ class ReposTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("tmux") and shutil.which("ssh-keygen"), "tmux and ssh-keygen are needed")
+class OwnFolderTest(ReposTest):
+    """Loop 16d: the owner's own clone instead of a second copy in Agent Manager's folder."""
+
+    def own_repo(self, name="mine", origin=None):
+        path = os.path.join(self.tmp, name)
+        os.makedirs(path)
+        git(path, "init", "-q", "-b", "main")
+        with open(os.path.join(path, "index.html"), "w") as f:
+            f.write("<h1>site</h1>\n")
+        git(path, "add", ".")
+        git(path, "commit", "-q", "-m", "site")
+        if origin:
+            git(path, "remote", "add", "origin", origin)
+        return path
+
+    def test_the_owners_folder_without_origin_gets_it_on_request(self):
+        mine = self.own_repo()
+        r = self.s.repos.add("file://" + self.bare, local_path=mine)
+        self.assertEqual(r["local_path"], mine)
+        self.assertEqual(r["folder"]["origin_state"], "missing")
+        self.assertFalse(r["folder"]["managed"])
+        r = self.s.repos.set_origin(r["id"])
+        self.assertEqual(r["folder"]["origin_state"], "same")
+        self.assertEqual(self.s.repos.ensure_clone(r["id"]), mine)            # no second copy
+        self.assertNotIn("core.sshcommand", git(mine, "config", "--list").lower())   # the key never goes into the repo
+
+    def test_another_origin_is_never_changed(self):
+        mine = self.own_repo(origin="git@github.com:someone/else.git")
+        r = self.s.repos.add("file://" + self.bare, local_path=mine)
+        self.assertEqual(r["folder"]["origin_state"], "other")
+        with self.assertRaises(ValueError):
+            self.s.repos.set_origin(r["id"])
+        self.assertIn("someone/else", git(mine, "remote", "get-url", "origin"))
+
+    def test_a_subfolder_or_a_full_non_git_folder_is_refused(self):
+        mine = self.own_repo()
+        os.makedirs(os.path.join(mine, "docs"))
+        with open(os.path.join(mine, "docs", "a.md"), "w") as f:
+            f.write("x")
+        with self.assertRaises(ValueError) as e:
+            self.s.repos.add("file://" + self.bare, local_path=os.path.join(mine, "docs"))
+        self.assertIn("top folder", str(e.exception))
+
+    def test_switching_to_the_owners_folder_offers_to_remove_the_copy(self):
+        r = self.s.repos.add("file://" + self.bare)
+        copy = self.s.repos.ensure_clone(r["id"])                            # Agent Manager's own clone
+        self.assertTrue(self.s.repos.get(r["id"])["folder"]["managed"])
+        mine = self.own_repo(origin="file://" + self.bare)
+        out = self.s.repos.set_folder(r["id"], mine)
+        self.assertEqual(out["local_path"], mine)
+        self.assertEqual(out["previous_copy"], copy)
+        self.assertTrue(self.s.repos.inspect_copy(copy)["clean"])
+        with open(os.path.join(copy, "work.txt"), "w") as f:
+            f.write("not committed")
+        self.assertFalse(self.s.repos.inspect_copy(copy)["clean"])            # shown before the owner confirms
+        with self.assertRaises(ValueError):
+            self.s.repos.remove_copy(copy, False)
+        with self.assertRaises(ValueError):
+            self.s.repos.remove_copy(mine, True)                              # never the owner's own folder
+        self.assertEqual(self.s.repos.remove_copy(copy, True), {"removed": copy})
+        self.assertFalse(os.path.exists(copy))

@@ -334,3 +334,19 @@ project allows gpt-transcribe: a real one-second call now goes through (about $0
   than 15 s with no « esc to interrupt » on the whole visible screen (it was only the last 40 rows) means idle.
 - « Remove and forget » now asks first (it deleted at once); the agent's own conversation stays in Claude Code / Codex.
   Tests: 62.
+
+## Loop 16d: repositories in the owner's own folders (2026-11-08)
+
+Owner's report: connecting gd-project made a second, empty copy in Agent Manager's data folder (inside WSL), while his
+real repository is C:\git-2026\gd-project (no remote yet); his session worked in the empty copy. The optional folder
+field was easy to miss, and a Windows path typed there was not converted. Now:
+- **Add a repository** asks « I already have it on this computer » (Browse… to its top folder) or « Clone it for me ».
+  The folder must be a git repository's top folder, or an empty folder to clone into; Windows and \\wsl.localhost
+  paths are converted.
+- **The card shows the folder**: « yours » or « Agent Manager's copy », and its origin: ✓ the same address, « no remote
+  yet » with « Add it as origin » (`git remote add origin`, on click only), or « another repository » (never changed).
+- **Change folder…** points a connected repository at the owner's clone; when it was on Agent Manager's own copy, the
+  app offers to remove that copy, after showing anything in it that would be lost (uncommitted files, commits not
+  pushed). Only copies in Agent Manager's repos folder can be removed, never the owner's.
+- The deploy key still goes to the sessions only (GIT_SSH_COMMAND): nothing is written in the owner's repository config,
+  and his own pushes keep his usual credentials. A test checks it. Tests: 67.

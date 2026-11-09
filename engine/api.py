@@ -73,8 +73,17 @@ def make_handler(sessions: Sessions, token: str):
                 if parts == ["repos"] and method == "POST":
                     b = self._body()
                     return self._reply(201, sessions.repos.add(str(b.get("url", "")), str(b.get("local_path", "")), str(b.get("name", ""))))
+                if parts == ["repos", "copy", "inspect"] and method == "POST":  # before /repos/<id>/<action>
+                    return self._reply(200, sessions.repos.inspect_copy(str(self._body().get("path", ""))))
+                if parts == ["repos", "copy", "remove"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.repos.remove_copy(str(b.get("path", "")), bool(b.get("confirmed", False))))
                 if len(parts) == 3 and parts[0] == "repos" and method == "POST":
                     rid, act = parts[1], parts[2]
+                    if act == "folder":
+                        return self._reply(200, sessions.repos.set_folder(rid, str(self._body().get("path", ""))))
+                    if act == "origin":
+                        return self._reply(200, sessions.repos.set_origin(rid))
                     if act == "check":
                         return self._reply(200, sessions.repos.check(rid))
                     if act == "rotate":
