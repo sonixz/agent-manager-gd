@@ -5,8 +5,8 @@ with AGENTS.md (the rules), README.md (what the app does), DEVLOG.md (every loop
 
 ## State
 
-- Local git only, branch main, nothing uncommitted. **No remote yet**: the owner creates the GitHub repository; never
-  push or change visibility without his word. Licence MIT. Commits as sonixz with the session attribution lines.
+- Branch main, pushed to github.com/sonixz/agent-manager-gd (private; git authenticates with the repository's deploy
+  key through GIT_SSH_COMMAND). Never change visibility; push when the owner has asked for the work. Licence MIT. Commits as sonixz with the session attribution lines.
 - Done: Loops 1–15 of the plan, then 16 (Sandboxes tab as a control room), 16b (copy: OSC 52, rejoined rows), 16c
   (Remote Control on by default, stale « working » fixed, sandbox scrolling, F9 falls back to dictation), 16d
   (repositories in the owner's own folders), plus the voice models aligned with the Second Brain (gpt-transcribe first).
@@ -41,7 +41,7 @@ with AGENTS.md (the rules), README.md (what the app does), DEVLOG.md (every loop
 - His last test round (the list he got on 2026-11-08): repos « Change folder… » to C:\git-2026\gd-project + « Add it
   as origin », Remote Control in claude.ai/code (untested for real), stale state after Esc, voice F8/F9, copy, a real
   sandbox (its live health checks never ran on a real machine yet), Remove and forget's confirmation.
-- Creating the GitHub repository (sonixz/agent-manager-gd) and saying when to push.
-- Proposed, not started: Loop 17 (a ✦ Brain tab: connection, who holds a key, proposals from our sessions, timeline,
+- Next: Loops 17–21, the public website (docs/brief/PLAN.md « Le site public »), asked by the owner on 2026-11-08.
+- Proposed, not started: the ✦ Brain tab (formerly « Loop 17 »: a ✦ Brain tab: connection, who holds a key, proposals from our sessions, timeline,
   settings; a first-run « Are you using Second Brain? »; « Resume all » after a reboot). Agent security:
   docs/brief/AGENT-SECURITY.md, recorded only, **do not build until he asks**.

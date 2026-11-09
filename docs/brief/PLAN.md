@@ -183,3 +183,44 @@ Détails : `docs/brief/SANDBOX.md`. Mêmes règles qu'avant (tests, captures, ra
 - Le propriétaire veut encadrer ce qu'un agent local peut toucher (fichiers hors du projet, installations de paquets,
   code lancé ailleurs). Constat, options (règles de Claude Code, sandbox bubblewrap, sandbox de Codex) et proposition
   d'un réglage « Accès » par session : docs/brief/AGENT-SECURITY.md. À discuter avant toute construction.
+
+## Le site public : Loops 17 à 21 (demandé par le propriétaire, 2026-11-08)
+
+Ses mots : « Est-ce que tu serais capable de faire un site dans le même genre [que celui de Second Brain], pas
+nécessairement identique ? J'aimerais une petite touche qui appartient à Agent Manager GD… avec des beaux screenshots.
+Les sections How-to et Docs sont super importantes. » Puis : « Dans l'index, on met vraiment les features nice : MCP
+server, Git manager, les SSH automatisés, le AI natif, vocal… Je veux un index de feu. Mets l'accent sur le Brain, ça a
+vraiment de la valeur. »
+
+Modèle : second-brain-gd/public (index, howto, docs ; captures webp tirées de la vraie app sur Xvfb ; guides en données).
+Choix par défaut (le propriétaire peut les changer) : anglais seulement comme Second Brain ; le site avant l'onglet
+✦ Brain ; le site reste dans `public/`, rien n'est publié sans son mot (le dépôt est privé).
+La touche Agent Manager : la palette de l'app (am_theme.gd), un en-tête « salle de contrôle » (une mosaïque de
+terminaux vivants), une section « Better together » avec Second Brain, les deux sites liés l'un à l'autre.
+
+### Loop 17 · Fondations et espace de démonstration
+- `public/` : index, howto, docs, CSS aux couleurs de l'app, JS, logo, `.gdignore`.
+- `tools/showcase.sh` : la vraie app sur Xvfb avec un espace fictif en anglais (projets, groupes, sessions, dépôts git
+  de démonstration, Fly fictive). Rien de personnel à l'écran : contrôle automatique (chemins, courriel, clés).
+- Captures en webp par Godot lui-même (rien à télécharger).
+
+### Loop 18 · La vitrine (index « de feu »)
+- En avant : le serveur MCP (les agents pilotent des agents), le gestionnaire Git (dépôts connectés, revue de diff,
+  worktrees), les clés SSH automatisées (une deploy key par dépôt, GIT_SSH_COMMAND, rien dans ~/.ssh), la voix native
+  (dictée F8, commandes F9, état parlé), les sandboxes Fly et leurs coûts, Remote Control.
+- Le Second Brain au centre : sessions qui se documentent, contexte qui survit, l'archiviste ; « Better together ».
+- Principes (local d'abord ; tes outils, ton login, jamais tes jetons), architecture, frise « Built in loops ».
+
+### Loop 19 · How-to
+- Même outillage que Second Brain : guides en données (but, prérequis, étapes « tu fais / tu vois », une capture par
+  étape, « If it does not work », liens vers Docs), captures numérotées, page générée.
+- Une douzaine de guides : premières minutes, l'arbre et les groupes, répondre vite, reprendre/dupliquer/worktree,
+  revue de diff, connecter un dépôt, la voix, un agent qui pilote des agents, Remote Control, une sandbox, budgets,
+  une session qui se documente dans le Brain, copier depuis un terminal.
+
+### Loop 20 · Docs
+- Référence avec menu latéral : installation, concepts, chaque fonction, clés et dotenvx, dépôts et deploy keys,
+  sandboxes, voix, Second Brain, outils MCP, API HTTP locale, sécurité et vie privée, dépannage.
+
+### Loop 21 · Finition
+- Liens, accessibilité, mobile, poids (< 10 Mo), toutes les captures en une commande, relecture avec le propriétaire.
