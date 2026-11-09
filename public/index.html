@@ -188,12 +188,12 @@
               any session and start helpers of its own: they show up in your list, « ↳ Lead », in real terminals you
               can take over at any time.</p>
             <div class="term" role="img" aria-label="The six MCP tools"><span class="c"># agent-manager, offered to every agent</span>
-<span class="k">list_sessions</span>      every session, its tool, folder, state
-<span class="k">session_status</span>     working · waits for OK · asks · done
-<span class="k">read_screen</span>        what any terminal shows right now
-<span class="k">start_session</span>      a child session: Claude Code, Codex, shell
-<span class="k">send_to_session</span>    <span class="s">its own children only</span>
-<span class="k">wait_for_session</span>   until a child is done or waits</div>
+<span class="k">list_sessions</span>     every session and its state
+<span class="k">session_status</span>    working, waits, asks, done
+<span class="k">read_screen</span>       what a terminal shows now
+<span class="k">start_session</span>     a child: Claude, Codex, shell
+<span class="k">send_to_session</span>   <span class="s">its own children only</span>
+<span class="k">wait_for_session</span>  until a child is done</div>
             <p class="small muted" style="margin-top: 14px">No tool presses keys in someone else's session: an agent
               never approves on another's behalf. « Connect other tools » gives the same server to any MCP client
               outside the app, read and start only.</p>
