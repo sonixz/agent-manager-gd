@@ -50,6 +50,8 @@ var board_previews := {}      # id -> Label (Board view)
 var f_worktree: CheckBox
 var f_brain: CheckBox
 var f_remote: CheckBox
+var f_browse: Button
+var folder_dialog: FileDialog
 var f_brief: CheckBox
 var dictation: Dictation
 var voice_mode := "dictate"     # F8 dictate, F9 command
@@ -492,6 +494,7 @@ func _build_new_dialog() -> void:
 	f_repo.item_selected.connect(func(_i: int) -> void:
 		var on := str(f_repo.get_selected_metadata()) != ""
 		f_cwd.editable = not on
+		f_browse.disabled = on  # a connected repository has its own folder
 		if on:
 			for r in repos_cache:
 				if str(r["id"]) == str(f_repo.get_selected_metadata()):
@@ -499,10 +502,19 @@ func _build_new_dialog() -> void:
 		_check_brief())
 	g.add_child(f_repo)
 	g.add_child(_muted("Folder"))
+	var cwd_row := HBoxContainer.new()
+	cwd_row.add_theme_constant_override("separation", 6)
 	f_cwd = LineEdit.new()
 	f_cwd.text = "~"
 	f_cwd.placeholder_text = "C:\\git-2026\\my-project or ~/my-project"
-	g.add_child(f_cwd)
+	f_cwd.size_flags_horizontal = SIZE_EXPAND_FILL
+	cwd_row.add_child(f_cwd)
+	f_browse = Button.new()
+	f_browse.text = "Browse…"
+	f_browse.tooltip_text = "Pick the folder (a Windows folder, or one in WSL through \\\\wsl.localhost)"
+	f_browse.pressed.connect(_pick_folder)
+	cwd_row.add_child(f_browse)
+	g.add_child(cwd_row)
 	g.add_child(Control.new())
 	f_worktree = CheckBox.new()
 	f_worktree.text = "In its own git branch (a worktree beside the repository)"
@@ -535,6 +547,30 @@ func _muted(t: String) -> Label:
 	return l
 
 
+## The folder picker (Windows' own dialog when available): it opens on the last folder chosen.
+func _pick_folder() -> void:
+	if folder_dialog == null:
+		folder_dialog = FileDialog.new()
+		folder_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+		folder_dialog.access = FileDialog.ACCESS_FILESYSTEM
+		folder_dialog.use_native_dialog = true
+		folder_dialog.title = "Choose the session's folder"
+		folder_dialog.dir_selected.connect(func(dir: String) -> void:
+			f_cwd.text = dir.replace("/", "\\") if engine.on_windows else dir
+			_save("last_folder", dir)
+			_check_brief())
+		add_child(folder_dialog)
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS)
+	var start := str(cfg.get_value("ui", "last_folder", ""))
+	var typed := f_cwd.text.strip_edges()
+	if typed.length() > 2 and (typed[1] == ":" or typed.begins_with("\\\\")):
+		start = typed
+	if start != "":
+		folder_dialog.current_dir = start
+	folder_dialog.popup_centered_ratio(0.6)
+
+
 func _check_remote() -> void:
 	var claude := str(f_tool.get_selected_metadata()) == "claude"
 	var local := str(f_where.get_selected_metadata()) != "sandbox"
@@ -564,6 +600,7 @@ func _check_brief() -> void:
 func _open_new(where := "", tool := "") -> void:
 	f_name.text = ""
 	f_cwd.editable = true
+	f_browse.disabled = false
 	f_repo.clear()
 	f_repo.add_item("(none: a folder)")
 	f_repo.set_item_metadata(0, "")

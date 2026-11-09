@@ -21,6 +21,7 @@ TOOLS = {
 }
 NAME_OK = re.compile(r"^[^\x00-\x1f]{1,60}$")
 WIN_PATH = re.compile(r"^([A-Za-z]):[\\/](.*)$")
+WSL_UNC = re.compile(r"^[\\/]{2}wsl(?:\.localhost|\$)[\\/][^\\/]+(?:[\\/](.*))?$", re.I)  # \\wsl.localhost\Ubuntu\home\x
 
 
 def host_path(path: str) -> str:
@@ -28,6 +29,9 @@ def host_path(path: str) -> str:
     m = WIN_PATH.match(path or "")
     if m and os.path.isdir("/mnt/" + m.group(1).lower()):
         return "/mnt/" + m.group(1).lower() + "/" + m.group(2).replace("\\", "/")
+    u = WSL_UNC.match(path or "")  # a WSL folder picked from Windows: the same folder inside WSL
+    if u:
+        return "/" + (u.group(1) or "").replace("\\", "/").rstrip("/")
     return path
 
 

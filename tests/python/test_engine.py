@@ -64,6 +64,14 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.sessions.get(s["id"])["state"], "missing")
         self.assertEqual(self.sessions.restart(s["id"])["state"], "running")
 
+    def test_folders_picked_from_windows_become_wsl_paths(self):
+        from engine.sessions import host_path
+        self.assertEqual(host_path("\\\\wsl.localhost\\Ubuntu\\home\\py\\proj"), "/home/py/proj")
+        self.assertEqual(host_path("//wsl$/Ubuntu-24.04/home/py"), "/home/py")
+        self.assertEqual(host_path("~/x"), "~/x")
+        if os.path.isdir("/mnt/c"):
+            self.assertEqual(host_path("C:/git-2026/gd-project"), "/mnt/c/git-2026/gd-project")
+
     def test_remote_control_is_remembered_and_named_for_claude_ai(self):
         rec = self.sessions.store.add("Site redesign", "claude", self.tmp, "GD Project")
         self.sessions.store.update(rec["id"], remote_control=1)
