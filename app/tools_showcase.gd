@@ -56,7 +56,7 @@ func _workspace() -> Dictionary:
 	var made := {}
 	var map := OS.get_environment("SHOWCASE_MAP")
 	for p in plan:
-		var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": p[0], "tool": p[1], "cwd": code.path_join(p[2]), "group": p[3], "brain": false})
+		var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": p[0], "tool": p[1], "cwd": code.path_join(p[2]), "group": p[3], "brain": p[1] != "shell"})
 		var sid := str(r.get("id", ""))
 		made[p[0]] = sid
 		if p[4] != "":
@@ -129,7 +129,6 @@ func _run() -> void:
 			await wait(1.0)
 			await shot("board")
 		"new-session":
-			main.brain_ok = true  # as when the Second Brain runs on this computer (no key is made: nothing is created)
 			main.select(made["Checkout flow"])
 			await wait(2.0)
 			await main._open_new("", "claude")
@@ -143,7 +142,7 @@ func _run() -> void:
 			await shot("new-session")
 			main.new_dialog.hide()
 		"agents":
-			var lead: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Release lead", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": false})
+			var lead: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Release lead", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true})
 			_map(str(lead["id"]), "lead-done")
 			# what the lead's start_session does through Agent Manager's MCP server
 			var h1: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Helper · tests", "tool": "shell", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "parent": lead["id"]})
@@ -169,6 +168,11 @@ func _run() -> void:
 			main.set_view("repos")
 			await wait(2.5)
 			await shot("repos")
+		"brain-keys":
+			# the Keys tab: the keys this computer keeps, then the Second Brain keys, one per agent session
+			main.set_view("keys")
+			await wait(3.0)
+			await shot("brain-keys")
 		"review":
 			var repo := code.path_join("acme-store")
 			_write(repo.path_join("src/checkout/giftcard.ts"), "export interface GiftCard { code: string; balance: number }\n\nexport function redeemGiftCard(total: number, card: GiftCard) {\n  const applied = Math.min(total, card.balance);\n  return { applied, remaining: total - applied, card: { ...card, balance: card.balance - applied } };\n}\n")

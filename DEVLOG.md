@@ -413,3 +413,19 @@ automatic SSH keys, the native voice, and the Second Brain. Plan: docs/brief/PLA
   the first recording Claude ran `npx vitest` in the scratch project (later prompts say « read and write files only »).
 - Tests: 76 (one skipped). The voice overlay's microphone emoji shows as a box on the virtual display (no emoji font
   there).
+
+## Loop 18: the showcase index, with the Brain at the centre (2026-11-09)
+
+- **A stand-in Second Brain for the screenshots**: `tools/showcase/fake_brain.py` answers the few calls Agent Manager
+  makes (`/health`, its MCP keys) on 127.0.0.1:18792, with a home folder laid out like the real Brain's
+  (`AGMGD_BRAIN_HOME`, `AGMGD_BRAIN_REPO`). Every capture now shows « ✦ Second Brain connected », the ✦ Brain mark on
+  each agent session and « shares the Second Brain » in the header. Nothing touches the owner's Brain.
+- **New capture `brain-keys`**: the Keys tab with « Second Brain keys made by Agent Manager », one per session, and an
+  unused one that can be revoked.
+- **Index, Second Brain section**: the cycle in four steps (orients, works, you decide, the next one knows), then two
+  screenshots side by side: the Brain keys in Agent Manager, and the proposals waiting in Second Brain
+  (`public/assets/brain/mcp-proposals.webp`, from Second Brain's own site, regenerated there).
+- **« Built in loops »**: a timeline of the loops, the Brain ones in violet.
+- Checked: every capture regenerated in one run (`tools/showcase.sh hero new-session agents repos brain-keys review
+  voice sandboxes palette`, 15 images, the personal-text check clean); the page rendered with Edge headless at 1440 px.
+  Engine untouched: the test suite was not re-run this loop. Site: 2.3 MB.

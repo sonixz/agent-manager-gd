@@ -161,6 +161,26 @@
               The Brain's keys never leave your computer.</p></article>
         </div>
 
+        <ol class="cycle reveal" aria-label="How a session and the Brain work together">
+          <li><b>Orients</b><span>Reads the project card, the last session's journal, the open questions. Checks them against <code>git log</code>.</span></li>
+          <li><b>Works</b><span>Proposes your words, each decision and a journal entry at every commit. Never writes directly.</span></li>
+          <li><b>You decide</b><span>The archivist files each proposal with your rules, or waits for your OK. Every change can be undone.</span></li>
+          <li><b>The next one knows</b><span>Tomorrow's session, or another agent, starts where this one stopped. So do you.</span></li>
+        </ol>
+
+        <div class="duo reveal">
+          <figure class="shot">
+            <img src="assets/showcase/brain-keys.webp" width="1920" height="1200" loading="lazy" alt="Agent Manager's Keys tab: « Second Brain keys made by Agent Manager », one per session (Checkout flow, Flaky tests, Docs refresh, Rate limiter, Sparks) with their call counts, and an unused key that can be revoked. Each session in the left column carries a « ✦ Brain » mark.">
+            <figcaption class="shot-caption"><b>In Agent Manager.</b> One Brain key per session, named after it, with
+              what uses it. A key nothing uses can be revoked; removing a session revokes its key.</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="assets/brain/mcp-proposals.webp" width="1280" height="800" loading="lazy" alt="Second Brain's « AI tools and your Brain » window: two proposals from an agent wait for approval, each with Approve and Reject, and the tools allowed to read the Brain with their level.">
+            <figcaption class="shot-caption"><b>In your Second Brain.</b> What agents propose waits for you, with who
+              proposed it and why. You choose each tool's level: read only, or suggest changes.</figcaption>
+          </figure>
+        </div>
+
         <div class="feature reveal" style="margin-top: clamp(48px, 7vw, 80px)">
           <div>
             <span class="tag">New session</span>
@@ -316,8 +336,33 @@
       </div>
     </section>
 
+    <!-- BUILT IN LOOPS -->
+    <section class="section" id="loops">
+      <div class="container">
+        <div class="section-head center reveal">
+          <p class="overline">Built in loops</p>
+          <h2>One loop, one thing that works</h2>
+          <p>Each loop ends with tests, real screenshots and a journal entry, then the next one starts. Agent Manager
+            was built this way by coding agents it now runs, with the owner testing every round.</p>
+        </div>
+        <ol class="timeline reveal">
+          <li><span class="when">Loop 2</span><b>Our own terminal</b><span>libghostty-vt in Godot, on Linux and native Windows: accents, true colour, mouse.</span></li>
+          <li><span class="when">Loop 3</span><b>Sessions that survive</b><span>A local engine and a private tmux server: close the app, the agents keep working.</span></li>
+          <li><span class="when">Loop 4</span><b>Live states</b><span>The tree, « They wait for you », Approve from the list, alerts.</span></li>
+          <li><span class="when">Loop 5</span><b>Resume, fork, worktree</b><span>A history that never forgets a conversation.</span></li>
+          <li class="brain"><span class="when">Loop 6</span><b>✦ The Brain in every session</b><span>A Second Brain key per session; agents pilot agents through MCP.</span></li>
+          <li class="brain"><span class="when">Loop 7</span><b>✦ Context that survives</b><span>Wrap up, summaries proposed to the Brain, Brief from the last one.</span></li>
+          <li><span class="when">Loops 8–9</span><b>Review and repositories</b><span>Diff review with line comments; deploy keys made for you.</span></li>
+          <li><span class="when">Loops 10–11</span><b>Keys and voice</b><span>Encrypted keys, F8 dictation, F9 commands, spoken status.</span></li>
+          <li><span class="when">Loops 12–16</span><b>Cloud sandboxes</b><span>Fly.io machines per agent, tunnels, budgets that only pause.</span></li>
+          <li class="brain"><span class="when">Loop 16e</span><b>✦ Sessions that document themselves</b><span>The agent orients in the Brain, then proposes your words, decisions and its journal.</span></li>
+          <li><span class="when">Loops 17–18</span><b>This website</b><span>Every screenshot from the real app, on a fictional workspace, in one command.</span></li>
+        </ol>
+      </div>
+    </section>
+
     <!-- PRINCIPLES -->
-    <section class="section">
+    <section class="section section-alt">
       <div class="container">
         <div class="section-head reveal">
           <p class="overline">Principles</p>
@@ -343,7 +388,7 @@
       </div>
     </section>
 
-    <section class="section section-alt">
+    <section class="section">
       <div class="container narrow center reveal">
         <h2>Ready when you are</h2>
         <p class="muted">Windows (with WSL) or Linux. Unzip, run the installer for your user, and the Setup check
