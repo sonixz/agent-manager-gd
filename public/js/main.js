@@ -66,7 +66,7 @@
       i++;
     };
     show();
-    if (!reduce) setInterval(show, 2600);
+    setInterval(show, 2600);  // a text change, not a movement: it runs with reduced motion too
   }
 
   // Hero background: a wall of tiny terminals, a few of them busy

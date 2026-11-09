@@ -343,3 +343,26 @@ p { margin: 0 0 1em; }
 .hero-grid > * { min-width: 0; }
 .live-wrap { max-width: 100%; }
 @media (max-width: 980px) { .hero .live-wrap { transform: none; } }
+/* Live hero: the Grid view and voice dictation */
+.lv-main { position: relative; }
+.lv-grid { display: none; flex: 1; margin: 1.2cqw; gap: .9cqw; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; min-height: 0; }
+.lv-main.grid .lv-grid { display: grid; }
+.lv-main.grid .lv-term { display: none; }
+.lv-tile { background: #142030; border: 1px solid var(--border); border-radius: .8cqw; padding: .8cqw 1cqw; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; animation: lv-in .3s ease; transition: border-color .3s; }
+.lv-tile.st-done { border-color: rgba(143, 227, 239, .5); }
+.lv-tile p { margin: 0 0 .5cqw; display: flex; align-items: center; gap: .6cqw; font-size: 1.2cqw; color: var(--muted); }
+.lv-tile.st-working p { color: var(--info); } .lv-tile.st-done p { color: var(--mint); }
+.lv-tb { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; font-family: "JetBrains Mono", var(--mono); font-size: 1.05cqw; line-height: 1.5; color: #c9d6e2; overflow: hidden; }
+.lv-tb .ln { white-space: pre; overflow: hidden; text-overflow: ellipsis; animation: lv-type .25s ease; }
+.lv-tb .tool::first-letter { color: var(--green); }
+.lv-tb .good { color: var(--green); } .lv-tb .bad { color: var(--error); } .lv-tb .spin { color: var(--faint); }
+.lv-voice { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(.96); width: 72%; display: grid; grid-template-columns: auto auto 1fr; grid-template-rows: auto auto; align-items: center; gap: .6cqw 1.2cqw; padding: 1.6cqw 2cqw; background: rgba(31, 47, 66, .97); border: 1px solid var(--mint); border-radius: 1.2cqw; box-shadow: 0 2cqw 5cqw rgba(0, 0, 0, .5); opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 2; }
+.lv-voice.on { opacity: 1; transform: translate(-50%, -50%); }
+.lv-voice .mic { font-size: 2.4cqw; }
+.lv-meter { display: flex; align-items: center; gap: .3cqw; height: 2.6cqw; }
+.lv-meter i { width: .45cqw; height: 30%; background: var(--mint); border-radius: .3cqw; transition: height .12s; }
+.lv-vt { font-size: 1.35cqw; color: var(--text); }
+.lv-vt small { color: var(--muted); font-size: .85em; }
+.lv-voice .said { grid-column: 1 / -1; font-family: "JetBrains Mono", var(--mono); font-weight: 500; font-size: 1.5cqw; color: var(--mint-soft); min-height: 1.5em; }
+.live.calm .lv-cursor { transition: opacity .01s; }
+.lv-term .typed { color: var(--text); }

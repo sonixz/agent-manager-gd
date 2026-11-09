@@ -455,3 +455,16 @@ Owner: « Je voyais une animation dynamique… clean, animée, rapide… juste s
     captures, though it moves in a real browser.
   - Edge headless will not go below 477 px wide: a 390 px screenshot is cropped and only looks like an overflow. Measured
     in the page, nothing is wider than the screen.
+- Owner, after a first look: « J'aurais pensé que tu aurais pu simuler un peu plus? Là je vois une image, rien ne
+  bouge. » Cause (hypothesis): Windows animation effects switched off, which browsers report as reduced motion, and the
+  hero then showed a still picture (the background and the ticker stopped too). Now the hero plays in every case, and
+  with reduced motion nothing slides or fades. The ticker also runs (it changes text, it does not move).
+- A richer scene, about 34 s:
+  - You type the request at the prompt, and Claude Code answers line by line.
+  - Approve, from the list.
+  - A question, answered with the arrow keys.
+  - The cursor opens the **Grid view**: four live tiles (tests passing, a flaky run caught, the limiter's tests, Sparks
+    done), while two helpers appear through MCP.
+  - Back to Focus, **F8 dictation** (a listening overlay, a level meter, the words as they are heard), typed into the
+    prompt: « commit this and push the branch », then the commit and the push with the repository's own deploy key.
+  - The ✦ journal is proposed to the Brain.
