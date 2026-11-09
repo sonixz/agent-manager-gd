@@ -50,6 +50,7 @@ var board_previews := {}      # id -> Label (Board view)
 var f_worktree: CheckBox
 var f_brain: CheckBox
 var f_remote: CheckBox
+var f_document: CheckBox
 var f_browse: Button
 var folder_dialog: FileDialog
 var f_brief: CheckBox
@@ -523,7 +524,12 @@ func _build_new_dialog() -> void:
 	g.add_child(Control.new())
 	f_brain = CheckBox.new()
 	f_brain.text = "Share the Second Brain (a key of its own, proposals wait for your OK)"
+	f_brain.toggled.connect(func(_on: bool) -> void: _check_document())
 	g.add_child(f_brain)
+	g.add_child(Control.new())
+	f_document = CheckBox.new()  # under the Brain: the agent orients in the Brain first and documents as it works
+	f_document.text = "↳ Document this session in the Brain as it works"
+	g.add_child(f_document)
 	g.add_child(Control.new())
 	f_brief = CheckBox.new()
 	f_brief.text = "Brief it with the latest summary of this folder"
@@ -587,6 +593,17 @@ func _check_remote() -> void:
 	var local := str(f_where.get_selected_metadata()) != "sandbox"
 	f_remote.disabled = not (claude and local)
 	f_remote.tooltip_text = "The session appears in claude.ai/code under « Group · Name »" if not f_remote.disabled else ("Claude Code only" if not claude else "Not in cloud sandboxes yet")
+	_check_document()
+
+
+func _check_document() -> void:
+	var claude := str(f_tool.get_selected_metadata()) == "claude"
+	var local := str(f_where.get_selected_metadata()) != "sandbox"
+	f_document.disabled = not (f_brain.button_pressed and not f_brain.disabled and claude and local)
+	if f_document.disabled:
+		f_document.button_pressed = false
+	f_document.tooltip_text = ("The agent first reads where the project stands in the Brain (its card, the last session, open questions), then proposes decisions, your words and a session journal at each milestone; proposals still go through the archivist" if not f_document.disabled
+		else ("Share the Second Brain first" if not f_brain.button_pressed or f_brain.disabled else ("Claude Code only for now" if not claude else "Not in cloud sandboxes yet")))
 
 
 func _check_brief() -> void:
@@ -625,6 +642,7 @@ func _open_new(where := "", tool := "") -> void:
 	f_brain.disabled = not brain_ok
 	f_brain.button_pressed = brain_ok
 	f_brain.tooltip_text = "" if brain_ok else "The Second Brain is not running on this computer"
+	f_document.button_pressed = false
 	_check_brief()
 	f_group.clear()
 	f_group.add_item("(no group)")
@@ -2589,7 +2607,7 @@ func _create() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return

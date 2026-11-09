@@ -119,6 +119,37 @@ class BrainTest(unittest.TestCase):
         self.s.remove(f["id"])
         self.assertIn(("DELETE", "/mcp/clients/c002", None), FakeBrain.calls)
 
+    def note(self, cmd):
+        return cmd[cmd.index("--append-system-prompt") + 1] if "--append-system-prompt" in cmd else ""
+
+    def test_a_session_asked_to_document_itself_gets_the_brain_directive(self):
+        d = self.s.create("Docs", "claude", self.tmp, document=True)
+        self.assertTrue(d["brain_document"])
+        rec = self.s.store.get(d["id"])
+        note = self.note(self.s.command_for(rec))
+        self.assertIn("document this session in their Second Brain", note)
+        self.assertIn("Orient first", note)                                  # read where the project stands first
+        self.assertIn("git log", note)                                       # check the Brain against the repository
+        self.assertIn("list_sessions", note)                                 # what the other agents are doing
+        self.assertIn("propose_item", note)                                  # always through the archivist
+        self.assertIn("« Session journal · Docs »", note)
+        self.assertIn(f"« {os.path.basename(self.tmp)} »", note)             # the project: the folder's name here
+        self.assertIn("Never put source code, secrets, keys or tokens", note)
+        self.assertIn("document this session", self.note(self.s.command_for(rec, "resume", "abc")))   # a restart keeps it
+        f = self.s.fork(d["id"], "Docs, other idea")                         # a fork keeps documenting, own key
+        self.assertTrue(f["brain_document"])
+        self.screen(d["id"], "Orient first")                                 # really passed at launch
+
+    def test_the_directive_needs_the_option_the_brain_and_claude_code(self):
+        plain = self.s.create("Plain", "claude", self.tmp)
+        self.assertFalse(plain["brain_document"])
+        self.assertNotIn("document this session", self.note(self.s.command_for(self.s.store.get(plain["id"]))))
+        alone = self.s.create("Alone docs", "claude", self.tmp, brain=False, document=True)
+        self.assertFalse(alone["brain_document"])                            # no Brain shared: nothing to document into
+        self.assertNotIn("document this session", self.note(self.s.command_for(self.s.store.get(alone["id"]))))
+        codex = self.s.create("Codex docs", "codex", self.tmp, document=True)
+        self.assertFalse(codex["brain_document"])                            # Codex gets no instructions yet
+
     def test_shells_and_sessions_without_the_brain_get_no_key(self):
         self.s.create("Shell", "shell", self.tmp)
         d = self.s.create("Alone", "claude", self.tmp, brain=False)

@@ -67,6 +67,8 @@ class Store:
                     db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
             if "remote_control" not in cols:  # Loop 16c: Claude Code's Remote Control (claude.ai/code, the Claude app)
                 db.execute("ALTER TABLE sessions ADD COLUMN remote_control INTEGER NOT NULL DEFAULT 0")
+            if "brain_document" not in cols:  # the session documents itself in the Second Brain as it works
+                db.execute("ALTER TABLE sessions ADD COLUMN brain_document INTEGER NOT NULL DEFAULT 0")
             if "archived_at" not in cols:
                 db.execute("ALTER TABLE sessions ADD COLUMN archived_at REAL NOT NULL DEFAULT 0")
 
@@ -104,7 +106,7 @@ class Store:
 
     def update(self, sid: str, **fields) -> None:
         allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived", "archived_at", "cwd", "worktree",
-                                                            "brain_client", "remote_control")}
+                                                            "brain_client", "remote_control", "brain_document")}
         if not allowed:
             return
         sets = ", ".join(f"{k} = :{k}" for k in allowed)

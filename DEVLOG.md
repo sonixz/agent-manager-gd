@@ -362,3 +362,23 @@ git, never create SSH keys or edit ~/.ssh, and what a write refusal means. Codex
   key and git fell back on the owner's default ~/.ssh key. The note also says to check access with
   `git ls-remote origin` (a bare `ssh -T` ignores GIT_SSH_COMMAND, which misled the gd-project agent). Proposed, not
   built: a per-session ssh-agent holding only the repository's key, so tools calling ssh directly use it too.
+
+## Loop 16e: sessions that document themselves in the Second Brain (2026-11-08)
+
+Owner's idea: when the Brain is shared, an agent should keep it up to date as it works, so any agent can pick the
+project up later (vision, decisions, the owner's words, where things stand) while the repository keeps the code.
+- **New session**: under « Share the Second Brain », « ↳ Document this session in the Brain as it works ». Enabled only
+  with the Brain, Claude Code and this computer (Codex gets no launch instructions yet; sandboxes not yet); off by
+  default. Stored with the session (`brain_document`); a resume keeps it, a fork keeps it with its own key.
+- **The directive** (`BRAIN_DOCUMENT_NOTE`, appended to the repository note in one `--append-system-prompt`, this launch
+  only): orient first (overview, search the project, read its card, latest session journal, open questions, recent
+  decisions and the owner's documentation guidelines note, which wins over the summary); check the Brain against
+  `git log`; see the other agents (their journals, live sessions through agent-manager `list_sessions`); say where
+  the project stands. Then propose at milestones, not every prompt: the owner's words at once, each decision, a
+  « Session journal · <name> » entry at each commit or finished task, pitfalls; complete the journal and propose a
+  project card update before the end. Update rather than duplicate, cite sources, mark established / hypothesis /
+  wish; never code, secrets, keys or tokens. Always through the archivist (propose_item).
+- Capture scenario `document` (dialog only, no session made). Tests: 76 (one skipped). The wrap-up test failed once in
+  the first full run and passed five times alone and in the next full run: the known intermittent one.
+- Open: how the Brain accepts an update of an existing item (the directive asks for one; to check with the Brain).
+

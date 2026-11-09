@@ -43,6 +43,12 @@ Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard l
   searches the Brain, and what it proposes waits for your OK in the Brain). The key is passed at launch only
   (`--mcp-config` / `-c mcp_servers…`) through the Brain's own relay; a fork gets its own key; removing a session
   revokes it. The Brain's timeline shows which session proposed what. `AGMGD_BRAIN=off` turns it off.
+- **Sessions that document themselves** (New session → « ↳ Document this session in the Brain as it works », under
+  the Brain, Claude Code only for now): the agent gets a directive at launch (`--append-system-prompt`, never written
+  into the repository). It orients in the Brain first (the project card, the last session journal, open questions,
+  recent decisions, your documentation guidelines note), checks that against `git log` and the other live sessions,
+  says where the project stands, then proposes your words, decisions and a session journal at each milestone, and
+  updates the journal and the project card before the end. Everything still goes through the Brain's archivist.
 - **Agents pilot agents**: every agent session is also offered Agent Manager's own MCP server (`agent-manager`):
   `list_sessions`, `session_status`, `read_screen` for any session; `start_session` makes a child session (shown
   « ↳ parent » on its card), `send_to_session` and `wait_for_session` work on its own children only. No tool presses

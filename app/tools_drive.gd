@@ -313,6 +313,26 @@ func _run() -> void:
 			for x in main.sessions.duplicate():  # removing revokes the test sessions' Brain keys (never the owner's)
 				await main.engine.call_api("DELETE", "/sessions/%s" % x["id"])
 			report.append("test sessions removed, their Brain keys revoked")
+		"document":
+			# New session: « Document this session in the Brain » under the Brain, only with it and Claude Code (no session made)
+			main.brain_ok = true
+			await main._open_new("", "claude")
+			await wait(0.5)
+			main.f_document.button_pressed = true
+			report.append("Brain on, Claude Code: document enabled=%s" % (not main.f_document.disabled))
+			await shot("document-1-on")
+			main.f_brain.button_pressed = false
+			await wait(0.3)
+			report.append("Brain off: document enabled=%s pressed=%s" % [not main.f_document.disabled, main.f_document.button_pressed])
+			await shot("document-2-brain-off")
+			main.f_brain.button_pressed = true
+			for i in main.f_tool.item_count:
+				if str(main.f_tool.get_item_metadata(i)) == "codex":
+					main.f_tool.select(i)
+			main._check_brief()
+			await wait(0.3)
+			report.append("Codex: document enabled=%s (%s)" % [not main.f_document.disabled, main.f_document.tooltip_text])
+			main.new_dialog.hide()
 		"agents":
 			var home := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
 			var lead: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Lead agent", "tool": "shell", "cwd": home, "group": "Agent Manager"})

@@ -53,6 +53,25 @@ WRAPUP_PROMPT = (
     "{brain}Then answer only: summary written.")
 BRAIN_HINT = ("If the second-brain MCP tools are available, also propose it with propose_item (title: "
               "\"Session summary · {name} · {date}\", the summary as its text) so the owner can approve it. ")
+BRAIN_DOCUMENT_NOTE = (
+    "Agent Manager: the owner asked you to document this session in their Second Brain, in real time, through the "
+    "second-brain MCP tools. The Brain's archivist is the only door: you propose (propose_item), it files and links; "
+    "never write project notes anywhere else. The repository holds the code; the Brain holds the project: vision, "
+    "decisions, the owner's words, where things stand, what each session did. "
+    "1. Orient first, before changing anything: call overview, search the Brain for this project (« {project} ») and "
+    "read its project card, its latest session journal, its open questions and recent decisions, and the "
+    "documentation guidelines note if there is one (follow it: it is the owner's method and wins over this summary). "
+    "Check that context against the repository: compare the last commit the Brain knows with `git log` and say so "
+    "if work is missing from the Brain. See what other agents are doing: their journals in the Brain, and live "
+    "sessions with the agent-manager list_sessions tool. Then tell the user in two lines where the project stands. "
+    "2. While you work, propose at milestones, not after every prompt: the owner's directives, wishes and refusals "
+    "at once (close to their words, dated); each decision (context, choice, why, alternatives, who decided); a "
+    "session journal entry at each commit or finished task (title « Session journal · {name} », with goal, done, "
+    "decisions, commits, what is left, how to continue); a pitfall as soon as one bites. "
+    "3. Before the session ends, complete the journal (how to continue) and propose an update to the project card. "
+    "Ask for an update of the existing item rather than a duplicate; cite your sources (file, commit, date); mark "
+    "each claim as established, a hypothesis or a wish. Never put source code, secrets, keys or tokens in the Brain. "
+    "If the second-brain tools are missing, say so once and carry on with the work.")
 BRIEF_PROMPT = ("Context from earlier sessions on this project, kept by Agent Manager GD: read {path} (the latest "
                 "session summary){brain}. Then say in two lines what you understood and wait for instructions.")
 
@@ -87,6 +106,15 @@ class Sessions:
                 "and never look into Agent Manager's key folder. If a push is refused for write access, tell the user to "
                 "tick « Allow write access » on the repository's deploy key.")
 
+    def brain_note(self, rec: dict) -> str:
+        """For a session asked to document itself in the Second Brain (and sharing it): how to orient in the Brain,
+        what to propose and when. This launch only, never written into the repository."""
+        rec = (self.store.get(rec["id"]) or rec) if rec.get("id") else rec   # the key is stored after the record
+        if not (rec.get("brain_document") and rec.get("brain_client")):
+            return ""
+        project = self._repo_name(rec.get("repo_id", "")) or os.path.basename((rec.get("base_repo") or rec.get("cwd") or "").rstrip("/"))
+        return BRAIN_DOCUMENT_NOTE.format(project=project or rec["name"], name=rec["name"])
+
     @staticmethod
     def remote_name(rec: dict) -> str:
         """The name Remote Control shows in claude.ai/code: « Group · Session », or the session's name alone."""
@@ -108,8 +136,10 @@ class Sessions:
             base = ["claude", "--settings", path] + self._claude_mcp(rec)
             if rec.get("remote_control"):  # seen and driven from claude.ai/code or the Claude app, under this name
                 base += ["--remote-control", self.remote_name(rec)]
-            note = self.repo_note(rec)
-            if note:  # how git already authenticates here: the agent never goes looking for a key in ~/.ssh
+            # how git already authenticates here (the agent never goes looking for a key in ~/.ssh), and, when asked,
+            # how to document the session in the Second Brain: one --append-system-prompt for both
+            note = "\n\n".join(n for n in (self.repo_note(rec), self.brain_note(rec)) if n)
+            if note:
                 base += ["--append-system-prompt", note]
             if mode == "resume" and conversation:
                 return base + ["--resume", conversation]
@@ -205,7 +235,7 @@ class Sessions:
 
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
-               repo: str = "", host: str = "local", remote: bool = False) -> dict:
+               repo: str = "", host: str = "local", remote: bool = False, document: bool = False) -> dict:
         if host == "sandbox":
             return self.create_sandbox_session(name, tool, grp, repo, brain)
         if tool not in TOOLS:
@@ -233,6 +263,8 @@ class Sessions:
             rec = self.store.get(rec["id"])
         if brain:
             self._connect_brain(rec)
+            if document and tool == "claude" and (self.store.get(rec["id"]) or {}).get("brain_client"):
+                self.store.update(rec["id"], brain_document=1)   # Claude Code only: Codex gets no instructions yet
         cmd = self.command_for(rec)
         if brief and tool in ("claude", "codex"):
             last = self.store.summaries(cwd=cwd)
@@ -265,6 +297,7 @@ class Sessions:
                 "since": float(hs.get("time", 0) or (t.activity if t else 0) or rec["created"]),
                 "last_conversation": self.last_conversation(rec["id"]),
                 "brain": bool(rec.get("brain_client")),
+                "brain_document": bool(rec.get("brain_client") and rec.get("brain_document")),
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",
@@ -511,6 +544,8 @@ class Sessions:
         rec = self.store.add((name or d["name"] + " (fork)").strip()[:60], d["tool"], d["cwd"], d["grp"], parent=sid)
         if d.get("brain_client"):
             self._connect_brain(rec)
+            if d.get("brain_document"):  # a fork keeps documenting, with a key of its own
+                self.store.update(rec["id"], brain_document=1)
         self.tmux.new_session(self.tmux_name(rec["id"]), rec["cwd"], self.command_for(rec, "fork", conv),
                               env=self.session_env(rec["id"]))
         return self.get(rec["id"])
