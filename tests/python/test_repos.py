@@ -136,6 +136,21 @@ class OwnFolderTest(ReposTest):
         self.assertNotIn("--append-system-prompt", self.s.command_for(plain))
         self.assertFalse(os.path.exists(os.path.join(mine, "CLAUDE.md")))                # nothing written in the repo
 
+    def test_a_session_opened_by_folder_still_gets_the_repository_key(self):
+        mine = self.own_repo()
+        r = self.s.repos.add("file://" + self.bare, local_path=mine)
+        os.makedirs(os.path.join(mine, "docs"))
+        for folder in (mine, os.path.join(mine, "docs")):
+            d = self.s.create("By folder", "shell", folder)                 # no « repo » given, only the folder
+            self.assertEqual(self.s.store.get(d["id"])["repo_id"], r["id"])
+            self.assertIn("GIT_SSH_COMMAND", self.s.session_env(d["id"]))
+        wt = os.path.join(self.tmp, "mine-wt")
+        git(mine, "worktree", "add", "-q", "-b", "am/x", wt)
+        self.assertEqual(self.s.repos.owner_of(wt), r["id"])                  # a worktree of it too
+        elsewhere = os.path.join(self.tmp, "elsewhere")
+        os.makedirs(elsewhere)
+        self.assertEqual(self.s.store.get(self.s.create("Other", "shell", elsewhere)["id"])["repo_id"], "")
+
     def test_another_origin_is_never_changed(self):
         mine = self.own_repo(origin="git@github.com:someone/else.git")
         r = self.s.repos.add("file://" + self.bare, local_path=mine)

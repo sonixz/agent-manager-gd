@@ -357,3 +357,8 @@ along, given through GIT_SSH_COMMAND; the real blocker was a missing origin. The
 Code session on a connected repository gets one paragraph appended to its instructions (`--append-system-prompt`, this
 launch only, never written into the repository): git already authenticates with the repository's deploy key, use plain
 git, never create SSH keys or edit ~/.ssh, and what a write refusal means. Codex sessions do not get it yet. Tests: 73.
+- A session created by folder (not by « Repository ») in a connected repository's folder, a subfolder or one of its
+  worktrees is now linked to that repository: it gets the deploy key and the note like the others. Before, it got no
+  key and git fell back on the owner's default ~/.ssh key. The note also says to check access with
+  `git ls-remote origin` (a bare `ssh -T` ignores GIT_SSH_COMMAND, which misled the gd-project agent). Proposed, not
+  built: a per-session ssh-agent holding only the repository's key, so tools calling ssh directly use it too.

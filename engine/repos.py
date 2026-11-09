@@ -132,6 +132,17 @@ class Repos:
             st["commits"] = int(n) if rc == 0 and n.isdigit() else 0
         return st
 
+    def owner_of(self, folder: str) -> str:
+        """The connected repository a folder belongs to (its folder, a subfolder, or one of its worktrees), or ""."""
+        f = os.path.realpath(folder)
+        rc, common = self._git(f, "rev-parse", "--path-format=absolute", "--git-common-dir") if os.path.isdir(f) else (1, "")
+        top = os.path.dirname(os.path.realpath(common)) if rc == 0 and common else ""
+        for r in self.all():
+            lp = os.path.realpath(r["local_path"]) if r["local_path"] else ""
+            if lp and (f == lp or f.startswith(lp + os.sep) or top == lp):
+                return r["id"]
+        return ""
+
     def set_folder(self, rid: str, path: str) -> dict:
         """Points the repository at another folder (the owner's own clone); the previous copy is left as it is."""
         r = self.get(rid)

@@ -217,6 +217,8 @@ class Sessions:
         cwd = os.path.expanduser(host_path((cwd or "~").strip()))
         if not os.path.isdir(cwd):
             raise ValueError(f"no such folder: {cwd}")
+        if not repo:  # a folder that belongs to a connected repository: the session gets that repository's key too
+            repo = self.repos.owner_of(cwd)
         wt, base = ("", "")
         if worktree:
             wt, base = self._add_worktree(cwd, name)
