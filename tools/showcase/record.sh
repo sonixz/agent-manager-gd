@@ -22,7 +22,9 @@ for line in sys.stdin.read().split("\n"):
         pad = " " * (len(a) - len(b)) if "\u2502" in line else ""  # only inside a box (│ … │)
         line = re.sub(re.escape(a) + r"(\S*)", lambda m: b + m.group(1) + pad, line)
     print(line)
-' | sed -e "s#$(whoami)@$(hostname)#dev@workstation#g"
+' | sed -e "s#$(whoami)@$(hostname)#dev@workstation#g" \
+        -e 's/\x1b\[48;5;22m/\x1b[48;2;27;58;38m/g' -e 's/\x1b\[48;5;52m/\x1b[48;2;66;31;38m/g'
+  # capture-pane gives Claude Code's dark diff backgrounds as 256-colour green and red (22, 52): back to dark tones
 }
 case "$1" in
   setup) rm -rf "$R"; "$HERE/make_workspace.sh" "$R" >/dev/null; mv "$R/home/dev/code" "$R/code"; ls "$R/code" ;;

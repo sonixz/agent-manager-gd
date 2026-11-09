@@ -4,20 +4,20 @@
 [38;5;246m  ⎿  [39mUpdated [1mscripts/sparks.gd[0m [38;5;246m(+13 -1)[39m
      [2m[38;5;231m  1 [0m[38;5;231m extends GPUParticles2D[39m
      [2m[38;5;231m  2 [0m[38;5;231m [39m
-     [38;5;167m[48;5;52m  3 -[38;5;231mfunc burst() -> void:                                                                                                                                        [39m[49m
-     [38;5;77m[48;5;22m  3 +[38;5;231mconst CRIT_MULTIPLIER := 2                                                                                                                                   [39m[49m
-     [38;5;77m[48;5;22m  4 +[38;5;231m                                                                                                                                                             [39m[49m
-     [38;5;77m[48;5;22m  5 +[38;5;231mvar _base_amount: int                                                                                                                                        [39m[49m
-     [38;5;77m[48;5;22m  6 +[38;5;231mvar _base_speed_scale: float                                                                                                                                 [39m[49m
-     [38;5;77m[48;5;22m  7 +[38;5;231m                                                                                                                                                             [39m[49m
-     [38;5;77m[48;5;22m  8 +[38;5;231mfunc _ready() -> void:                                                                                                                                       [39m[49m
-     [38;5;77m[48;5;22m  9 +[38;5;231m        _base_amount = amount                                                                                                                                [39m[49m
-     [38;5;77m[48;5;22m 10 +[38;5;231m        _base_speed_scale = speed_scale                                                                                                                      [39m[49m
-     [38;5;77m[48;5;22m 11 +[38;5;231m                                                                                                                                                             [39m[49m
-     [38;5;77m[48;5;22m 12 +[38;5;231mfunc burst(crit: bool = false) -> void:                                                                                                                      [39m[49m
-     [38;5;77m[48;5;22m 13 +[38;5;231m        var mult := CRIT_MULTIPLIER if crit else 1                                                                                                           [39m[49m
-     [38;5;77m[48;5;22m 14 +[38;5;231m        amount = _base_amount * mult                                                                                                                         [39m[49m
-     [38;5;77m[48;5;22m 15 +[38;5;231m        speed_scale = _base_speed_scale * mult                                                                                                               [39m[49m
+     [38;5;167m[48;2;66;31;38m  3 -[38;5;231mfunc burst() -> void:                                                                                                                                        [39m[49m
+     [38;5;77m[48;2;27;58;38m  3 +[38;5;231mconst CRIT_MULTIPLIER := 2                                                                                                                                   [39m[49m
+     [38;5;77m[48;2;27;58;38m  4 +[38;5;231m                                                                                                                                                             [39m[49m
+     [38;5;77m[48;2;27;58;38m  5 +[38;5;231mvar _base_amount: int                                                                                                                                        [39m[49m
+     [38;5;77m[48;2;27;58;38m  6 +[38;5;231mvar _base_speed_scale: float                                                                                                                                 [39m[49m
+     [38;5;77m[48;2;27;58;38m  7 +[38;5;231m                                                                                                                                                             [39m[49m
+     [38;5;77m[48;2;27;58;38m  8 +[38;5;231mfunc _ready() -> void:                                                                                                                                       [39m[49m
+     [38;5;77m[48;2;27;58;38m  9 +[38;5;231m        _base_amount = amount                                                                                                                                [39m[49m
+     [38;5;77m[48;2;27;58;38m 10 +[38;5;231m        _base_speed_scale = speed_scale                                                                                                                      [39m[49m
+     [38;5;77m[48;2;27;58;38m 11 +[38;5;231m                                                                                                                                                             [39m[49m
+     [38;5;77m[48;2;27;58;38m 12 +[38;5;231mfunc burst(crit: bool = false) -> void:                                                                                                                      [39m[49m
+     [38;5;77m[48;2;27;58;38m 13 +[38;5;231m        var mult := CRIT_MULTIPLIER if crit else 1                                                                                                           [39m[49m
+     [38;5;77m[48;2;27;58;38m 14 +[38;5;231m        amount = _base_amount * mult                                                                                                                         [39m[49m
+     [38;5;77m[48;2;27;58;38m 15 +[38;5;231m        speed_scale = _base_speed_scale * mult                                                                                                               [39m[49m
      [2m[38;5;231m 16 [0m[38;5;231m         restart()[39m
      [2m[38;5;231m 17 [0m[38;5;231m [39m
      [2m[38;5;231m 18 [0m[38;5;231m func cool_down() -> void:[39m

@@ -20,6 +20,42 @@ func shot(name: String) -> void:
 	report.append("capture " + name)
 
 
+## A How-to step: the window at 1280×800, to public/assets/howto/<guide>/NN.webp.
+func hshot(gid: String, n: int) -> void:
+	for i in 3:
+		await process_frame
+	var dir := OS.get_environment("SHOW_HOWTO").path_join(gid)
+	DirAccess.make_dir_recursive_absolute(dir)
+	var img := root.get_texture().get_image()
+	img.resize(1280, 800, Image.INTERPOLATE_LANCZOS)
+	img.save_webp(dir.path_join("%02d.webp" % n), true, 0.88)
+	report.append("howto %s %02d" % [gid, n])
+
+
+func _sid(name: String) -> String:
+	for x in main.sessions:
+		if str(x["name"]) == name:
+			return str(x["id"])
+	return ""
+
+
+## The gift card change in acme-store, for the Review view.
+func _review_files() -> void:
+	var repo := code.path_join("acme-store")
+	_write(repo.path_join("src/checkout/giftcard.ts"), "export interface GiftCard { code: string; balance: number }\n\nexport function redeemGiftCard(total: number, card: GiftCard) {\n  const applied = Math.min(total, card.balance);\n  return { applied, remaining: total - applied, card: { ...card, balance: card.balance - applied } };\n}\n")
+	_write(repo.path_join("tests/giftcard.test.ts"), "import { redeemGiftCard } from \"../src/checkout/giftcard\";\n\ntest(\"takes no more than the balance\", () => {\n  const r = redeemGiftCard(80, { code: \"GIFT-1234\", balance: 50 });\n  expect(r.applied).toBe(50);\n  expect(r.remaining).toBe(30);\n});\n")
+	_write(repo.path_join("README.md"), "# Acme Store\nA small storefront: catalogue, cart and checkout.\n\nGift cards are redeemed at checkout, never for more than their balance.\n")
+
+
+func _review_pick(part: String) -> void:
+	for i in main.review_files.item_count:
+		var t: String = main.review_files.get_item_text(i)
+		if t.contains(part) and not (part == "giftcard.ts" and t.contains("test")):
+			main.review_file = i
+			main.review_files.select(i)
+	main._render_review_file()
+
+
 func wait(s: float) -> void:
 	await create_timer(s).timeout
 
@@ -235,6 +271,107 @@ func _run() -> void:
 				await wait(2.5)
 				await shot("theme-%s" % t)
 			await main.set_theme_name("focus")
+		# ---------------------------------------------------------------- How-to guides (tools/howto/guides.py)
+		"howto-first-minutes":
+			var g := "first-minutes"
+			main.select(made["Checkout flow"])  # the new session goes into the selected session's group
+			await wait(2.0)
+			await main._open_new("", "claude")
+			await wait(0.6)
+			main.f_name.text = "Gift card"
+			main.f_cwd.text = "~/code/acme-store"
+			await wait(0.4)
+			await hshot(g, 1)
+			main.new_dialog.hide()
+			main.f_cwd.text = code.path_join("acme-store")
+			await main._create()
+			var sid := _sid("Gift card")
+			_map(sid, "idle-claude")
+			_state(sid, "claude", {"hook_event_name": "SessionStart"})  # as Claude Code says when it starts
+			await wait(3.0)
+			await main.refresh()
+			await hshot(g, 2)
+			_map(sid, "checkout-working")
+			_state(sid, "claude", WORKING)
+			await wait(2.0)
+			await main.refresh()
+			await hshot(g, 3)
+			main.select(made["Checkout flow"])
+			await wait(1.5)
+			main._toast("Flaky tests waits for your OK")
+			await main.refresh()
+			await hshot(g, 4)
+			_state(sid, "claude", DONE)
+			await main.refresh()
+			main.select(made["Sparks"])
+			await wait(2.0)
+			main._toast("Gift card is done")
+			await hshot(g, 5)
+		"howto-answer-fast":
+			var g := "answer-fast"
+			main.select(made["Checkout flow"])
+			await wait(2.5)
+			await hshot(g, 1)
+			_state(made["Flaky tests"], "claude", WORKING)
+			await main.refresh()
+			main._toast("Approved: Flaky tests carries on")
+			await wait(0.8)
+			await hshot(g, 2)
+			main._quick_reply(made["Rate limiter"])
+			main.ask_edit.text = "Per API key, with the client IP as a fallback"
+			await wait(0.6)
+			await hshot(g, 3)
+			main.ask_dialog.hide()
+			main.select(made["Rate limiter"])
+			await wait(2.5)
+			await hshot(g, 4)
+		"howto-views":
+			var g := "views"
+			main.select(made["Checkout flow"])
+			await wait(2.5)
+			await hshot(g, 1)
+			main.grid_ids = [made["Checkout flow"], made["Flaky tests"], made["Rate limiter"], made["Test runner"]]
+			main.set_view("grid")
+			await wait(3.5)
+			await main.refresh()
+			await hshot(g, 2)
+			main.set_view("board")
+			await wait(3.5)
+			await main.refresh()
+			await wait(1.0)
+			await hshot(g, 3)
+			main.set_view("focus")
+			main.select(made["Sparks"])
+			await wait(2.0)
+			main.open_palette()
+			main.palette.edit.text = "gr"
+			main.palette._filter("gr")
+			await wait(0.6)
+			await hshot(g, 4)
+			main.palette.hide()
+		"howto-review":
+			var g := "review"
+			_review_files()
+			var sid: String = made["Checkout flow"]
+			main.select(sid)
+			await wait(1.0)
+			main.set_view("review")
+			await wait(1.5)
+			await main._load_review()
+			await wait(0.8)
+			await hshot(g, 1)
+			_review_pick("giftcard.ts")
+			await wait(0.8)
+			await hshot(g, 2)
+			await main.engine.call_api("POST", "/sessions/%s/comments" % sid, {"path": "src/checkout/giftcard.ts", "line": 4, "code": "  const applied = Math.min(total, card.balance);", "text": "Round to cents: totals come in as floats"})
+			await main.engine.call_api("POST", "/sessions/%s/comments" % sid, {"path": "src/checkout/giftcard.ts", "line": 5, "code": "  return { applied, remaining: total - applied, card: { ...card, balance: card.balance - applied } };", "text": "Also refuse an expired card"})
+			await main._load_review()
+			_review_pick("giftcard.ts")
+			await wait(0.8)
+			await hshot(g, 3)
+			await main._send_review()
+			await wait(0.8)
+			await hshot(g, 4)
 	for x in main.sessions.duplicate():
 		await main.engine.call_api("DELETE", "/sessions/%s" % x["id"])
 	var f := FileAccess.open(OS.get_environment("SHOW_REPORTS").path_join("report-%s.txt" % OS.get_environment("SHOW_STEP")), FileAccess.WRITE)

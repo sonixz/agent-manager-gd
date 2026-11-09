@@ -468,3 +468,20 @@ Owner: « Je voyais une animation dynamique… clean, animée, rapide… juste s
   - Back to Focus, **F8 dictation** (a listening overlay, a level meter, the words as they are heard), typed into the
     prompt: « commit this and push the branch », then the commit and the push with the repository's own deploy key.
   - The ✦ journal is proposed to the Brain.
+
+## Loop 19: How-to, the guides (2026-11-09, in progress)
+
+Owner: « Oui, cadence-toi pour Loop 19 et 20. »
+- **Guides as data**: `tools/howto/guides.py` holds each guide's goal, what you need, and its steps (what you do,
+  what you see). It also holds « If it does not work » and links to the Docs. `tools/howto/build_page.py` generates
+  `public/howto.html`: cards with thumbnails, a side menu by group, the guides, and « Coming next » for those not
+  captured yet.
+- **One screenshot per step**: `tools/showcase.sh howto-<guide>` drives the real app on Xvfb and saves
+  `public/assets/howto/<guide>/NN.webp` at 1280×800. `python3 tools/howto/guides.py --check` counts them.
+- **The replayed agent follows the guide**: `agent-replay` now redraws when the map names another scene. A new
+  session also gets Claude Code's own `SessionStart` event, so it shows « ready » like the real one. Before, it showed
+  « working » with « python3 » as its quote.
+- **First 4 guides**: your first five minutes, answer without opening a terminal, Focus/Grid/Board, review a diff
+  and send comments.
+- Pitfall: `tmux capture-pane -e` turns Claude Code's dark diff backgrounds into 256-colour green and red (22, 52),
+  which look bright. The scenes and `record.sh` now map them back to dark tones. The terminal itself was right.

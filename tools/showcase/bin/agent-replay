@@ -2,7 +2,7 @@
 """Website screenshots only: stands in for an agent CLI and shows a recorded real screen (tools/showcase/scenes).
 The scene comes from $SHOWCASE_MAP/<session id> (written by app/tools_showcase.gd), or idle-<tool>. Each scene is
 recorded at the terminal sizes the screenshots use (<scene>@<cols>x<rows>.ans); the one that fits is shown, again
-whenever the terminal is resized."""
+whenever the terminal is resized, and when the map names another scene (a How-to guide moves the agent along)."""
 import glob, os, re, select, shutil, signal, sys, time
 
 tool = os.path.basename(sys.argv[1] if len(sys.argv) > 1 else "claude")
@@ -47,12 +47,19 @@ def draw(*_):
 sys.stdout.buffer.write(b"\x1b[?1049h")
 signal.signal(signal.SIGWINCH, draw)
 draw()
-while True:  # keystrokes are ignored; the screen stays as recorded
+while True:  # keystrokes are ignored; the screen stays as recorded until the map names another scene
     try:
-        r, _, _ = select.select([sys.stdin], [], [], 3600)
+        r, _, _ = select.select([sys.stdin], [], [], 0.3)
         if r:
             os.read(0, 1024)
     except InterruptedError:
         pass
     except OSError:
         time.sleep(1)
+    try:
+        now = open(mp).read().strip()
+    except OSError:
+        continue
+    if now and now != scene:
+        scene = now
+        draw()
