@@ -70,6 +70,11 @@ static func style(key: String, default: Variant) -> Variant:
 	return (STYLES.get(current, {}) as Dictionary).get(key, default)
 
 
+## The Second Brain's own colour (violet), readable on every theme.
+static func brain() -> Color:
+	return Color("6a3fc0") if is_light() else Color("c8b6ff")
+
+
 static func is_light() -> bool:
 	return col("BG").get_luminance() > 0.5
 

@@ -12,7 +12,9 @@ const TOOL_BADGE := {"claude": ["✻", Color("d97757")], "codex": ["◎", Color(
 var id := ""
 var data := {}
 var dot: Panel
+var brain_mark: Label
 var _pulse: Tween
+var _glow: Tween
 
 
 func setup(s: Dictionary, selected: bool, activity: Array) -> void:
@@ -72,6 +74,10 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	top.add_child(name)
 	top.add_child(_label(_ago(float(s.get("since", 0))), AmTheme.col("FAINT"), 11))
+	brain_mark = _label("", AmTheme.col("FAINT"), 15)
+	brain_mark.mouse_filter = MOUSE_FILTER_PASS
+	brain_mark.pivot_offset = Vector2(6, 9)
+	top.add_child(brain_mark)
 	v.add_child(_label("%s · %s" % [s["tool_label"], activity[1]], acc if attention or str(s.get("activity", "")) == "working" else AmTheme.col("MUTED"), 12))
 	var msg := str(s.get("message", "")).replace("\n", " ").strip_edges()
 	if msg != "":
@@ -80,7 +86,7 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 		m.custom_minimum_size = Vector2(10, 0)
 		v.add_child(m)
 	var where := ("⎇ " + str(s["repo_name"])) if str(s.get("repo_name", "")) != "" else (str(s["cwd"]).get_file() if str(s["cwd"]).get_file() != "" else str(s["cwd"]))
-	var meta := "▸ " + where + ("   ⎇ " + str(s["branch"]) if str(s.get("branch", "")) != "" else "") + ("   ✦ Brain" if s.get("brain", false) else "") + ("   ⇄ claude.ai" if s.get("remote_control", false) else "")
+	var meta := "▸ " + where + ("   ⎇ " + str(s["branch"]) if str(s.get("branch", "")) != "" else "")  + ("   ⇄ claude.ai" if s.get("remote_control", false) else "")
 	if str(s.get("parent_name", "")) != "":
 		meta = "↳ " + str(s["parent_name"]) + "   " + meta
 	var w := _label(meta, AmTheme.col("FAINT"), 11)
@@ -98,6 +104,47 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 		_pulse.tween_property(dot, "scale", Vector2(1.35, 1.35), 0.45).set_trans(Tween.TRANS_BACK)
 		_pulse.tween_property(dot, "scale", Vector2.ONE, 0.45)
 	dot.pivot_offset = dot.size / 2
+
+
+## The ✦ light (main calls it at each Brain check): its look, its details on hover, a glow when it just used the Brain.
+func set_brain(info: Dictionary, glow: bool) -> void:
+	var look := brain_look(info, str(data.get("tool", "")) != "shell")
+	brain_mark.text = look[0]
+	brain_mark.add_theme_color_override("font_color", look[1])
+	brain_mark.tooltip_text = look[2]
+	if glow and look[0] != "":
+		if _glow:
+			_glow.kill()
+		_glow = create_tween()
+		for i in 3:
+			_glow.tween_property(brain_mark, "scale", Vector2(1.45, 1.45), 0.35).set_trans(Tween.TRANS_SINE)
+			_glow.tween_property(brain_mark, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_SINE)
+
+
+## How a session's ✦ looks, as [glyph, colour, details]: ✧ faint (an agent without the Brain), ✦ soft violet (a key
+## of its own), ✦ violet (it also documents: the directive is in its instructions), ✦ amber (it documents but has
+## proposed nothing for a while), ✦ soft red (its key no longer works, or the Brain stopped). Never the key itself.
+static func brain_look(info: Dictionary, agent: bool) -> Array:
+	if info.is_empty():
+		return ["✧", Color(AmTheme.col("FAINT"), 0.7), "No Second Brain for this session"] if agent else ["", Color.TRANSPARENT, ""]
+	var doc := bool(info.get("document", false))
+	var lines := PackedStringArray(["✦ Second Brain: a key of its own, for this session only" + ("\nIt documents its work: the directive is in its instructions" if doc else "")])
+	var calls := int(info.get("calls", 0))
+	var seen := float(info.get("last_seen", 0))
+	lines.append("%d call%s to the Brain%s" % [calls, "" if calls == 1 else "s", (", the last " + _ago(seen) + (" ago" if _ago(seen) != "now" else "")) if seen > 0 else ""])
+	var n := int(info.get("proposals", 0))
+	if n > 0:
+		lines.append("%d proposal%s: %d accepted, %d waiting, %d refused" % [n, "" if n == 1 else "s", int(info.get("applied", 0)), int(info.get("pending", 0)), int(info.get("refused", 0))])
+	else:
+		lines.append("No proposal yet")
+	var problem := str(info.get("problem", ""))
+	if problem != "":
+		lines.insert(0, "Problem: " + problem)
+		return ["✦", Color(AmTheme.col("ERROR"), 0.85), "\n".join(lines)]
+	if bool(info.get("quiet", false)):
+		lines.append("It documents, but has proposed nothing for a while: ask it for its session journal?")
+		return ["✦", AmTheme.col("WARN"), "\n".join(lines)]
+	return ["✦", AmTheme.brain() if doc else Color(AmTheme.brain(), 0.55), "\n".join(lines)]
 
 
 ## A soft flash when the state changes (main calls it).

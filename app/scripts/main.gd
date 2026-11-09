@@ -80,6 +80,14 @@ var review_info: Label
 var read_dialog: AcceptDialog
 var read_text: RichTextLabel
 var brain_ok := false
+var brain := {}             # GET /brain/activity: the Brain, each session's key and what it did with it (never a key)
+var brain_seen := {}        # session id -> calls + proposals at the last check, to make its ✦ glow when it used the Brain
+var brain_badge: Button
+var brain_panel: PanelContainer
+var brain_glyph: Label
+var brain_line1: Label
+var brain_line2: Label
+var header_brain: Button
 var history_search: LineEdit
 var history_list: VBoxContainer
 var finish_dialog: ConfirmationDialog
@@ -125,9 +133,13 @@ func _ready() -> void:
 		status_label.text = "The engine did not start: see the setup check."
 		set_view("setup")
 		return
-	var b := await engine.call_api("GET", "/brain")
-	brain_ok = bool(b.get("connected", false))
-	status_label.text = ("✦ Second Brain connected" if brain_ok else "Second Brain: " + str(b.get("reason", "not connected"))) + " · %s for commands" % key_text("palette")
+	status_label.text = "%s for commands" % key_text("palette")
+	await refresh_brain()
+	var brain_timer := Timer.new()  # the Brain is checked again every 10 s: the badge and the ✦ lights always tell the truth
+	brain_timer.wait_time = 10.0
+	brain_timer.autostart = true
+	brain_timer.timeout.connect(refresh_brain)
+	add_child(brain_timer)
 	await refresh()
 	if sessions.size() > 0:
 		select(str(sessions[0]["id"]))
@@ -302,6 +314,35 @@ func _build() -> void:
 	list_box.size_flags_horizontal = SIZE_EXPAND_FILL
 	list_box.add_theme_constant_override("separation", 6)
 	scroll.add_child(list_box)
+	brain_badge = Button.new()
+	brain_badge.custom_minimum_size = Vector2(0, 54)
+	brain_badge.tooltip_text = "The Second Brain: who holds a key, what the sessions proposed"
+	brain_badge.pressed.connect(_toggle_brain_panel)
+	side_box.add_child(brain_badge)
+	var bh := HBoxContainer.new()
+	bh.set_anchors_and_offsets_preset(PRESET_FULL_RECT, PRESET_MODE_MINSIZE, 10)
+	bh.add_theme_constant_override("separation", 10)
+	bh.mouse_filter = MOUSE_FILTER_IGNORE
+	brain_badge.add_child(bh)
+	brain_glyph = Label.new()
+	brain_glyph.text = "✦"
+	brain_glyph.add_theme_font_size_override("font_size", 24)
+	brain_glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	brain_glyph.pivot_offset = Vector2(9, 16)
+	bh.add_child(brain_glyph)
+	var bv := VBoxContainer.new()
+	bv.alignment = BoxContainer.ALIGNMENT_CENTER
+	bv.add_theme_constant_override("separation", 0)
+	bv.mouse_filter = MOUSE_FILTER_IGNORE
+	bh.add_child(bv)
+	brain_line1 = Label.new()
+	brain_line1.text = "Second Brain · checking…"
+	brain_line1.add_theme_font_size_override("font_size", 13)
+	brain_line1.add_theme_font_override("font", AmTheme.ui_font(650))
+	bv.add_child(brain_line1)
+	brain_line2 = Label.new()
+	brain_line2.add_theme_font_size_override("font_size", 11)
+	bv.add_child(brain_line2)
 	status_label = Label.new()
 	status_label.add_theme_font_size_override("font_size", 11)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -330,6 +371,11 @@ func _build() -> void:
 	header_meta.add_theme_font_size_override("font_size", 12)
 	header_meta.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	titles.add_child(header_meta)
+	header_brain = Button.new()
+	header_brain.flat = true
+	header_brain.add_theme_font_size_override("font_size", 12)
+	header_brain.pressed.connect(_toggle_brain_panel)
+	hb.add_child(header_brain)
 	header_state = Label.new()
 	header_state.add_theme_font_size_override("font_size", 13)
 	hb.add_child(header_state)
@@ -697,6 +743,160 @@ func refresh() -> void:
 		_update_grid_titles()
 
 
+# ---------------------------------------------------------------- the Second Brain, visible
+func brain_info(id: String) -> Dictionary:
+	return (brain.get("sessions", {}) as Dictionary).get(id, {})
+
+
+func _brain_mark(l: Label, s: Dictionary) -> void:
+	var look := SessionCard.brain_look(brain_info(str(s.get("id", ""))), str(s.get("tool", "")) != "shell")
+	l.text = look[0]
+	l.tooltip_text = look[2]
+	l.add_theme_color_override("font_color", look[1])
+
+
+func refresh_brain() -> void:
+	var r := await engine.call_api("GET", "/brain/activity", null, true, 30.0)
+	if r.has("error"):
+		return
+	brain = r
+	brain_ok = bool(r.get("connected", false))
+	var any_glow := false
+	var per: Dictionary = r.get("sessions", {})
+	for id in per:
+		var n := int(per[id].get("calls", 0)) + int(per[id].get("proposals", 0))
+		var glow: bool = brain_seen.has(id) and n > int(brain_seen[id])
+		brain_seen[id] = n
+		any_glow = any_glow or glow
+		if cards.has(id) and is_instance_valid(cards[id]):
+			cards[id].set_brain(per[id], glow)
+	for id in cards:  # sessions without a key (or that lost it) too
+		if not per.has(id) and is_instance_valid(cards[id]):
+			cards[id].set_brain({}, false)
+	_render_brain_badge(any_glow)
+	_render_header()
+	if view == "grid":
+		_update_grid_titles()
+
+
+func _render_brain_badge(glow: bool) -> void:
+	var v := AmTheme.brain()
+	var per: Dictionary = brain.get("sessions", {})
+	var linked := per.values().filter(func(x): return str(x.get("problem", "")) == "").size()
+	var trouble := per.size() - linked
+	var colour := v
+	if brain_ok:
+		brain_line1.text = "Second Brain  ● connected"
+		brain_line2.text = "%d of %d agents linked  ·  %d proposal%s today" % [linked, int(brain.get("agents", 0)), int(brain.get("today", 0)), "" if int(brain.get("today", 0)) == 1 else "s"]
+	else:
+		colour = AmTheme.col("FAINT")
+		brain_line1.text = "Second Brain  ○ " + ("off" if str(brain.get("reason", "")).begins_with("off") else "not running")
+		brain_line2.text = ("%d session%s count%s on it" % [trouble, "" if trouble == 1 else "s", "s" if trouble == 1 else ""]) if trouble > 0 else "Click for details"
+	brain_glyph.add_theme_color_override("font_color", colour)
+	brain_line1.add_theme_color_override("font_color", colour if not brain_ok else AmTheme.col("TEXT"))
+	brain_line2.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+
+	for st in ["normal", "hover", "pressed", "focus"]:
+		var a := 0.07 if st == "normal" else 0.14
+		brain_badge.add_theme_stylebox_override(st, AmTheme.box(Color(colour, a), 10, Color(colour, 0.45 if brain_ok else 0.25), 1, 9))
+	if glow:
+		var t := create_tween()
+		for i in 2:
+			t.tween_property(brain_glyph, "scale", Vector2(1.4, 1.4), 0.35).set_trans(Tween.TRANS_SINE)
+			t.tween_property(brain_glyph, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_SINE)
+
+
+## The small Brain panel (from the badge or the header): the connection, each session's light, the latest proposals.
+func _toggle_brain_panel() -> void:
+	if brain_panel and brain_panel.visible:
+		brain_panel.queue_free()
+		brain_panel = null
+	else:
+		_show_brain_panel()
+
+
+func _show_brain_panel() -> void:
+	if brain_panel:
+		brain_panel.queue_free()
+	brain_panel = PanelContainer.new()
+	brain_panel.top_level = true
+	brain_panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 12, Color(AmTheme.brain(), 0.6), 1, 14))
+	var v := VBoxContainer.new()
+	v.custom_minimum_size = Vector2(420, 0)
+	v.add_theme_constant_override("separation", 6)
+	brain_panel.add_child(v)
+	var title := Label.new()
+	title.text = "✦ Second Brain"
+	title.add_theme_font_override("font", AmTheme.ui_font(700))
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", AmTheme.brain())
+	v.add_child(title)
+	var sub := _wrap(("Connected on this computer. Each session holds a key of its own, read-and-propose only: the Brain's archivist files what they propose, with your rules." if brain_ok
+		else "Not connected: " + str(brain.get("reason", "")) + ". Sessions that count on it cannot read or propose until it runs again."))
+	v.add_child(sub)
+	sub.custom_minimum_size = Vector2(400, 0)
+	var head := Label.new()
+	head.text = "SESSIONS"
+	head.add_theme_font_size_override("font_size", 11)
+	head.add_theme_color_override("font_color", AmTheme.col("MINT"))
+	v.add_child(head)
+	for s in sessions:
+		if str(s.get("tool", "")) == "shell":
+			continue
+		var info := brain_info(str(s["id"]))
+		var look := SessionCard.brain_look(info, true)
+		var row := HBoxContainer.new()
+		var g := Label.new()
+		g.text = look[0]
+		g.add_theme_color_override("font_color", look[1])
+		row.add_child(g)
+		var n := Label.new()
+		n.text = str(s["name"])
+		n.size_flags_horizontal = SIZE_EXPAND_FILL
+		n.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		row.add_child(n)
+		var d := Label.new()
+		d.text = ("no Brain" if info.is_empty() else (str(info["problem"]) if str(info.get("problem", "")) != "" else
+			"%s%d call%s · %d proposal%s" % ["documents · " if info.get("document", false) else "", int(info.get("calls", 0)), "" if int(info.get("calls", 0)) == 1 else "s", int(info.get("proposals", 0)), "" if int(info.get("proposals", 0)) == 1 else "s"]))
+		d.add_theme_font_size_override("font_size", 12)
+		d.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+		row.add_child(d)
+		row.tooltip_text = look[2]
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
+		v.add_child(row)
+	var recent: Array = brain.get("recent", [])
+	if recent.size() > 0:
+		var h2 := head.duplicate() as Label
+		h2.text = "LATEST PROPOSALS"
+		v.add_child(h2)
+		for p in recent:
+			var l := Label.new()
+			var mark: String = {"applied": "✓", "pending": "…", "rejected": "✕", "failed": "✕"}.get(str(p["status"]), "·")
+			l.text = "%s  %s  ·  %s  ·  %s" % [mark, str(p["title"]), str(p["session"]), SessionCard._ago(float(p["at"]))]
+			l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			l.custom_minimum_size = Vector2(10, 0)
+			l.add_theme_font_size_override("font_size", 12)
+			l.add_theme_color_override("font_color", AmTheme.col("TEXT") if str(p["status"]) != "pending" else AmTheme.col("WARN"))
+			v.add_child(l)
+	var btns := HBoxContainer.new()
+	btns.add_theme_constant_override("separation", 8)
+	v.add_child(btns)
+	btns.add_child(_small("Brain keys…", func() -> void:
+		_toggle_brain_panel()
+		set_view("keys"), "Every key Agent Manager made; unused ones can be revoked"))
+	btns.add_child(_small("Check now", func() -> void:
+		await refresh_brain()
+		_show_brain_panel()))
+	btns.add_child(_small("Close", _toggle_brain_panel))
+	add_child(brain_panel)
+	await get_tree().process_frame
+	brain_panel.reset_size()  # once the text knows its width, the panel takes the height it needs
+	await get_tree().process_frame
+	brain_panel.reset_size()
+	var at := brain_badge.get_global_rect()
+	brain_panel.position = Vector2(at.position.x, at.position.y - brain_panel.size.y - 8)
+
+
 func _watch_transitions() -> Array:
 	var changed := []
 	for x in sessions:
@@ -763,6 +963,7 @@ func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
 	var id := str(s["id"])
 	var card := SessionCard.new()
 	card.setup(s, id == selected, activity_of(s))
+	card.set_brain(brain_info(id), false)
 	card.picked.connect(select)
 	card.rename.connect(_rename_session)
 	card.menu.connect(func(sid: String) -> void:
@@ -886,9 +1087,15 @@ func _render_header() -> void:
 		meta = "%s  ·  %s" % [s["tool_label"], short_path(str(s["cwd"]))]
 		if str(s.get("branch", "")) != "":
 			meta += "  ·  ⎇ " + str(s["branch"])
-		if s.get("brain", false):
-			meta += "  ·  ✦ shares the Second Brain"
 	header_meta.text = meta
+	var look := SessionCard.brain_look(brain_info(str(s.get("id", ""))), s and str(s.get("tool", "")) != "shell")
+	header_brain.visible = s and look[0] != ""
+	if header_brain.visible:
+		var info := brain_info(str(s["id"]))
+		header_brain.text = look[0] + (" Brain · documents" if info.get("document", false) else (" Brain" if not info.is_empty() else " no Brain"))
+		header_brain.tooltip_text = look[2]
+		header_brain.add_theme_color_override("font_color", look[1])
+		header_brain.add_theme_color_override("font_hover_color", look[1].lightened(0.2))
 	var act := activity_of(s) if s else [AmTheme.col("MUTED"), ""]
 	var msg := str(s.get("message", ""))
 	header_state.text = ("● " + str(act[1]) if s else "") + (("  ·  " + msg.left(60)) if msg != "" and str(s.get("activity", "")) in ["approval", "waiting"] else "")
@@ -1058,6 +1265,11 @@ func _frame(id: String, titled: bool) -> Control:
 		t.add_theme_font_size_override("font_size", 13)
 		t.size_flags_horizontal = SIZE_EXPAND_FILL
 		bar.add_child(t)
+		var bm := Label.new()
+		bm.name = "Brain"
+		bm.mouse_filter = MOUSE_FILTER_PASS
+		_brain_mark(bm, s)
+		bar.add_child(bm)
 		var focus_btn := _small("⤢", func() -> void:
 			selected = id
 			set_view("focus"), "Open alone")
@@ -1086,6 +1298,7 @@ func _update_grid_titles() -> void:
 				var act := activity_of(s)
 				(bar.get_node("Dot") as Label).add_theme_color_override("font_color", act[0])
 				(bar.get_node("Title") as Label).text = "%s  ·  %s" % [s.get("name", ""), act[1]]
+				_brain_mark(bar.get_node("Brain") as Label, s)
 
 
 func _tile(s: Dictionary) -> Control:

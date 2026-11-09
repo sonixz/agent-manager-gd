@@ -76,6 +76,16 @@ BRIEF_PROMPT = ("Context from earlier sessions on this project, kept by Agent Ma
                 "session summary){brain}. Then say in two lines what you understood and wait for instructions.")
 
 
+
+def _epoch(iso) -> float:
+    """The Brain's UTC times (2026-11-09T14:02:11.123Z) as seconds; 0 when missing or unreadable."""
+    import datetime
+    try:
+        d = datetime.datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        return (d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)).timestamp()
+    except ValueError:
+        return 0.0
+
 class Sessions:
     def __init__(self, store: Store, tmux: Tmux, home: str = "", brain=None):
         self.store = store
@@ -367,6 +377,42 @@ class Sessions:
                 used.setdefault(sb["brain_client"], "sandbox %s" % sb["id"])
         return [{**{k: c.get(k) for k in ("id", "name", "created_at", "last_seen", "calls")},
                  "used_by": used.get(c["id"], "")} for c in self.brain.clients()]
+
+    QUIET = 30 * 60  # a documenting session that worked this long after its last proposal gets a gentle hint
+
+    def brain_activity(self, now: float | None = None) -> dict:
+        """The Second Brain as the app shows it: is it there, which sessions hold a key, what each one did with it
+        (calls, last use, proposals and how they ended), today's proposals and the latest ones. Never a key."""
+        now = now or time.time()
+        recs = [r for r in self.store.all() if r.get("brain_client")]
+        st = self.brain.status() if self.brain else {"connected": False, "reason": "off"}
+        keys, props = ({}, [])
+        if st["connected"]:
+            keys, props = self.brain.keys_activity(), self.brain.proposals()
+        by_key = {r["brain_client"]: r for r in recs}
+        lt = time.localtime(now)
+        midnight = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+        sessions = {}
+        for r in recs:
+            cid, k = r["brain_client"], keys.get(r["brain_client"])
+            mine = [p for p in props if p["client_id"] == cid]
+            last_p = max((_epoch(p["created_at"]) for p in mine), default=0.0)
+            problem = ("" if k else "its key no longer works") if st["connected"] else "the Second Brain is not running"
+            worked = float(self.hook_state(r["id"]).get("time", 0) or 0)
+            doc = bool(r.get("brain_document"))
+            sessions[r["id"]] = {
+                "document": doc, "problem": problem,
+                "calls": int(k.get("calls", 0) or 0) if k else 0, "last_seen": _epoch(k.get("last_seen")) if k else 0.0,
+                "proposals": len(mine), "applied": sum(p["status"] == "applied" for p in mine),
+                "pending": sum(p["status"] == "pending" for p in mine),
+                "refused": sum(p["status"] in ("rejected", "failed") for p in mine), "last_proposal": last_p,
+                "quiet": bool(doc and not problem and worked - (last_p or float(r["created"])) > self.QUIET)}
+        ours = [p for p in props if p["client_id"] in by_key]
+        return {"connected": bool(st["connected"]), "reason": st.get("reason", ""), "sessions": sessions,
+                "agents": sum(1 for r in self.store.all() if r["tool"] != "shell"),
+                "today": sum(1 for p in ours if _epoch(p["created_at"]) >= midnight),
+                "recent": [{"title": p["title"], "session": by_key[p["client_id"]]["name"], "status": p["status"],
+                            "at": _epoch(p["created_at"])} for p in ours[:6]]}
 
     def revoke_brain_key(self, cid: str, confirmed: bool) -> dict:
         if not confirmed:

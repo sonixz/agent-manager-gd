@@ -92,7 +92,7 @@ func _workspace() -> Dictionary:
 	var made := {}
 	var map := OS.get_environment("SHOWCASE_MAP")
 	for p in plan:
-		var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": p[0], "tool": p[1], "cwd": code.path_join(p[2]), "group": p[3], "brain": p[1] != "shell"})
+		var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": p[0], "tool": p[1], "cwd": code.path_join(p[2]), "group": p[3], "brain": p[1] != "shell", "document": p[0] in ["Checkout flow", "Sparks"]})
 		var sid := str(r.get("id", ""))
 		made[p[0]] = sid
 		if p[4] != "":
@@ -164,6 +164,17 @@ func _run() -> void:
 			await main.refresh()
 			await wait(1.0)
 			await shot("board")
+		"brain-visible":  # the Brain made visible: the badge, the ✦ lights, the header pill and the panel
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			await main.refresh_brain()
+			await wait(2.0)
+			await main.refresh_brain()
+			await shot("brain-lights")
+			await main._show_brain_panel()
+			await wait(1.0)
+			await shot("brain-panel")
+			main._toggle_brain_panel()
 		"new-session":
 			main.select(made["Checkout flow"])
 			await wait(2.0)

@@ -153,6 +153,8 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, {"keys": sessions.brain_keys()})
                 if len(parts) == 4 and parts[:2] == ["brain", "keys"] and parts[3] == "revoke" and method == "POST":
                     return self._reply(200, sessions.revoke_brain_key(parts[2], bool(self._body().get("confirmed", False))))
+                if parts == ["brain", "activity"] and method == "GET":
+                    return self._reply(200, sessions.brain_activity())
                 if parts == ["brain"] and method == "GET":
                     return self._reply(200, sessions.brain.status() if sessions.brain else {"connected": False, "reason": "off"})
                 if parts == ["summaries"] and method == "GET":

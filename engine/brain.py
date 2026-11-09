@@ -154,6 +154,25 @@ class Brain:
             raise ValueError("the Second Brain did not list its keys")
         return [c for c in body.get("clients", []) if str(c.get("name", "")).startswith(self.PREFIX)]
 
+    def keys_activity(self) -> dict[str, dict]:
+        """Every key the Brain still accepts, by id: its calls and when it was last used (no status call first)."""
+        code, body = self.call("GET", "/mcp/clients")
+        return {str(c.get("id", "")): c for c in body.get("clients", [])} if code == 200 else {}
+
+    def proposals(self) -> list[dict]:
+        """The latest proposals (newest first), reduced to what the app shows: which key, kind, status, when, title.
+        Nothing else of their content is kept."""
+        code, body = self.call("GET", "/mcp/proposals?status=all")
+        if code != 200:
+            return []
+        out = []
+        for p in body.get("proposals", []):
+            pay = p.get("payload") if isinstance(p.get("payload"), dict) else {}
+            out.append({"client_id": str(p.get("client_id", "")), "kind": str(p.get("kind", "")),
+                        "status": str(p.get("status", "")), "created_at": str(p.get("created_at", "")),
+                        "title": str(pay.get("title", ""))[:90]})
+        return out
+
     def server_spec(self, client_id: str) -> dict:
         """How an agent starts the Brain's MCP server: the relay, run by the Brain's Python, with this session's key."""
         return {"command": self.python, "args": [self.relay_path(), "--client", client_id]}

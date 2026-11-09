@@ -548,3 +548,20 @@ breathing spinner (· ✢ ✳ ✶ ✻ ✽) with a shimmering verb and seconds an
 as a real diff (dark green and red lines), the test run before the summary, the agent's answer streamed a few
 characters at a time, a soft glow while it works (live.js, style.css). Checked with Edge renders at six moments of
 the loop and `tools/site.sh --check` (all green, 5.4 MB).
+
+## Loop 22, first part: the Second Brain made visible in the app (2026-11-09)
+The owner asked for more emphasis on « Second Brain connected » at the bottom left, and for a light on each agent
+session: a session on the Brain holds a key of its own and, when it documents, carries the directive. Before, the
+Brain was one line of grey text checked once at start (it could say « connected » after the Brain had stopped).
+- Engine: `GET /brain/activity` (sessions.brain_activity) reads the Brain's own key list (calls, last use) and its
+  proposals list, and keeps only which key, kind, status, time and title: no content, never a key. For each session:
+  document or not, calls, last use, proposals (accepted, waiting, refused), a problem (its key no longer works, the
+  Brain stopped) and « quiet » (it documents but worked 30 min past its last proposal: promise against fact).
+  Local agents reach the Brain through its own relay, not through the engine, so the counts come from the Brain.
+- App: a badge at the bottom left (a large ✦, « Second Brain ● connected », « 5 of 5 agents linked · 4 proposals
+  today »), checked every 10 s; its ✦ pulses when a session used the Brain. On each card, Grid tile and in the
+  header, a ✦ light: ✧ faint (no Brain), soft violet (its key), violet (documents), amber (quiet), soft red (problem),
+  details on hover. The badge or the header opens a small panel: each session's light and counts, the latest
+  proposals with their outcome, Brain keys…, Check now. A key is given when a session starts (its MCP setup), so the
+  panel has no « give a key » to a running session.
+- Captures: the stand-in Brain answers proposals; new step `brain-visible` (brain-lights, brain-panel). Tests 77 OK.

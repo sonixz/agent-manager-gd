@@ -22,6 +22,8 @@ CLIENT_TOKEN = "sbmcp_secret_never_shown"
 class FakeBrain(BaseHTTPRequestHandler):
     calls = []
     n = 0
+    keys = {}        # id -> {calls, last_seen}: what GET /mcp/clients answers
+    proposals = []   # what GET /mcp/proposals?status=all answers, newest first
 
     def log_message(self, *a):
         pass
@@ -34,6 +36,10 @@ class FakeBrain(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        if self.path == "/mcp/clients":
+            return self._reply({"clients": [{"id": k, "name": "Agent Manager · x", **v} for k, v in FakeBrain.keys.items()]})
+        if self.path.startswith("/mcp/proposals"):
+            return self._reply({"proposals": FakeBrain.proposals})
         self._reply({"status": "ok", "version": "test"})
 
     def do_POST(self):
@@ -51,7 +57,7 @@ class FakeBrain(BaseHTTPRequestHandler):
 @unittest.skipUnless(shutil.which("tmux"), "tmux is needed")
 class BrainTest(unittest.TestCase):
     def setUp(self):
-        FakeBrain.calls, FakeBrain.n = [], 0
+        FakeBrain.calls, FakeBrain.n, FakeBrain.keys, FakeBrain.proposals = [], 0, {}, []
         self.tmp = tempfile.mkdtemp(prefix="agmgd-brain-")
         self.srv = ThreadingHTTPServer(("127.0.0.1", 0), FakeBrain)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
@@ -155,6 +161,45 @@ class BrainTest(unittest.TestCase):
         d = self.s.create("Alone", "claude", self.tmp, brain=False)
         self.assertEqual(FakeBrain.calls, [])
         self.assertFalse(d["brain"])
+
+    def test_brain_activity_per_session_without_any_key_or_content(self):
+        doc = self.s.create("Checkout flow", "claude", self.tmp, document=True)    # key c001, documents
+        plain = self.s.create("Rate limiter", "claude", self.tmp)                  # key c002
+        self.s.create("Shell", "shell", self.tmp)                                  # no key
+        now = time.time()
+        iso = lambda t: time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(t))
+        FakeBrain.keys = {"c001": {"calls": 7, "last_seen": iso(now - 60)}}       # c002 is gone (revoked in the Brain)
+        FakeBrain.proposals = [
+            {"client_id": "c001", "kind": "item", "status": "applied", "created_at": iso(now - 120),
+             "payload": {"title": "Session journal · acme", "content": "SECRET CONTENT", "reason": "r"}},
+            {"client_id": "c001", "kind": "item", "status": "pending", "created_at": iso(now - 300), "payload": {"title": "A decision"}},
+            {"client_id": "zzz", "kind": "item", "status": "applied", "created_at": iso(now - 30), "payload": {"title": "Not ours"}}]
+        a = self.s.brain_activity(now)
+        self.assertTrue(a["connected"])
+        self.assertEqual(a["agents"], 2)
+        d = a["sessions"][doc["id"]]
+        self.assertEqual((d["document"], d["calls"], d["proposals"], d["applied"], d["pending"], d["problem"]), (True, 7, 2, 1, 1, ""))
+        self.assertAlmostEqual(d["last_seen"], now - 60, delta=2)
+        self.assertEqual(a["sessions"][plain["id"]]["problem"], "its key no longer works")
+        today = sum(time.localtime(now - ago).tm_yday == time.localtime(now).tm_yday for ago in (120, 300))
+        self.assertEqual(a["today"], today)                                         # ours only, since midnight
+        self.assertEqual([r["title"] for r in a["recent"]], ["Session journal · acme", "A decision"])
+        self.assertEqual(a["recent"][0]["session"], "Checkout flow")
+        text = json.dumps(a)
+        for secret in ("SECRET CONTENT", CLIENT_TOKEN, APP_TOKEN, "c001"):
+            self.assertNotIn(secret, text)
+        # promise vs fact: it worked well after its last proposal
+        os.makedirs(os.path.join(self.tmp, "state"), exist_ok=True)
+        with open(os.path.join(self.tmp, "state", doc["id"] + ".json"), "w") as f:
+            json.dump({"state": "working", "time": now + 3600}, f)
+        self.assertTrue(self.s.brain_activity(now)["sessions"][doc["id"]]["quiet"])
+        # the Brain stops: every session that counts on it shows the problem
+        self.srv.shutdown(); self.srv.server_close()
+        a = self.s.brain_activity(now)
+        self.assertFalse(a["connected"])
+        self.assertEqual(a["sessions"][doc["id"]]["problem"], "the Second Brain is not running")
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), FakeBrain)  # a running one again, for tearDown
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
 
 
 if __name__ == "__main__":
