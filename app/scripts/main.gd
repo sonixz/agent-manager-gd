@@ -20,6 +20,8 @@ var dismissed := {}         # session id -> the request (its « since ») you cl
 var notified := {}          # session id -> the request already announced: one toast, one flash, one chime per request
 var sound_on := true
 var chime: AudioStreamPlayer
+var blip_done: AudioStreamPlayer
+var sound_btn: Button
 var cards := {}               # id -> SessionCard
 
 var side_box: VBoxContainer
@@ -456,6 +458,13 @@ func _build() -> void:
 	repos_btn.pressed.connect(set_view.bind("repos"))
 	hb.add_child(repos_btn)
 	view_buttons["repos"] = repos_btn
+	sound_btn = Button.new()  # the small sounds, on or muted (there is no spoken notice any more)
+	sound_btn.text = "♪" if sound_on else "♪ off"
+	sound_btn.toggle_mode = true
+	sound_btn.button_pressed = not sound_on
+	sound_btn.tooltip_text = "Small sounds: a soft blip when an agent waits for you, a quieter tick when one finishes. Click to mute or unmute"
+	sound_btn.pressed.connect(func() -> void: set_sound(not sound_on))
+	hb.add_child(sound_btn)
 	var theme_btn := Button.new()
 	theme_btn.text = "◐"
 	theme_btn.tooltip_text = "Theme and keys"
@@ -1433,29 +1442,32 @@ func _watch_transitions() -> Array:
 		var before := str(last_activity.get(id, ""))
 		if before != "" and act != before:
 			changed.append(id)
-			_speak_transition(x, act)
+			if act == "done" and before == "working" and sound_on:
+				_blip(false)   # finished: an even quieter, lower tick
 			if act in ["approval", "waiting"] and str(notified.get(id, "")) != str(x.get("since", "")):
 				notified[id] = str(x.get("since", ""))
 				_toast("%s %s" % [x["name"], activity_of(x)[1]])
 				if not get_window().has_focus():
 					DisplayServer.window_request_attention()
 				if sound_on:
-					_chime()
+					_blip(true)
 		last_activity[id] = act
 	var n := sessions.filter(func(y): return str(y.get("activity", "")) in ["approval", "waiting"]).size()
 	get_window().title = ("(%d) " % n if n > 0 else "") + "Agent Manager GD"
 	return changed
 
 
-## A soft two-note chime made here (no sound file): when an agent starts waiting for you.
-func _chime() -> void:
-	if chime == null:
+## Small sounds made here (no sound file), never a voice: a soft short blip when an agent waits for you, an even
+## quieter lower tick when one finishes. The ♪ button at the top right mutes them.
+func _blip(waits: bool) -> void:
+	var p := chime if waits else blip_done
+	if p == null:
 		var rate := 22050
+		var f := 740.0 if waits else 494.0
 		var data := PackedByteArray()
-		for i in int(rate * 0.32):
+		for i in int(rate * 0.12):
 			var t := float(i) / rate
-			var f := 880.0 if t < 0.14 else 659.0
-			var env := exp(-9.0 * fmod(t, 0.14 if t < 0.14 else 1.0)) * 0.35
+			var env := minf(1.0, t / 0.006) * exp(-38.0 * t) * 0.5   # 6 ms soft attack, then a quick fade: no « ding »
 			var v := int(clamp(sin(TAU * f * t) * env, -1.0, 1.0) * 32767)
 			data.append(v & 0xff)
 			data.append((v >> 8) & 0xff)
@@ -1463,16 +1475,23 @@ func _chime() -> void:
 		w.format = AudioStreamWAV.FORMAT_16_BITS
 		w.mix_rate = rate
 		w.data = data
-		chime = AudioStreamPlayer.new()
-		chime.stream = w
-		chime.volume_db = -8.0
-		add_child(chime)
-	chime.play()
+		p = AudioStreamPlayer.new()
+		p.stream = w
+		p.volume_db = -16.0 if waits else -22.0
+		add_child(p)
+		if waits:
+			chime = p
+		else:
+			blip_done = p
+	p.play()
 
 
 func set_sound(on: bool) -> void:
 	sound_on = on
 	_save("sound", on)
+	if sound_btn:
+		sound_btn.text = "♪" if on else "♪ off"
+		sound_btn.set_pressed_no_signal(not on)
 	_toast("Chime " + ("on: a soft sound when an agent waits for you" if on else "off"))
 
 
@@ -2288,13 +2307,6 @@ func _spoken_waiting(w: Array) -> String:
 	if w.is_empty():
 		return "Personne ne t'attend."
 	return ", ".join(w.map(func(x): return "%s %s" % [x["name"], "attend ton OK" if str(x["activity"]) == "approval" else "attend une réponse"])) + "."
-
-
-func _speak_transition(x: Dictionary, act: String) -> void:
-	match act:
-		"approval": _speak("%s attend ton OK." % x["name"])
-		"waiting": _speak("%s attend une réponse." % x["name"])
-		"done": _speak("%s a fini." % x["name"])
 
 
 func set_spoken(on: bool) -> void:
@@ -3386,7 +3398,6 @@ func open_palette() -> void:
 	items.append({"label": "Shortcuts", "hint": "change the keyboard shortcuts", "run": set_view.bind("shortcuts")})
 	items.append({"label": "Connect other tools (MCP)", "hint": "Agent Manager's MCP for Claude Code, Codex, any MCP client", "run": set_view.bind("connect")})
 	items.append({"label": "Setup check", "hint": "python3, tmux, git, ssh, agents, flyctl: found or not", "run": set_view.bind("setup")})
-	items.append({"label": "Spoken status: " + ("turn off" if spoken else "turn on"), "hint": "short spoken notices", "run": func() -> void: set_spoken(not spoken)})
 	items.append({"label": "New session", "hint": key_text("new"), "run": _open_new})
 	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", func(n: String) -> void:
 		await engine.call_api("POST", "/groups", {"name": n})
@@ -3628,10 +3639,6 @@ func _build_menus() -> void:
 		theme_menu.add_item(AmTheme.LABELS[t])
 		theme_menu.set_item_metadata(theme_menu.item_count - 1, t)
 	theme_menu.add_separator()
-	theme_menu.add_item("Spoken status (on / off)")
-	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__spoken")
-	theme_menu.add_item("Chime when an agent waits (on / off)")
-	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__sound")
 	theme_menu.add_item("Usage…")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__usage")
 	theme_menu.add_item("Keys…")
@@ -3650,10 +3657,6 @@ func _build_menus() -> void:
 			set_view(m.substr(2))
 		elif m == "__usage":
 			set_view("usage")
-		elif m == "__spoken":
-			set_spoken(not spoken)
-		elif m == "__sound":
-			set_sound(not sound_on)
 		else:
 			set_theme_name(m))
 	add_child(theme_menu)

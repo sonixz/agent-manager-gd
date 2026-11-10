@@ -664,3 +664,10 @@ its terminal keeps one size across refreshes.
 - Then (owner: « il est comme stocké à moitié de l'écran »): its terminal had only half the window, the plan and
   sessions took the rest. Now tabs: Terminal (the whole height), Plan 0/3, Sessions 2; the window is kept whole and
   in view when it opens (a smaller screen than when it was placed); its background a little less see-through.
+
+## Sounds, not voices (2026-11-09)
+The owner: hearing « … a fini » annoyed him; he wanted a very subtle sound when something waits for him (« pas un
+ding ») and a mute button at the top right. Spoken notices are gone (no voice when an agent waits or finishes; the
+voice still answers when asked « who waits for me? »). Two small sounds made in code: a soft 0.12 s blip when an agent
+waits for you (6 ms attack, quick fade, -16 dB), an even quieter, lower tick when one finishes (-22 dB). A ♪ button at
+the top right mutes them (« ♪ off »); the old menu items (Spoken status, Chime) are removed.
