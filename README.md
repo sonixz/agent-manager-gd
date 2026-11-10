@@ -15,6 +15,9 @@ Claude Code, Codex and your shells side by side, in real terminals that never di
   <a href="https://github.com/sonixz/agent-manager-gd/actions/workflows/tests.yml"><img src="https://github.com/sonixz/agent-manager-gd/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
 </p>
 
+> **This is a lab.** Run it on your own computer; don't put it on the internet unless you know what you're doing
+> (TCP/IP, TLS, authentication, infrastructure as code, DevOps). Read the [AI notice](AI-NOTICE.md).
+
 <p align="center">
   <img src="public/assets/showcase/hero-grid.webp" alt="Agent Manager GD: four live terminals in a grid, the session tree on the left with each agent's state, and the queue of agents waiting for you." width="900">
 </p>
