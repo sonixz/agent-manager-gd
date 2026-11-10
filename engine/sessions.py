@@ -46,6 +46,28 @@ ACTIVE_SECONDS = 2.5
 CLAUDE_BUSY = re.compile(r"esc to interrupt", re.I)   # what Claude Code shows while it works
 STALE_WORKING_SECONDS = 15
 
+# Loop 25: the orchestrator. Sessions started by agents are capped: how many run at once under one root session, and
+# how deep the tree goes (the orchestrator, its sessions, their helpers). Pushing and merging stay the owner's.
+MAX_RUNNING_CHILDREN = 4
+MAX_DEPTH = 2
+OWNER_ONLY_GIT = ["Bash(git push)", "Bash(git push *)", "Bash(git merge *)", "Bash(git rebase *)"]
+ORCH_NOTE = (
+    "You are the orchestrator of Agent Manager GD: you plan, delegate, follow up and check; you rarely code yourself. "
+    "Your agent-manager MCP tools: list_repos, list_sessions, start_session (repo, worktree, level, model, document), "
+    "send_to_session, wait_for_session, read_screen, ask_owner, finish_session. How you work: "
+    "1. Orient: the Second Brain (project cards, open questions, recent decisions) if you have it, then list_repos and "
+    "list_sessions. "
+    "2. Before starting anything, propose a short plan to the owner: the tasks, the repository, the tool and model for "
+    "each and why; then call ask_owner with it and stop until the owner's answer arrives in your terminal. "
+    "3. Delegate each task to its own session with start_session, in a worktree (worktree: true) on the right "
+    "repository, with a precise brief and how to check it. At most {max_children} of your sessions run at once; they "
+    "cannot start sessions of their own beyond one level. "
+    "4. Follow them with wait_for_session and read_screen; send corrections with send_to_session. Their permission "
+    "requests go to the owner, not to you. "
+    "5. When a task is done, check it (tests, the diff), then call finish_session: the owner reviews and merges. You and "
+    "your sessions never push nor merge (it is refused). "
+    "6. Report briefly to the owner, and record the plan, your routing choices and a journal in the Second Brain.")
+
 # Loop 24: permission levels, from the fewest rights to the most. Claude Code and Codex flags of this launch only.
 LEVELS = ["ask", "edits", "auto", "full"]
 LEVEL_FLAGS = {
@@ -98,6 +120,7 @@ def _epoch(iso) -> float:
 
 class Sessions:
     def __init__(self, store: Store, tmux: Tmux, home: str = "", brain=None):
+        self._questions: dict[str, dict] = {}  # session id -> its pending question for the owner (ask_owner, finish_session)
         self._answered: dict[str, float] = {}  # session id -> when you answered it (Approve, Refuse, a reply) from the app
         self.store = store
         self.tmux = tmux
@@ -154,7 +177,99 @@ class Sessions:
                 level = cap
         return level
 
-    def deny_rules(self) -> list[str]:
+    # ---------------------------------------------------------------- the session tree (Loop 25)
+    def root_of(self, sid: str) -> str:
+        seen = set()
+        while sid and sid not in seen:
+            seen.add(sid)
+            parent = (self.store.get(sid) or {}).get("parent", "")
+            if not parent:
+                return sid
+            sid = parent
+        return sid
+
+    def depth_of(self, sid: str) -> int:
+        d, seen = 0, set()
+        while sid and sid not in seen:
+            seen.add(sid)
+            sid = (self.store.get(sid) or {}).get("parent", "")
+            d += 1 if sid else 0
+        return d
+
+    def descendants(self, sid: str) -> list[dict]:
+        out, todo = [], [sid]
+        rows = self.store.all()
+        while todo:
+            cur = todo.pop()
+            kids = [r for r in rows if r.get("parent") == cur]
+            out += kids
+            todo += [k["id"] for k in kids]
+        return out
+
+    def under_orchestrator(self, sid: str) -> bool:
+        return (self.store.get(self.root_of(sid)) or {}).get("role") == "orchestrator" if sid else False
+
+    def check_caps(self, parent: str) -> None:
+        """A session started by an agent: not deeper than MAX_DEPTH, not more than MAX_RUNNING_CHILDREN running at once
+        under the same root session."""
+        if self.depth_of(parent) + 1 > MAX_DEPTH:
+            raise ValueError(f"too deep: sessions started by agents stop at {MAX_DEPTH} levels")
+        live = self.tmux.sessions()
+        running = [r for r in self.descendants(self.root_of(parent))
+                   if (t := live.get(self.tmux_name(r["id"]))) is not None and not t.pane_dead]
+        if len(running) >= MAX_RUNNING_CHILDREN:
+            raise ValueError(f"already {len(running)} sessions running under this one (the limit is "
+                             f"{MAX_RUNNING_CHILDREN}): wait for one to finish, or finish one")
+
+    # ---------------------------------------------------------------- the orchestrator (Loop 25)
+    def orchestrator(self) -> dict | None:
+        rec = next((r for r in self.store.all() if r.get("role") == "orchestrator"), None)
+        return self.describe(rec) if rec else None
+
+    def start_orchestrator(self, cwd: str = "~", level: str = "auto", model: str = "") -> dict:
+        """The one orchestrator: started once, then resumed on its own conversation when it is not running."""
+        cur = self.orchestrator()
+        if cur and cur["state"] == "running":
+            return cur
+        if cur:
+            return self.resume(cur["id"]) if hasattr(self, "resume") else cur
+        return self.create("Orchestrator", "claude", cwd, "", brain=True, document=True, level=level or "auto",
+                           model=model, role="orchestrator")
+
+    def stop_orchestrator(self) -> list[str]:
+        """Stops the orchestrator and every session under it (they stay in the list, ended; nothing is deleted)."""
+        cur = self.orchestrator()
+        if not cur:
+            return []
+        stopped = []
+        for r in [cur] + self.descendants(cur["id"]):
+            try:
+                self.tmux.kill(self.tmux_name(r["id"]))
+                stopped.append(r["id"])
+            except Exception:
+                pass
+        return stopped
+
+    def ask_owner(self, sid: str, question: str, options: list | None = None) -> dict:
+        """A question for the owner: the session shows « waits for an answer » with it until the owner replies."""
+        q = " ".join(str(question).split())[:400]
+        if not q:
+            raise ValueError("an empty question")
+        opts = [str(o)[:80] for o in (options or [])][:6]
+        self._questions[sid] = {"question": q, "options": opts, "at": time.time()}
+        return {"asked": True, "note": "the owner's answer will arrive as a message in your terminal; stop until then"}
+
+    def ready_for_review(self, child: str, by: str, note: str = "") -> dict:
+        """finish_session: a child's work is done; the owner reviews and merges it (never the agent)."""
+        rec = self.store.get(child)
+        if not rec or rec.get("parent") != by:
+            raise ValueError("you may only finish sessions you started")
+        what = f"ready for your review: {note.strip()[:200]}" if note.strip() else "ready for your review"
+        how = " · Finish merges its branch" if rec.get("worktree") else ""
+        self._questions[child] = {"question": what + how, "options": [], "at": time.time(), "review": True}
+        return {"ok": True, "note": "the owner reviews and merges it; you do not push nor merge"}
+
+    def deny_rules(self, rec: dict | None = None) -> list[str]:
         """Paths no agent may read or change, at every level, « No permission » included (Claude Code applies deny
         rules in every mode). Its built-in file tools and the file commands it recognises in Bash are covered; a
         script that opens files itself is not (only an OS sandbox would stop that)."""
@@ -163,7 +278,10 @@ class Sessions:
         if self.brain and getattr(self.brain, "home", ""):
             for sub in ("runtime", "mcp"):
                 paths.append("/" + os.path.join(os.path.abspath(self.brain.home), sub) + "/**")
-        return [f"Read({p})" for p in paths] + [f"Edit({p})" for p in paths]
+        out = [f"Read({p})" for p in paths] + [f"Edit({p})" for p in paths]
+        if rec and rec.get("id") and self.under_orchestrator(rec["id"]):
+            out += OWNER_ONLY_GIT   # the orchestrator and its sessions: pushing and merging are the owner's
+        return out
 
     def command_for(self, rec: dict, mode: str = "new", conversation: str = "") -> list[str]:
         """The tool's command with this session's hooks: options of this launch only, never the user's settings.
@@ -173,18 +291,21 @@ class Sessions:
             cmd = " ".join(_q(c) for c in hook + ["claude"])
             settings = {"hooks": {e: [{"matcher": "", "hooks": [{"type": "command", "command": cmd, "timeout": 5}]}]
                                   for e in CLAUDE_EVENTS},
-                        "permissions": {"deny": self.deny_rules()}}
+                        "permissions": {"deny": self.deny_rules(rec)}}
             folder = os.path.join(self.home, "sessions", rec["id"])
             os.makedirs(folder, exist_ok=True)
             path = os.path.join(folder, "claude-settings.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(settings, f)
             base = ["claude", "--settings", path] + LEVEL_FLAGS["claude"][rec.get("level") or "auto"] + self._claude_mcp(rec)
+            if rec.get("model"):
+                base += ["--model", rec["model"]]
             if rec.get("remote_control"):  # seen and driven from claude.ai/code or the Claude app, under this name
                 base += ["--remote-control", self.remote_name(rec)]
             # how git already authenticates here (the agent never goes looking for a key in ~/.ssh), and, when asked,
             # how to document the session in the Second Brain: one --append-system-prompt for both
-            note = "\n\n".join(n for n in (self.repo_note(rec), self.brain_note(rec)) if n)
+            orch = ORCH_NOTE.format(max_children=MAX_RUNNING_CHILDREN) if rec.get("role") == "orchestrator" else ""
+            note = "\n\n".join(n for n in (orch, self.repo_note(rec), self.brain_note(rec)) if n)
             if note:
                 base += ["--append-system-prompt", note]
             if mode == "resume" and conversation:
@@ -197,6 +318,8 @@ class Sessions:
             return base + ["--session-id", new_id]
         if rec["tool"] == "codex":
             notify = ["-c", "notify=" + json.dumps(hook + ["codex"])] + LEVEL_FLAGS["codex"][rec.get("level") or "auto"] + self._codex_mcp(rec)
+            if rec.get("model"):
+                notify += ["-m", rec["model"]]
             if mode == "resume":  # without a known id Codex shows its own picker
                 return ["codex", "resume"] + notify + ([conversation] if conversation else [])
             if mode == "fork":
@@ -282,7 +405,7 @@ class Sessions:
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
                repo: str = "", host: str = "local", remote: bool = False, document: bool = False,
-               level: str = "") -> dict:
+               level: str = "", model: str = "", role: str = "") -> dict:
         if host == "sandbox":
             return self.create_sandbox_session(name, tool, grp, repo, brain)
         if tool not in TOOLS:
@@ -303,10 +426,14 @@ class Sessions:
         if parent and not self.store.get(parent):
             raise ValueError("unknown parent session")
         level = self.level_for(level, grp, parent)
+        if parent:
+            self.check_caps(parent)
+        if model and not re.match(r"^[A-Za-z0-9._\-\[\]]{1,60}$", model):
+            raise ValueError("a model name of letters, digits, dots and dashes")
         from .review import head
         rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent, start_commit=head(cwd),
                              repo_id=repo)
-        self.store.update(rec["id"], level=level)
+        self.store.update(rec["id"], level=level, model=model, role=role)
         rec = self.store.get(rec["id"])
         if remote and tool == "claude":
             self.store.update(rec["id"], remote_control=1)
@@ -342,6 +469,9 @@ class Sessions:
             state, activity = "archived", "archived"
         elif rec["id"] in self._wrapping and state == "running":
             activity, message = "wrapping", "writing its summary"
+        elif rec["id"] in self._questions and state == "running":
+            q = self._questions[rec["id"]]
+            activity, message = "waiting", q["question"] + ("  [" + " / ".join(q["options"]) + "]" if q["options"] else "")
         return {**rec, "tool_label": TOOLS.get(rec["tool"], {}).get("label", rec["tool"]), "state": state,
                 "activity": activity, "message": message, "conversation": hs.get("conversation", ""),
                 "since": float(hs.get("time", 0) or (t.activity if t else 0) or rec["created"]),
@@ -525,6 +655,7 @@ class Sessions:
             raise ValueError("the session is not running")
         self.tmux.send_text(self.tmux_name(sid), text, enter)
         self._answered[sid] = time.time()
+        self._questions.pop(sid, None)
 
     KEYS = {"Enter", "Escape", "Up", "Down", "Left", "Right", "Tab", "BTab", "y", "n", "1", "2", "3"}
 

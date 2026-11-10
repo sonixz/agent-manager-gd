@@ -164,6 +164,20 @@ def make_handler(sessions: Sessions, token: str):
                 if parts == ["history"] and method == "GET":
                     q = parse_qs(url.query).get("q", [""])[0]
                     return self._reply(200, {"sessions": sessions.history(q)})
+                if parts == ["orchestrator"] and method == "GET":
+                    from .sessions import MAX_RUNNING_CHILDREN, MAX_DEPTH
+                    o = sessions.orchestrator()
+                    kids = [sessions.describe(r) for r in sessions.descendants(o["id"])] if o else []
+                    return self._reply(200, {"orchestrator": o, "sessions": kids,
+                                             "caps": {"running": MAX_RUNNING_CHILDREN, "depth": MAX_DEPTH}})
+                if parts == ["orchestrator", "start"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.start_orchestrator(str(b.get("cwd", "~")), str(b.get("level", "auto")),
+                                                                        str(b.get("model", ""))))
+                if parts == ["orchestrator", "stop"] and method == "POST":
+                    if not bool(self._body().get("confirmed", False)):
+                        raise ValueError("stopping the orchestrator needs the owner's confirmation")
+                    return self._reply(200, {"stopped": sessions.stop_orchestrator()})
                 if parts == ["tree"] and method == "GET":
                     return self._reply(200, sessions.tree())
                 if parts == ["groups"] and method == "POST":
@@ -205,7 +219,7 @@ def make_handler(sessions: Sessions, token: str):
                                                             str(b.get("parent", "")), bool(b.get("brief", False)),
                                                             str(b.get("repo", "")), str(b.get("host", "local")),
                                                             bool(b.get("remote", False)), bool(b.get("document", False)),
-                                                            str(b.get("level", ""))))
+                                                            str(b.get("level", "")), str(b.get("model", ""))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
@@ -220,6 +234,12 @@ def make_handler(sessions: Sessions, token: str):
                         b = self._body()
                         sessions.send(sid, str(b.get("text", "")), bool(b.get("enter", True)))
                         return self._reply(200, {"ok": True})
+                    if method == "POST" and action == "ask":
+                        b = self._body()
+                        return self._reply(200, sessions.ask_owner(sid, str(b.get("question", "")), list(b.get("options") or [])))
+                    if method == "POST" and action == "ready":
+                        b = self._body()
+                        return self._reply(200, sessions.ready_for_review(sid, str(b.get("by", "")), str(b.get("note", ""))))
                     if method == "POST" and action == "keys":
                         sessions.keys(sid, [str(k) for k in self._body().get("keys", [])])
                         return self._reply(200, {"ok": True})

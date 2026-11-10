@@ -164,6 +164,26 @@ func _run() -> void:
 			await main.refresh()
 			await wait(1.0)
 			await shot("board")
+		"orchestrator":  # Loop 25: the panel on the right, its question to the owner, its sessions
+			var map := OS.get_environment("SHOWCASE_MAP")
+			var o: Dictionary = await main.engine.call_api("POST", "/orchestrator/start", {"cwd": code})
+			var oid := str(o.get("id", ""))
+			var f0 := FileAccess.open(map.path_join(oid), FileAccess.WRITE)
+			f0.store_string("idle-claude")
+			f0 = null
+			for p in [["Gift cards", "acme-store", "Acme Store", "checkout-working", "opus"], ["Flaky cart test", "acme-store", "Acme Store", "flaky-ok", "sonnet"]]:
+				var c: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": p[0], "tool": "claude", "cwd": code.path_join(p[1]), "group": p[2], "parent": oid, "model": p[4], "brain": true})
+				var f1 := FileAccess.open(map.path_join(str(c.get("id", ""))), FileAccess.WRITE)
+				f1.store_string(p[3])
+			await main.engine.call_api("POST", "/sessions/%s/ask" % oid, {"question": "Plan for today: 1) gift cards at checkout (Claude Code, Opus, worktree), 2) the flaky cart test (Claude Code, Sonnet). Start both?", "options": ["Yes", "Only 1", "No"]})
+			await main.refresh()
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			main.toggle_orchestrator()
+			await wait(3.0)
+			await main.refresh()
+			await wait(1.0)
+			await shot("orchestrator-panel")
 		"permissions":  # Loop 24: the level at creation, its confirmation, the badge on the card
 			await main.engine.call_api("POST", "/sessions", {"name": "Night refactor", "tool": "claude", "cwd": code.path_join("pixel-forge"), "group": "Pixel Forge", "brain": true, "level": "full"})
 			await main.engine.call_api("POST", "/sessions", {"name": "Careful fix", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true, "level": "ask"})

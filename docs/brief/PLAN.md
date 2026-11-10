@@ -242,7 +242,7 @@ terminaux vivants), une section « Better together » avec Second Brain, les deu
   les niveaux (vérifier que Claude Code respecte les refus en mode sans permission ; sinon le dire avant d'aller plus
   loin) ; un enfant n'a jamais plus de droits que son parent.
 
-### Loop 25 · L'orchestrateur, le socle
+### Loop 25 · L'orchestrateur, le socle (fait le 2026-11-09)
 - Panneau à droite (Ctrl+O) : son terminal et son plan ; rôle et directive ; outils MCP `list_repos`, `start_session`
   (dépôt, worktree, niveau, modèle), `ask_owner`, `finish_session` ; plafonds (sessions simultanées, profondeur) ; ni
   push ni fusion sur main sans l'OK du propriétaire ; bouton « Stop orchestrateur ». Par défaut : il propose son plan et

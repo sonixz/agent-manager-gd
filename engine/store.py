@@ -71,6 +71,9 @@ class Store:
                 db.execute("ALTER TABLE sessions ADD COLUMN brain_document INTEGER NOT NULL DEFAULT 0")
             if "archived_at" not in cols:
                 db.execute("ALTER TABLE sessions ADD COLUMN archived_at REAL NOT NULL DEFAULT 0")
+            for col in ("role", "model"):  # Loop 25: the orchestrator's role; the model a session was started with
+                if col not in cols:
+                    db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
             if "level" not in cols:  # Loop 24: its permission level (ask, edits, auto, full)
                 db.execute("ALTER TABLE sessions ADD COLUMN level TEXT NOT NULL DEFAULT 'auto'")
             if "level" not in {r[1] for r in db.execute("PRAGMA table_info(groups)")}:  # a group's default level
@@ -110,7 +113,7 @@ class Store:
 
     def update(self, sid: str, **fields) -> None:
         allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived", "archived_at", "cwd", "worktree",
-                                                            "brain_client", "remote_control", "brain_document", "level")}
+                                                            "brain_client", "remote_control", "brain_document", "level", "role", "model")}
         if not allowed:
             return
         sets = ", ".join(f"{k} = :{k}" for k in allowed)

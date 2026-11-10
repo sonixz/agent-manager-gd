@@ -100,6 +100,14 @@ var brain_glyph: Label
 var brain_line1: Label
 var brain_line2: Label
 var header_brain: Button
+var orch_panel: PanelContainer   # Loop 25: the orchestrator, on the right (Ctrl+O): its terminal, its question, its sessions
+var orch_head: Label
+var orch_state: Label
+var orch_start: Button
+var orch_stop: Button
+var orch_term_box: VBoxContainer
+var orch_hint: Label
+var orch_list: VBoxContainer
 var history_search: LineEdit
 var history_list: VBoxContainer
 var finish_dialog: ConfirmationDialog
@@ -139,6 +147,7 @@ func _ready() -> void:
 	theme = AmTheme.build()
 	font = TermFont.make()
 	_build()
+	_build_orch_panel()
 	engine = EngineClient.new()
 	add_child(engine)
 	status_label.text = "Starting the engine…"
@@ -171,11 +180,11 @@ func _notification(what: int) -> void:
 # ------------------------------------------------------------------ shortcuts
 const DEFAULT_KEYS := {"palette": "Ctrl+K", "new": "Ctrl+N", "focus": "Ctrl+F", "grid": "Ctrl+G", "board": "Ctrl+B",
 	"history": "Ctrl+H", "review": "Ctrl+R", "next": "Ctrl+Down", "prev": "Ctrl+Up", "approve": "Ctrl+A",
-	"dictate": "F8", "command": "F9"}
+	"dictate": "F8", "command": "F9", "orchestrator": "Ctrl+O"}
 const KEY_LABELS := {"palette": "Command palette", "new": "New session", "focus": "Focus view", "grid": "Grid view",
 	"board": "Board view", "history": "History", "review": "Review", "next": "Next session", "prev": "Previous session",
 	"approve": "Approve the first session waiting for an OK", "dictate": "Hold to dictate (voice)",
-	"command": "Hold for a voice command"}
+	"command": "Hold for a voice command", "orchestrator": "Show or hide the orchestrator"}
 var keymap := DEFAULT_KEYS.duplicate()
 var key_capture := ""  # the action waiting for its new key (Shortcuts screen)
 
@@ -207,6 +216,7 @@ func _run_action(a: String) -> void:
 		"next": _step(1)
 		"prev": _step(-1)
 		"approve": _approve_first()
+		"orchestrator": toggle_orchestrator()
 
 
 func _input(e: InputEvent) -> void:
@@ -763,10 +773,171 @@ func refresh() -> void:
 			if cards.has(id):
 				cards[id].flash(activity_of(_session(id))[0])
 	_render_header()
+	_render_orchestrator()
 	if view == "board":
 		_refresh_previews()
 	elif view == "grid":
 		_update_grid_titles()
+
+
+# ---------------------------------------------------------------- the orchestrator (Loop 25)
+func orchestrator_session() -> Dictionary:
+	for s in sessions:
+		if str(s.get("role", "")) == "orchestrator":
+			return s
+	return {}
+
+
+## Every session under the orchestrator (its children and their helpers), from the parent links.
+func orchestrated() -> Array:
+	var o := orchestrator_session()
+	if o.is_empty():
+		return []
+	var ids := {str(o["id"]): true}
+	var out := []
+	var grew := true
+	while grew:
+		grew = false
+		for s in sessions:
+			if not ids.has(str(s["id"])) and ids.has(str(s.get("parent", ""))):
+				ids[str(s["id"])] = true
+				out.append(s)
+				grew = true
+	return out
+
+
+func _build_orch_panel() -> void:
+	orch_panel = PanelContainer.new()
+	orch_panel.name = "Orchestrator"
+	orch_panel.custom_minimum_size = Vector2(520, 0)
+	orch_panel.visible = false
+	orch_panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("BG_2"), 0, AmTheme.col("BORDER"), 0, 12))
+	get_node("Root").add_child(orch_panel)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	orch_panel.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
+	v.add_child(top)
+	orch_head = Label.new()
+	orch_head.text = "◆ Orchestrator"
+	orch_head.add_theme_font_override("font", AmTheme.ui_font(700))
+	orch_head.add_theme_font_size_override("font_size", 16)
+	orch_head.add_theme_color_override("font_color", AmTheme.col("MINT"))
+	top.add_child(orch_head)
+	orch_state = Label.new()
+	orch_state.size_flags_horizontal = SIZE_EXPAND_FILL
+	orch_state.add_theme_font_size_override("font_size", 12)
+	top.add_child(orch_state)
+	orch_start = _small("Start", _start_orchestrator, "One orchestrator for all your connected repositories: it proposes a plan and waits for your OK")
+	top.add_child(orch_start)
+	orch_stop = _small("Stop all", func() -> void:
+		_confirm("Stop the orchestrator and every session under it?\n\nThey stay in the list, ended; nothing is deleted.", func() -> void:
+			await engine.call_api("POST", "/orchestrator/stop", {"confirmed": true})
+			await refresh()), "Stops the orchestrator and every session it started")
+	top.add_child(orch_stop)
+	top.add_child(_small("⤢", func() -> void:
+		var o := orchestrator_session()
+		if not o.is_empty():
+			set_view("focus")
+			select(str(o["id"])), "Open it in the main area"))
+	top.add_child(_small("✕", toggle_orchestrator, "Hide (%s)" % key_text("orchestrator")))
+	orch_hint = _wrap("")
+	v.add_child(orch_hint)
+	orch_term_box = VBoxContainer.new()
+	orch_term_box.size_flags_vertical = SIZE_EXPAND_FILL
+	v.add_child(orch_term_box)
+	var sub := Label.new()
+	sub.text = "ITS SESSIONS"
+	sub.name = "SubTitle"
+	sub.add_theme_font_size_override("font_size", 11)
+	sub.add_theme_color_override("font_color", AmTheme.col("MINT"))
+	v.add_child(sub)
+	orch_list = VBoxContainer.new()
+	orch_list.add_theme_constant_override("separation", 4)
+	v.add_child(orch_list)
+
+
+func toggle_orchestrator() -> void:
+	orch_panel.visible = not orch_panel.visible
+	if orch_panel.visible:
+		_render_orchestrator()
+		var o := orchestrator_session()
+		if not o.is_empty() and str(o.get("state", "")) == "running":
+			await _ensure_terminal(str(o["id"]))
+	_layout_view()
+
+
+func _start_orchestrator() -> void:
+	_toast("Starting the orchestrator…")
+	var r := await engine.call_api("POST", "/orchestrator/start", {"cwd": "~"}, true, 60.0)
+	if r.has("error"):
+		status_label.text = "Orchestrator: " + str(r["error"])
+		return
+	await refresh()
+	await _ensure_terminal(str(r["id"]))
+	_layout_view()
+
+
+## Its terminal goes in the panel, unless the main area shows it already (Focus or Grid on the orchestrator).
+func _mount_orchestrator() -> void:
+	if orch_panel == null or not orch_panel.visible:
+		return
+	var id := str(orchestrator_session().get("id", ""))
+	if id == "" or not terms.has(id) or not is_instance_valid(terms[id]):
+		return
+	if (view == "focus" and selected == id) or (view == "grid" and grid_ids.has(id)):
+		return
+	var t: Control = terms[id]
+	if t.get_parent() != orch_term_box:
+		t.reparent(orch_term_box, false)
+	t.size_flags_vertical = SIZE_EXPAND_FILL
+	t.size_flags_horizontal = SIZE_EXPAND_FILL
+
+
+func _render_orchestrator() -> void:
+	if orch_panel == null or not orch_panel.visible:
+		return
+	var o := orchestrator_session()
+	var running := not o.is_empty() and str(o.get("state", "")) == "running"
+	orch_start.visible = not running
+	orch_start.text = "Start" if o.is_empty() else "Resume"
+	orch_stop.visible = running
+	if o.is_empty():
+		orch_state.text = ""
+		orch_hint.text = "One orchestrator for all your connected repositories. It reads the Second Brain, proposes a plan and waits for your OK, then starts sessions in worktrees, follows them and hands you each result to review. It never pushes nor merges; at most 4 of its sessions run at once."
+	else:
+		var act := activity_of(o)
+		orch_state.text = "● " + str(act[1])
+		orch_state.add_theme_color_override("font_color", act[0])
+		var msg := str(o.get("message", ""))
+		orch_hint.text = ("It asks you: " + msg + "\n(answer in its terminal below, or with Reply… in the queue)") if str(o.get("activity", "")) == "waiting" and msg != "" else ""
+		if running and not terms.has(str(o["id"])):
+			_ensure_terminal(str(o["id"]))
+	orch_hint.visible = orch_hint.text != ""
+	for c in orch_list.get_children():
+		c.queue_free()
+	var kids := orchestrated()
+	var live := kids.filter(func(x): return str(x.get("state", "")) == "running").size()
+	(orch_panel.find_child("SubTitle", true, false) as Label).text = ("ITS SESSIONS   %d running, 4 at most" % live) if not kids.is_empty() else "ITS SESSIONS   none yet"
+	for k in kids:
+		var b := Button.new()
+		b.flat = true
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		var act := activity_of(k)
+		var tool := str(k.get("tool_label", ""))
+		if str(k.get("model", "")) != "":
+			tool += " · " + str(k["model"])
+		b.text = "%s●  %s  ·  %s  ·  %s%s" % ["      " if str(k.get("parent", "")) != str(o.get("id", "")) else "", k["name"], tool, act[1], ("  ·  ⎇ " + str(k["branch"])) if str(k.get("branch", "")) != "" else ""]
+		b.add_theme_color_override("font_color", act[0])
+		b.add_theme_font_size_override("font_size", 12)
+		b.tooltip_text = str(k.get("message", ""))
+		var kid := str(k["id"])
+		b.pressed.connect(func() -> void:
+			set_view("focus")
+			select(kid))
+		orch_list.add_child(b)
 
 
 # ---------------------------------------------------------------- the Second Brain, visible
@@ -1268,6 +1439,7 @@ func _park_all() -> void:
 
 func _layout_view() -> void:
 	_park_all()
+	_mount_orchestrator.call_deferred()
 	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect"]:
 		return
 	match view:

@@ -70,6 +70,7 @@
         <p class="group">Connect</p>
         <a href="#brain">The Second Brain</a>
         <a href="#mcp">Agent Manager's MCP server</a>
+        <a href="#orchestrator">The orchestrator</a>
         <a href="#repos">Repositories and deploy keys</a>
         <a href="#remote-control">Remote Control</a>
         <a href="#sandboxes">Cloud sandboxes and costs</a>
@@ -312,6 +313,25 @@
         <p>No tool presses keys in someone else's session: an agent never approves on another's behalf.
           <b>··· › Connect other tools</b> gives the command to plug the same server into Claude Code, Codex or any MCP
           client outside the app; such a tool can list, read and start sessions, never type into one or approve.</p>
+
+        <h2 id="orchestrator">The orchestrator</h2>
+        <p>One Claude Code session with an orchestrator's instructions, for all your connected repositories, in a panel on
+          the right (<b>Ctrl+O</b>, or Start in that panel). It plans, delegates, follows and checks; it rarely codes.</p>
+        <ul>
+          <li><b>It asks first.</b> It reads the Second Brain, proposes a plan (tasks, repository, tool and model for each)
+            and waits for your answer: the question shows in the panel and in <i>They wait for you</i>; reply there or
+            in its terminal.</li>
+          <li><b>It delegates</b> with its own tools on Agent Manager's MCP server: <code>list_repos</code>,
+            <code>start_session</code> (a connected repository, a worktree, a permission level, a model, documenting in
+            the Brain), <code>send_to_session</code>, <code>wait_for_session</code>, <code>read_screen</code>,
+            <code>ask_owner</code>, <code>finish_session</code>. Its sessions appear under it in the panel and in the list.</li>
+          <li><b>You review and merge.</b> <code>finish_session</code> hands you a finished session (<i>ready for your
+            review</i>); Finish merges its branch. The orchestrator and every session under it are refused
+            <code>git push</code>, <code>git merge</code> and <code>git rebase</code> (Claude Code deny rules).</li>
+          <li><b>Limits</b>: at most 4 sessions running under it at once, 2 levels deep (its sessions may start one level
+            of helpers), never a higher permission level than its own. Their permission requests come to you.
+            <b>Stop all</b> ends it and every session under it; nothing is deleted.</li>
+        </ul>
 
         <h2 id="repos">Repositories and deploy keys</h2>
         <p><b>⎇ Repos</b>: add a repository's SSH address (<code>git@github.com:owner/repo.git</code>) and its folder

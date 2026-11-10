@@ -607,3 +607,21 @@ stop that but needs bubblewrap, absent here (and Claude Code then runs unsandbox
   session starts (changing it means restarting the session).
 - Not verified with a real agent call: that Claude Code really refuses a denied path in bypass mode (it would use the
   owner's login); the docs say so. Tests 79 OK; captures `permissions` checked; Docs section « Permissions ».
+
+## Loop 25: the orchestrator, its foundation (2026-11-09)
+The owner decided it (« clairement, on va faire l'orchestrateur »), seen in a panel.
+- Engine: a session role « orchestrator », one at a time (`GET /orchestrator`, `POST /orchestrator/start` starts it or
+  resumes it, `POST /orchestrator/stop` with confirmation stops it and every session under it, nothing deleted). Its
+  instructions (`--append-system-prompt`): orient in the Brain, propose a plan and ask_owner before anything, delegate
+  each task to a session in a worktree, follow up, check, finish_session, never push nor merge, record in the Brain.
+- MCP: `start_session` takes a repository, a worktree, a level, a model (`--model` for Claude Code, `-m` for Codex) and
+  document; the orchestrator alone gets `list_repos`, `ask_owner` (its session shows « waits for an answer » with the
+  question, in the queue too, until the owner replies) and `finish_session` (the child shows « ready for your review ·
+  Finish merges its branch »).
+- Limits, for every session started by an agent: 2 levels deep, at most 4 running under one root session, never above
+  the parent's level. The orchestrator and every session under it get `git push`, `git merge`, `git rebase` as deny
+  rules (Claude Code; Codex has no deny rules, its sandbox only limits writes).
+- App: the panel on the right (Ctrl+O, a new shortcut): ◆ Orchestrator, its state, Start/Resume, Stop all, ⤢ to open
+  it in the main area, its question, its live terminal, « its sessions » (tool, model, state, branch; a click opens one).
+- Tests 80 OK (ask_owner, finish_session, caps, owner-only git, stop all); capture step `orchestrator` checked. Not
+  tried with a real orchestrator run yet (it would use the owner's login): that is the owner's first test.

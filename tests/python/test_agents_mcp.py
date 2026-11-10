@@ -67,6 +67,37 @@ class AgentsMcpTest(unittest.TestCase):
         self.assertIn("error", sent_other)
         self.assertIn("error", sent_own)
 
+    def test_the_orchestrator_asks_the_owner_finishes_children_and_is_capped(self):
+        orch = self.s.create("Orchestrator", "shell", self.tmp, role="orchestrator")
+        me = orch["id"]
+        repos, asked, child = self.mcp([("list_repos", {}), ("ask_owner", {"question": "Plan: 2 tasks. OK?", "options": ["Yes", "No"]}),
+                                        ("start_session", {"name": "Task 1", "tool": "shell", "level": "full"})], me=me)
+        self.assertEqual(repos, {"repos": []})
+        self.assertTrue(asked["asked"])
+        d = self.s.get(me)
+        self.assertEqual((d["activity"], d["message"]), ("waiting", "Plan: 2 tasks. OK?  [Yes / No]"))
+        self.s.send(me, "Yes")                                                    # the owner's answer clears it
+        self.assertNotEqual(self.s.get(me)["activity"], "waiting")
+        self.assertEqual(child["level"], "auto")                                  # never above its parent
+        (done,) = self.mcp([("finish_session", {"id": child["id"], "note": "tests pass"})], me=me)
+        self.assertTrue(done["ok"])
+        self.assertIn("ready for your review: tests pass", self.s.get(child["id"])["message"])
+        # pushing and merging are the owner's, for the orchestrator and every session under it
+        with open(self.s.command_for({**self.s.store.get(child["id"]), "tool": "claude"})[2]) as f:
+            self.assertIn("Bash(git push *)", json.load(f)["permissions"]["deny"])
+        # the orchestrator's own tools are refused to other agents
+        (refused,) = self.mcp([("ask_owner", {"question": "x"})])
+        self.assertIn("orchestrator only", refused["error"])
+        # caps: not deeper than two levels, not more than four running under one root
+        grandchild = self.s.create("Helper", "shell", self.tmp, parent=child["id"])
+        with self.assertRaises(ValueError):
+            self.s.create("Too deep", "shell", self.tmp, parent=grandchild["id"])
+        self.s.create("Task 2", "shell", self.tmp, parent=me)
+        self.s.create("Task 3", "shell", self.tmp, parent=me)
+        with self.assertRaises(ValueError):                                       # 4 already run under the orchestrator
+            self.s.create("Task 4", "shell", self.tmp, parent=me)
+        self.assertEqual(len(self.s.stop_orchestrator()), 5)                      # itself and the 4 under it
+
     def test_every_agent_session_is_offered_the_server(self):
         cmd = self.s.command_for({"id": "x1", "tool": "claude", "name": "x"})
         with open(cmd[cmd.index("--mcp-config") + 1]) as f:
