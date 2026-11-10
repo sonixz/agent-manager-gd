@@ -108,6 +108,11 @@ var orch_stop: Button
 var orch_term_box: VBoxContainer
 var orch_hint: Label
 var orch_list: VBoxContainer
+var orch_plan: VBoxContainer
+var orch_foot: Label
+var orch_data := {}          # GET /orchestrator: its plan, the routing rules, the budget and today's tokens
+var rules_dialog: AcceptDialog
+var rules_rows: VBoxContainer
 var history_search: LineEdit
 var history_list: VBoxContainer
 var finish_dialog: ConfirmationDialog
@@ -161,6 +166,7 @@ func _ready() -> void:
 	brain_timer.wait_time = 10.0
 	brain_timer.autostart = true
 	brain_timer.timeout.connect(refresh_brain)
+	brain_timer.timeout.connect(refresh_orchestrator)
 	add_child(brain_timer)
 	await refresh()
 	if sessions.size() > 0:
@@ -847,6 +853,9 @@ func _build_orch_panel() -> void:
 	orch_term_box = VBoxContainer.new()
 	orch_term_box.size_flags_vertical = SIZE_EXPAND_FILL
 	v.add_child(orch_term_box)
+	orch_plan = VBoxContainer.new()
+	orch_plan.add_theme_constant_override("separation", 3)
+	v.add_child(orch_plan)
 	var sub := Label.new()
 	sub.text = "ITS SESSIONS"
 	sub.name = "SubTitle"
@@ -856,16 +865,136 @@ func _build_orch_panel() -> void:
 	orch_list = VBoxContainer.new()
 	orch_list.add_theme_constant_override("separation", 4)
 	v.add_child(orch_list)
+	var foot := HBoxContainer.new()
+	foot.add_theme_constant_override("separation", 6)
+	v.add_child(foot)
+	orch_foot = Label.new()
+	orch_foot.size_flags_horizontal = SIZE_EXPAND_FILL
+	orch_foot.add_theme_font_size_override("font_size", 12)
+	orch_foot.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	foot.add_child(orch_foot)
+	foot.add_child(_small("Routing rules…", _open_rules, "Which tool and model for which kind of task: the orchestrator follows them"))
+	foot.add_child(_small("Budget…", func() -> void:
+		var cur := int((orch_data.get("budget", {}) as Dictionary).get("daily_tokens", 0))
+		_ask("Daily token budget for the orchestrator and its sessions (millions of tokens, 0 = none)", str(cur / 1000000.0) if cur else "0", func(t: String) -> void:
+			var r := await engine.call_api("POST", "/orchestrator/budget", {"daily_tokens": int(float(t.strip_edges().replace(",", ".")) * 1000000)})
+			if r.has("error"):
+				status_label.text = str(r["error"])
+			await refresh_orchestrator()), "Once today's tokens reach it, the orchestrator cannot start sessions"))
+	_build_rules_dialog()
 
 
 func toggle_orchestrator() -> void:
 	orch_panel.visible = not orch_panel.visible
 	if orch_panel.visible:
-		_render_orchestrator()
+		await refresh_orchestrator()
 		var o := orchestrator_session()
 		if not o.is_empty() and str(o.get("state", "")) == "running":
 			await _ensure_terminal(str(o["id"]))
 	_layout_view()
+
+
+## Its plan, live: each task with its state, tool and model, and its session's state; a click opens the session.
+func _render_plan() -> void:
+	for c in orch_plan.get_children():
+		c.queue_free()
+	var plan: Dictionary = orch_data.get("plan", {})
+	var tasks: Array = plan.get("tasks", [])
+	if tasks.is_empty():
+		return
+	var h := Label.new()
+	h.text = "PLAN" + (("   " + str(plan.get("goal", ""))) if str(plan.get("goal", "")) != "" else "")
+	h.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	h.add_theme_font_size_override("font_size", 11)
+	h.add_theme_color_override("font_color", AmTheme.col("MINT"))
+	orch_plan.add_child(h)
+	var icons := {"planned": "○", "running": "●", "review": "◐", "done": "✓", "dropped": "✕"}
+	for t in tasks:
+		var st := str(t.get("status", "planned"))
+		var sess := _session(str(t.get("session", "")))
+		var colour: Color = activity_of(sess)[0] if not sess.is_empty() and st == "running" else ({"done": activity_of({"activity": "done"})[0], "review": AmTheme.col("WARN"), "dropped": AmTheme.col("FAINT")}.get(st, AmTheme.col("MUTED")))
+		var b := Button.new()
+		b.flat = true
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		var who := str(t.get("tool", "claude")).replace("claude", "Claude Code").replace("codex", "Codex") + ((" · " + str(t["model"])) if str(t.get("model", "")) != "" else "")
+		b.text = "%s  %s   ·  %s%s" % [icons.get(st, "○"), t.get("title", ""), who, ("  ·  " + str(activity_of(sess)[1])) if not sess.is_empty() and st == "running" else ("  ·  " + st if st != "planned" else "")]
+		b.add_theme_color_override("font_color", colour)
+		b.add_theme_font_size_override("font_size", 12)
+		b.tooltip_text = ("Why: " + str(t.get("why", ""))) if str(t.get("why", "")) != "" else ""
+		var sid := str(t.get("session", ""))
+		if sid != "":
+			b.pressed.connect(func() -> void:
+				set_view("focus")
+				select(sid))
+		orch_plan.add_child(b)
+
+
+## The owner's routing rules: « when » (a kind of task), the tool, the model; the orchestrator reads them live.
+func _build_rules_dialog() -> void:
+	rules_dialog = AcceptDialog.new()
+	rules_dialog.title = "Routing rules"
+	rules_dialog.ok_button_text = "Save"
+	rules_dialog.min_size = Vector2i(720, 0)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	rules_dialog.add_child(v)
+	var intro := _wrap("Which tool and model for which kind of task. The orchestrator reads these before choosing, and says why when it departs from them. A model is a name its tool knows (opus, sonnet, haiku for Claude Code); empty means the tool's default.")
+	intro.custom_minimum_size = Vector2(680, 0)
+	v.add_child(intro)
+	rules_rows = VBoxContainer.new()
+	rules_rows.add_theme_constant_override("separation", 6)
+	v.add_child(rules_rows)
+	v.add_child(_small("+ Add a rule", func() -> void: _rule_row({"when": "", "tool": "claude", "model": ""})))
+	rules_dialog.confirmed.connect(func() -> void:
+		var out := []
+		for row in rules_rows.get_children():
+			if row.is_queued_for_deletion():
+				continue
+			var w: LineEdit = row.get_child(0)
+			var tool: OptionButton = row.get_child(1)
+			var m: LineEdit = row.get_child(2)
+			out.append({"when": w.text, "tool": str(tool.get_selected_metadata()), "model": m.text.strip_edges()})
+		var r := await engine.call_api("POST", "/orchestrator/rules", {"rules": out})
+		if r.has("error"):
+			status_label.text = "Routing rules: " + str(r["error"])
+		else:
+			_toast("Routing rules saved: the orchestrator reads them before its next choice")
+		await refresh_orchestrator())
+	add_child(rules_dialog)
+
+
+func _rule_row(rule: Dictionary) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	var w := LineEdit.new()
+	w.text = str(rule.get("when", ""))
+	w.placeholder_text = "a kind of task, e.g. hard bugs"
+	w.size_flags_horizontal = SIZE_EXPAND_FILL
+	row.add_child(w)
+	var tool := OptionButton.new()
+	for k in [["claude", "Claude Code"], ["codex", "Codex"], ["shell", "Shell"]]:
+		tool.add_item(k[1])
+		tool.set_item_metadata(tool.item_count - 1, k[0])
+		if k[0] == str(rule.get("tool", "claude")):
+			tool.select(tool.item_count - 1)
+	row.add_child(tool)
+	var m := LineEdit.new()
+	m.text = str(rule.get("model", ""))
+	m.placeholder_text = "model (default)"
+	m.custom_minimum_size = Vector2(150, 0)
+	row.add_child(m)
+	row.add_child(_small("✕", func() -> void: row.queue_free(), "Remove this rule"))
+	rules_rows.add_child(row)
+
+
+func _open_rules() -> void:
+	await refresh_orchestrator()
+	for c in rules_rows.get_children():
+		c.queue_free()
+	for r in orch_data.get("rules", []):
+		_rule_row(r)
+	rules_dialog.popup_centered()
 
 
 func _start_orchestrator() -> void:
@@ -895,9 +1024,23 @@ func _mount_orchestrator() -> void:
 	t.size_flags_horizontal = SIZE_EXPAND_FILL
 
 
+func refresh_orchestrator() -> void:
+	if orch_panel == null or not orch_panel.visible:
+		return
+	var r := await engine.call_api("GET", "/orchestrator", null, true, 30.0)
+	if not r.has("error"):
+		orch_data = r
+	_render_orchestrator()
+
+
+static func _tokens(n: int) -> String:
+	return ("%.1fM" % (n / 1000000.0)) if n >= 1000000 else (("%dk" % (n / 1000)) if n >= 1000 else str(n))
+
+
 func _render_orchestrator() -> void:
 	if orch_panel == null or not orch_panel.visible:
 		return
+	_render_plan()
 	var o := orchestrator_session()
 	var running := not o.is_empty() and str(o.get("state", "")) == "running"
 	orch_start.visible = not running
@@ -920,6 +1063,11 @@ func _render_orchestrator() -> void:
 	var kids := orchestrated()
 	var live := kids.filter(func(x): return str(x.get("state", "")) == "running").size()
 	(orch_panel.find_child("SubTitle", true, false) as Label).text = ("ITS SESSIONS   %d running, 4 at most" % live) if not kids.is_empty() else "ITS SESSIONS   none yet"
+	var b0: Dictionary = orch_data.get("budget", {})
+	var used := int(b0.get("used_today", 0))
+	var cap := int(b0.get("daily_tokens", 0))
+	orch_foot.text = "Today: %s tokens%s" % [_tokens(used), (" of %s" % _tokens(cap)) if cap else " · no budget"]
+	orch_foot.add_theme_color_override("font_color", AmTheme.col("WARN") if cap and used >= cap * 0.8 else AmTheme.col("MUTED"))
 	for k in kids:
 		var b := Button.new()
 		b.flat = true

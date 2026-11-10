@@ -171,10 +171,19 @@ func _run() -> void:
 			var f0 := FileAccess.open(map.path_join(oid), FileAccess.WRITE)
 			f0.store_string("idle-claude")
 			f0 = null
+			var kid_ids := []
 			for p in [["Gift cards", "acme-store", "Acme Store", "checkout-working", "opus"], ["Flaky cart test", "acme-store", "Acme Store", "flaky-ok", "sonnet"]]:
 				var c: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": p[0], "tool": "claude", "cwd": code.path_join(p[1]), "group": p[2], "parent": oid, "model": p[4], "brain": true})
+				kid_ids.append(str(c.get("id", "")))
 				var f1 := FileAccess.open(map.path_join(str(c.get("id", ""))), FileAccess.WRITE)
 				f1.store_string(p[3])
+			await main.engine.call_api("POST", "/orchestrator/plan", {"goal": "Gift cards and a steady test suite", "tasks": [
+				{"title": "Gift cards at checkout", "repo": "acme-store", "tool": "claude", "model": "opus", "why": "touches the money path: the owner's rule « hard bugs » → Opus"},
+				{"title": "Fix the flaky cart test", "repo": "acme-store", "tool": "claude", "model": "sonnet", "why": "everyday fix → Sonnet"},
+				{"title": "Second opinion on the gift card diff", "repo": "acme-store", "tool": "codex", "why": "the owner's rule « code review » → Codex"}]})
+			await main.engine.call_api("POST", "/orchestrator/tasks/t1/update", {"status": "running", "session": kid_ids[0]})
+			await main.engine.call_api("POST", "/orchestrator/tasks/t2/update", {"status": "running", "session": kid_ids[1]})
+			await main.engine.call_api("POST", "/orchestrator/budget", {"daily_tokens": 5000000})
 			await main.engine.call_api("POST", "/sessions/%s/ask" % oid, {"question": "Plan for today: 1) gift cards at checkout (Claude Code, Opus, worktree), 2) the flaky cart test (Claude Code, Sonnet). Start both?", "options": ["Yes", "Only 1", "No"]})
 			await main.refresh()
 			main.set_view("focus")
@@ -184,6 +193,10 @@ func _run() -> void:
 			await main.refresh()
 			await wait(1.0)
 			await shot("orchestrator-panel")
+			await main._open_rules()
+			await wait(0.6)
+			await shot("routing-rules")
+			main.rules_dialog.hide()
 		"permissions":  # Loop 24: the level at creation, its confirmation, the badge on the card
 			await main.engine.call_api("POST", "/sessions", {"name": "Night refactor", "tool": "claude", "cwd": code.path_join("pixel-forge"), "group": "Pixel Forge", "brain": true, "level": "full"})
 			await main.engine.call_api("POST", "/sessions", {"name": "Careful fix", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true, "level": "ask"})

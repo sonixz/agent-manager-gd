@@ -168,8 +168,23 @@ def make_handler(sessions: Sessions, token: str):
                     from .sessions import MAX_RUNNING_CHILDREN, MAX_DEPTH
                     o = sessions.orchestrator()
                     kids = [sessions.describe(r) for r in sessions.descendants(o["id"])] if o else []
+                    orc = sessions.orchestra
                     return self._reply(200, {"orchestrator": o, "sessions": kids,
-                                             "caps": {"running": MAX_RUNNING_CHILDREN, "depth": MAX_DEPTH}})
+                                             "caps": {"running": MAX_RUNNING_CHILDREN, "depth": MAX_DEPTH},
+                                             "plan": orc.plan(), "rules": orc.rules(),
+                                             "budget": {"daily_tokens": orc.budget(),
+                                                        "used_today": sessions.orchestrated_tokens_today()}})
+                if parts == ["orchestrator", "plan"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.orchestra.set_plan(str(b.get("goal", "")), b.get("tasks") or []))
+                if len(parts) == 4 and parts[:2] == ["orchestrator", "tasks"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.orchestra.update_task(parts[2] if parts[3] == "update" else "", str(b.get("status", "")),
+                                                                           str(b.get("session", "")), str(b.get("note", ""))))
+                if parts == ["orchestrator", "rules"] and method == "POST":
+                    return self._reply(200, {"rules": sessions.orchestra.set_rules(self._body().get("rules") or [])})
+                if parts == ["orchestrator", "budget"] and method == "POST":
+                    return self._reply(200, {"daily_tokens": sessions.orchestra.set_budget(int(self._body().get("daily_tokens", 0)))})
                 if parts == ["orchestrator", "start"] and method == "POST":
                     b = self._body()
                     return self._reply(200, sessions.start_orchestrator(str(b.get("cwd", "~")), str(b.get("level", "auto")),

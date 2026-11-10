@@ -331,6 +331,14 @@
           <li><b>Limits</b>: at most 4 sessions running under it at once, 2 levels deep (its sessions may start one level
             of helpers), never a higher permission level than its own. Their permission requests come to you.
             <b>Stop all</b> ends it and every session under it; nothing is deleted.</li>
+          <li><b>Routing</b>: <b>Routing rules…</b> in the panel says which tool and model for which kind of task (by
+            default: hard bugs and architecture → Claude Code Opus; everyday work → Sonnet; small edits → Haiku; a second
+            opinion → Codex). It reads them (<code>routing_rules</code>) before choosing and says why when it departs from
+            them; its routing choices go to the Second Brain with its journal.</li>
+          <li><b>Its plan, live</b>: after your OK it writes its plan (<code>set_plan</code>) and keeps it current
+            (<code>update_task</code>): each task with its tool, model, why, and its session's state.</li>
+          <li><b>Budget</b>: <b>Budget…</b> sets a daily token budget for it and its sessions; the panel shows today's
+            tokens, read from the agents' own logs (UTC day, no money amount). Once it is spent, it cannot start sessions.</li>
         </ul>
 
         <h2 id="repos">Repositories and deploy keys</h2>

@@ -44,6 +44,17 @@ ORCH_TOOLS = [
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "ask_owner", "description": "Asks the owner something (your plan, a choice). Your session shows « waits for an answer » with it; the answer arrives as a message in your terminal. Stop working until it comes.",
      "inputSchema": {"type": "object", "properties": {"question": {"type": "string"}, "options": {"type": "array", "items": {"type": "string"}}}, "required": ["question"]}},
+    {"name": "routing_rules", "description": "The owner's routing rules (which tool and model for which kind of task) and today's token budget. Read them before choosing.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "set_plan", "description": "Writes your plan, shown live to the owner in your panel (after the owner's OK). Each task: title, repo, tool, model, why.",
+     "inputSchema": {"type": "object", "properties": {"goal": {"type": "string"}, "tasks": {"type": "array", "items": {"type": "object", "properties": {
+         "id": {"type": "string"}, "title": {"type": "string"}, "repo": {"type": "string"}, "tool": {"type": "string", "enum": ["claude", "codex", "shell"]},
+         "model": {"type": "string"}, "why": {"type": "string"}}, "required": ["title"]}}}, "required": ["tasks"]}},
+    {"name": "update_task", "description": "Updates one task of your plan: status (planned, running, review, done, dropped), its session id, a note.",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "status": {"type": "string", "enum": ["planned", "running", "review", "done", "dropped"]},
+                     "session": {"type": "string"}, "note": {"type": "string"}}, "required": ["id"]}},
+    {"name": "usage", "description": "Tokens you and your sessions used today (UTC day, from the agents' own logs) and the owner's daily budget (0 = none).",
+     "inputSchema": {"type": "object", "properties": {}}},
     {"name": "finish_session", "description": "Marks one of YOUR sessions as done and ready for the owner's review: the owner reviews and merges it (you never push nor merge).",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "note": {"type": "string", "description": "what was done and how it was checked"}}, "required": ["id"]}},
 ]
@@ -120,7 +131,7 @@ def run_tool(eng, name, a):
             return s
         screen = eng.call("GET", f"/sessions/{sid}/preview?lines=30").get("text", "")
         return {**eng.brief(s), "timed_out": s.get("activity") not in DONE, "screen": screen}
-    if name in ("list_repos", "ask_owner", "finish_session") and eng.role() != "orchestrator":
+    if name in ("list_repos", "ask_owner", "finish_session", "routing_rules", "set_plan", "update_task", "usage") and eng.role() != "orchestrator":
         return {"error": f"{name} is for the orchestrator only"}
     if name == "list_repos":
         r = eng.call("GET", "/repos")
@@ -128,6 +139,16 @@ def run_tool(eng, name, a):
                                                  {"sessions": [y.get("name") for y in x.get("sessions", [])]} for x in r["repos"]]}
     if name == "ask_owner":
         return eng.call("POST", f"/sessions/{eng.me}/ask", {"question": str(a.get("question", "")), "options": a.get("options") or []})
+    if name in ("routing_rules", "usage"):
+        r = eng.call("GET", "/orchestrator")
+        if "error" in r:
+            return r
+        return {"rules": r["rules"], "budget": r["budget"]} if name == "routing_rules" else r["budget"]
+    if name == "set_plan":
+        return eng.call("POST", "/orchestrator/plan", {"goal": str(a.get("goal", "")), "tasks": a.get("tasks") or []})
+    if name == "update_task":
+        return eng.call("POST", f"/orchestrator/tasks/{a.get('id', '')}/update",
+                        {"status": str(a.get("status", "")), "session": str(a.get("session", "")), "note": str(a.get("note", ""))})
     if name == "finish_session":
         return eng.call("POST", f"/sessions/{sid}/ready", {"by": eng.me, "note": str(a.get("note", ""))})
     return {"error": f"unknown tool {name}"}

@@ -98,6 +98,28 @@ class AgentsMcpTest(unittest.TestCase):
             self.s.create("Task 4", "shell", self.tmp, parent=me)
         self.assertEqual(len(self.s.stop_orchestrator()), 5)                      # itself and the 4 under it
 
+    def test_routing_rules_plan_and_daily_budget(self):
+        orch = self.s.create("Orchestrator", "shell", self.tmp, role="orchestrator")
+        rules, plan, task, used = self.mcp([
+            ("routing_rules", {}),
+            ("set_plan", {"goal": "Gift cards", "tasks": [{"title": "Gift cards at checkout", "repo": "acme", "tool": "claude", "model": "opus", "why": "a hard bug"},
+                                                          {"title": "Review", "tool": "codex"}]}),
+            ("update_task", {"id": "t1", "status": "running", "session": "abc123"}),
+            ("usage", {})], me=orch["id"])
+        self.assertEqual(rules["rules"][0]["model"], "opus")                          # the default rules
+        self.assertEqual([t["id"] for t in plan["tasks"]], ["t1", "t2"])
+        self.assertEqual((task["status"], task["session"]), ("running", "abc123"))
+        self.assertEqual(used, {"daily_tokens": 0, "used_today": 0})
+        self.s.orchestra.set_rules([{"when": "everything", "tool": "codex", "model": "gpt-5"}])
+        self.assertEqual(self.s.orchestra.rules(), [{"when": "everything", "tool": "codex", "model": "gpt-5"}])
+        # the budget: once spent, the orchestrator's sessions cannot start
+        self.s.orchestra.set_budget(1000)
+        self.s.orchestrated_tokens_today = lambda: 1200
+        with self.assertRaises(ValueError) as e:
+            self.s.create("One more", "shell", self.tmp, parent=orch["id"])
+        self.assertIn("budget", str(e.exception))
+        self.s.create("Not under it", "shell", self.tmp, parent=self.parent["id"])  # other agents are not concerned
+
     def test_every_agent_session_is_offered_the_server(self):
         cmd = self.s.command_for({"id": "x1", "tool": "claude", "name": "x"})
         with open(cmd[cmd.index("--mcp-config") + 1]) as f:

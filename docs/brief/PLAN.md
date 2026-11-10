@@ -248,7 +248,7 @@ terminaux vivants), une section « Better together » avec Second Brain, les deu
   push ni fusion sur main sans l'OK du propriétaire ; bouton « Stop orchestrateur ». Par défaut : il propose son plan et
   attend l'OK ; un seul orchestrateur pour tous les dépôts connectés.
 
-### Loop 26 · L'orchestrateur qui route
+### Loop 26 · L'orchestrateur qui route (fait le 2026-11-09)
 - Plan en direct dans le panneau, règles de routage modifiables par le propriétaire, décisions de routage notées dans
   le Brain, outil `usage` avec budget par jour.
 

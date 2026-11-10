@@ -625,3 +625,18 @@ The owner decided it (« clairement, on va faire l'orchestrateur »), seen in a 
   it in the main area, its question, its live terminal, « its sessions » (tool, model, state, branch; a click opens one).
 - Tests 80 OK (ask_owner, finish_session, caps, owner-only git, stop all); capture step `orchestrator` checked. Not
   tried with a real orchestrator run yet (it would use the owner's login): that is the owner's first test.
+
+## Loop 26: the orchestrator routes (2026-11-09)
+- Engine (engine/orchestra.py, data/orchestrator.json): its plan (goal, up to 20 tasks: title, repo, tool, model, why,
+  status planned/running/review/done/dropped, session), the owner's routing rules (when → tool, model; four defaults:
+  hard bugs and architecture → Claude Code Opus, everyday → Sonnet, small edits → Haiku, second opinion → Codex), a
+  daily token budget. Today's tokens of the orchestrator and every session under it come from the agents' own logs
+  (UTC day, as the logs stamp it); once the budget is spent, sessions under it cannot start.
+- MCP, orchestrator only: `routing_rules`, `set_plan`, `update_task`, `usage`. Its instructions: read the rules
+  first, say why when departing from them, write the plan after the owner's OK, keep it current, note routing choices
+  in the Brain, check usage before starting sessions.
+- App, in its panel: PLAN (each task with its icon, tool and model, its session's live state; « why » on hover; a click
+  opens the session), « Today: 1.2M tokens of 5M » (amber from 80 %), Routing rules… (an editor: when, tool, model,
+  add, remove, Save), Budget… (millions of tokens, 0 = none).
+- Tests 81 OK; capture step `orchestrator` (panel with plan and budget, routing rules) checked; Docs updated.
+Loops 23 to 26 done. Not tried for real yet: an orchestrator run with the owner's login.

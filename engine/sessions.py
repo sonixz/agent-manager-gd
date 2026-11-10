@@ -66,7 +66,11 @@ ORCH_NOTE = (
     "requests go to the owner, not to you. "
     "5. When a task is done, check it (tests, the diff), then call finish_session: the owner reviews and merges. You and "
     "your sessions never push nor merge (it is refused). "
-    "6. Report briefly to the owner, and record the plan, your routing choices and a journal in the Second Brain.")
+    "6. Report briefly to the owner, and record the plan, your routing choices and a journal in the Second Brain. "
+    "Routing: call routing_rules first and follow the owner's rules to choose each task's tool and model; say why when "
+    "you depart from them. After the owner's OK, write the plan with set_plan (each task: title, repo, tool, model, "
+    "why) and keep it current with update_task (running with its session id, review, done). Check usage before "
+    "starting sessions: when today's token budget is spent, sessions cannot be started.")
 
 # Loop 24: permission levels, from the fewest rights to the most. Claude Code and Codex flags of this launch only.
 LEVELS = ["ask", "edits", "auto", "full"]
@@ -120,6 +124,8 @@ def _epoch(iso) -> float:
 
 class Sessions:
     def __init__(self, store: Store, tmux: Tmux, home: str = "", brain=None):
+        from .orchestra import Orchestra
+        self.orchestra = Orchestra(home or os.path.dirname(os.path.dirname(store.path)))
         self._questions: dict[str, dict] = {}  # session id -> its pending question for the owner (ask_owner, finish_session)
         self._answered: dict[str, float] = {}  # session id -> when you answered it (Approve, Refuse, a reply) from the app
         self.store = store
@@ -217,9 +223,31 @@ class Sessions:
         live = self.tmux.sessions()
         running = [r for r in self.descendants(self.root_of(parent))
                    if (t := live.get(self.tmux_name(r["id"]))) is not None and not t.pane_dead]
+        if self.under_orchestrator(parent):
+            budget, used = self.orchestra.budget(), self.orchestrated_tokens_today()
+            if budget and used >= budget:
+                raise ValueError(f"today's token budget is spent ({used:,} of {budget:,} tokens): the owner can raise it")
         if len(running) >= MAX_RUNNING_CHILDREN:
             raise ValueError(f"already {len(running)} sessions running under this one (the limit is "
                              f"{MAX_RUNNING_CHILDREN}): wait for one to finish, or finish one")
+
+    def orchestrated_tokens_today(self) -> int:
+        """Tokens the orchestrator and every session under it used today (UTC day), from the agents' own logs."""
+        o = next((r for r in self.store.all() if r.get("role") == "orchestrator"), None)
+        if not o:
+            return 0
+        from . import usage
+        from .orchestra import today
+        ids = {o["id"]} | {r["id"] for r in self.descendants(o["id"])}
+        total = 0
+        for s in self.store.history():
+            if s["id"] not in ids:
+                continue
+            for c in s.get("conversations", []):
+                u = usage.conversation_usage(s["tool"], c["conversation"])
+                if u:
+                    total += usage.total(u["days"].get(today(), {}))
+        return total
 
     # ---------------------------------------------------------------- the orchestrator (Loop 25)
     def orchestrator(self) -> dict | None:
