@@ -16,6 +16,10 @@ var selected := ""
 var view := "focus"
 var grid_ids: Array = []      # sessions shown in the grid, selected first
 var last_activity := {}
+var dismissed := {}         # session id -> the request (its « since ») you closed with ✕: off the queue, still on its card
+var notified := {}          # session id -> the request already announced: one toast, one flash, one chime per request
+var sound_on := true
+var chime: AudioStreamPlayer
 var cards := {}               # id -> SessionCard
 
 var side_box: VBoxContainer
@@ -122,6 +126,7 @@ func _ready() -> void:
 	if view in ["setup", "shortcuts", "connect"]:  # settings pages are not reopened at startup
 		view = "focus"
 	spoken = bool(cfg.get_value("ui", "spoken", false))
+	sound_on = bool(cfg.get_value("ui", "sound", true))
 	_load_keymap()
 	theme = AmTheme.build()
 	font = TermFont.make()
@@ -906,12 +911,46 @@ func _watch_transitions() -> Array:
 		if before != "" and act != before:
 			changed.append(id)
 			_speak_transition(x, act)
-			if act in ["approval", "waiting"]:
+			if act in ["approval", "waiting"] and str(notified.get(id, "")) != str(x.get("since", "")):
+				notified[id] = str(x.get("since", ""))
 				_toast("%s %s" % [x["name"], activity_of(x)[1]])
 				if not get_window().has_focus():
 					DisplayServer.window_request_attention()
+				if sound_on:
+					_chime()
 		last_activity[id] = act
+	var n := sessions.filter(func(y): return str(y.get("activity", "")) in ["approval", "waiting"]).size()
+	get_window().title = ("(%d) " % n if n > 0 else "") + "Agent Manager GD"
 	return changed
+
+
+## A soft two-note chime made here (no sound file): when an agent starts waiting for you.
+func _chime() -> void:
+	if chime == null:
+		var rate := 22050
+		var data := PackedByteArray()
+		for i in int(rate * 0.32):
+			var t := float(i) / rate
+			var f := 880.0 if t < 0.14 else 659.0
+			var env := exp(-9.0 * fmod(t, 0.14 if t < 0.14 else 1.0)) * 0.35
+			var v := int(clamp(sin(TAU * f * t) * env, -1.0, 1.0) * 32767)
+			data.append(v & 0xff)
+			data.append((v >> 8) & 0xff)
+		var w := AudioStreamWAV.new()
+		w.format = AudioStreamWAV.FORMAT_16_BITS
+		w.mix_rate = rate
+		w.data = data
+		chime = AudioStreamPlayer.new()
+		chime.stream = w
+		chime.volume_db = -8.0
+		add_child(chime)
+	chime.play()
+
+
+func set_sound(on: bool) -> void:
+	sound_on = on
+	_save("sound", on)
+	_toast("Chime " + ("on: a soft sound when an agent waits for you" if on else "off"))
 
 
 func _toast(text: String) -> void:
@@ -1015,11 +1054,18 @@ func _group_header(g: Dictionary) -> Button:
 func _render_queue() -> void:
 	for c in queue_box.get_children():
 		c.queue_free()
-	var waiting := sessions.filter(func(x): return str(x.get("activity", "")) in ["approval", "waiting"])
+	var all_waiting := sessions.filter(func(x): return str(x.get("activity", "")) in ["approval", "waiting"])
+	var waiting := all_waiting.filter(func(x): return str(dismissed.get(str(x["id"]), "-")) != str(x.get("since", "")))
+	var hidden := all_waiting.size() - waiting.size()
+	if waiting.is_empty() and hidden == 0:
+		return
 	if waiting.is_empty():
+		queue_box.add_child(_small("%d request%s hidden · show" % [hidden, "" if hidden == 1 else "s"], func() -> void:
+			dismissed.clear()
+			_render_queue(), "Requests you closed with ✕ (they are still on the agents' cards)"))
 		return
 	var title := Label.new()
-	title.text = "THEY WAIT FOR YOU   %d" % waiting.size()
+	title.text = "THEY WAIT FOR YOU   %d" % waiting.size() + ("   · %d hidden" % hidden if hidden else "")
 	title.add_theme_color_override("font_color", approval_color())
 	title.add_theme_font_size_override("font_size", 12)
 	title.add_theme_font_override("font", AmTheme.ui_font(700))
@@ -1031,11 +1077,26 @@ func _render_queue() -> void:
 		card.add_theme_stylebox_override("panel", AmTheme.box(Color(act[0], 0.10), 10, Color(act[0], 0.7), 1, 9))
 		var v := VBoxContainer.new()
 		card.add_child(v)
+		var top := HBoxContainer.new()
+		v.add_child(top)
 		var l := Label.new()
 		l.text = "%s · %s" % [x["name"], act[1]]
 		l.add_theme_font_size_override("font_size", 13)
 		l.add_theme_font_override("font", AmTheme.ui_font(600))
-		v.add_child(l)
+		l.size_flags_horizontal = SIZE_EXPAND_FILL
+		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		top.add_child(l)
+		var since := str(x.get("since", ""))
+		var close := Button.new()
+		close.text = "✕"
+		close.flat = true
+		close.tooltip_text = "Hide it here: the request stays on the agent's card and comes back if it asks again"
+		close.add_theme_font_size_override("font_size", 12)
+		close.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+		close.pressed.connect(func() -> void:
+			dismissed[id] = since
+			_render_queue())
+		top.add_child(close)
 		var msg := str(x.get("message", ""))
 		if msg != "":
 			var m := Label.new()
@@ -1048,8 +1109,8 @@ func _render_queue() -> void:
 		h.add_theme_constant_override("separation", 6)
 		v.add_child(h)
 		if str(x["activity"]) == "approval":
-			h.add_child(_small("Approve", func() -> void: _keys(id, ["Enter"]), "Enter: the agent's highlighted choice (Yes) · Ctrl+Shift+A"))
-			h.add_child(_small("Refuse", func() -> void: _keys(id, ["Escape"]), "Escape"))
+			h.add_child(_small("Approve", func() -> void: _answer(id, ["Enter"], card, "✓  Approved · %s carries on" % x["name"]), "Enter: the agent's highlighted choice (Yes) · Ctrl+Shift+A"))
+			h.add_child(_small("Refuse", func() -> void: _answer(id, ["Escape"], card, "✕  Refused · %s stops this step" % x["name"]), "Escape"))
 		else:
 			h.add_child(_small("Reply…", func() -> void: _quick_reply(id), "Write to the agent without opening its terminal"))
 		h.add_child(_small("Open", func() -> void: select(id)))
@@ -2877,6 +2938,35 @@ func _remove_now(sid: String) -> void:
 		_layout_view()
 
 
+## Approve or Refuse from the queue: the card says so at once and fades out; the session shows « working » right away
+## (the engine keeps it so until the agent's next event), and it comes back only if the agent asks again.
+func _answer(id: String, keys: Array, card: PanelContainer, said: String) -> void:
+	var ok: bool = str(keys[0]) == "Enter"
+	var colour: Color = activity_of({"activity": "done"})[0] if ok else AmTheme.col("MUTED")
+	for c in card.get_children():
+		c.queue_free()
+	var l := Label.new()
+	l.text = said
+	l.add_theme_font_override("font", AmTheme.ui_font(650))
+	l.add_theme_color_override("font_color", colour)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card.add_child(l)
+	card.add_theme_stylebox_override("panel", AmTheme.box(Color(colour, 0.12), 10, colour, 1, 9))
+	var s := _session(id)
+	if s:
+		s["activity"] = "working" if ok else "idle"
+		last_activity[id] = s["activity"]
+		if cards.has(id) and is_instance_valid(cards[id]):
+			cards[id].flash(colour)
+	var t := create_tween()
+	t.tween_interval(0.9)
+	t.tween_property(card, "modulate:a", 0.0, 0.35)
+	t.tween_callback(func() -> void:
+		tree_sig = ""
+		_render_list())
+	await _keys(id, keys)
+
+
 func _keys(id: String, keys: Array) -> void:
 	var r := await engine.call_api("POST", "/sessions/%s/keys" % id, {"keys": keys})
 	if r.has("error"):
@@ -2977,6 +3067,8 @@ func _build_menus() -> void:
 	theme_menu.add_separator()
 	theme_menu.add_item("Spoken status (on / off)")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__spoken")
+	theme_menu.add_item("Chime when an agent waits (on / off)")
+	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__sound")
 	theme_menu.add_item("Usage…")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__usage")
 	theme_menu.add_item("Keys…")
@@ -2997,6 +3089,8 @@ func _build_menus() -> void:
 			set_view("usage")
 		elif m == "__spoken":
 			set_spoken(not spoken)
+		elif m == "__sound":
+			set_sound(not sound_on)
 		else:
 			set_theme_name(m))
 	add_child(theme_menu)

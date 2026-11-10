@@ -164,6 +164,22 @@ func _run() -> void:
 			await main.refresh()
 			await wait(1.0)
 			await shot("board")
+		"approvals":  # Loop 23: Approve answers at once and the card leaves; ✕ hides a request from the queue only
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			await wait(2.0)
+			await shot("queue-before")
+			var appr := _find_button(main.queue_box, "Approve")
+			if appr:
+				appr.pressed.emit()
+			await wait(0.35)
+			await shot("approve-feedback")
+			await wait(2.5)
+			var x := _find_button(main.queue_box, "✕")
+			if x:
+				x.pressed.emit()
+			await wait(0.6)
+			await shot("queue-dismissed")
 		"brain-visible":  # the Brain made visible: the badge, the ✦ lights, the header pill and the panel
 			main.set_view("focus")
 			main.select(made["Checkout flow"])
@@ -586,3 +602,10 @@ func _run() -> void:
 	f.close()
 	print("\n".join(report))
 	quit()
+
+
+func _find_button(root: Node, text: String) -> Button:
+	for n in root.find_children("*", "Button", true, false):
+		if (n as Button).text == text:
+			return n
+	return null

@@ -86,8 +86,10 @@ def _epoch(iso) -> float:
     except ValueError:
         return 0.0
 
+
 class Sessions:
     def __init__(self, store: Store, tmux: Tmux, home: str = "", brain=None):
+        self._answered: dict[str, float] = {}  # session id -> when you answered it (Approve, Refuse, a reply) from the app
         self.store = store
         self.tmux = tmux
         self.brain = brain  # engine.brain.Brain or None (tests, or the Brain switched off)
@@ -344,13 +346,23 @@ class Sessions:
                 return "approval", "in a cloud sandbox"
             return "idle", "in a cloud sandbox"
         if rec["tool"] == "claude" and hs.get("state"):
-            st = hs["state"]
+            st, since, message = hs["state"], float(hs.get("time", 0) or 0), str(hs.get("message", ""))
+            if st in ("approval", "waiting"):
+                # Claude Code says nothing between your answer and the end of the tool you allowed (a test run can take
+                # minutes): answered from the app, or the prompt is gone and it works again (answered in its terminal)
+                answered = self._answered.get(rec["id"], 0.0)
+                if answered > since:
+                    st, since, message = "working", answered, ""
+                elif t and now - since > 3:
+                    screen = self._screen(rec)
+                    if CLAUDE_BUSY.search(screen) and not APPROVAL_HINTS.search("\n".join(screen.splitlines()[-12:])):
+                        st, message = "working", ""
             # the last hook said « working » a while ago and Claude Code does not show « esc to interrupt »: the turn
             # ended without a Stop hook (Esc, an error). Screen redraws do not count: full-screen mode redraws by itself.
-            if st == "working" and t and now - hs.get("time", 0) > STALE_WORKING_SECONDS \
+            if st == "working" and t and now - since > STALE_WORKING_SECONDS \
                     and not CLAUDE_BUSY.search(self._screen(rec)):
                 return "idle", "stopped (interrupted?)"
-            return ("idle" if st == "ended" else st), str(hs.get("message", ""))
+            return ("idle" if st == "ended" else st), message
         if rec["tool"] == "codex":
             if busy and not (hs.get("state") == "done" and hs.get("time", 0) >= t.activity - 0.5):
                 return "working", ""
@@ -473,6 +485,7 @@ class Sessions:
         if self.get(sid)["state"] != "running":
             raise ValueError("the session is not running")
         self.tmux.send_text(self.tmux_name(sid), text, enter)
+        self._answered[sid] = time.time()
 
     KEYS = {"Enter", "Escape", "Up", "Down", "Left", "Right", "Tab", "BTab", "y", "n", "1", "2", "3"}
 
@@ -484,6 +497,7 @@ class Sessions:
         if bad or not keys or len(keys) > 8:
             raise ValueError("keys must be among " + ", ".join(sorted(self.KEYS)))
         self.tmux.run("send-keys", "-t", self.tmux_name(sid), *keys)
+        self._answered[sid] = time.time()
 
     def restart(self, sid: str) -> dict:
         """Starts the tool again in the same session (fresh conversation); recreates the tmux session if it is gone."""

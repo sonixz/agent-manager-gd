@@ -192,6 +192,19 @@ class EngineTest(unittest.TestCase):
             self.assertEqual(got["activity"], want, payload)
         self.assertEqual(got["conversation"], "conv-1")  # kept for resuming (Loop 5)
 
+    def test_an_answer_from_the_app_unsticks_an_approval_until_the_next_request(self):
+        s = self.sessions.create("c", "shell", self.tmp)
+        rec = {**self.sessions.store.get(s["id"]), "tool": "claude"}
+        self.run_hook(s["id"], "claude", {"hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"})
+        self.assertEqual(self.sessions.describe(rec)["activity"], "approval")
+        time.sleep(0.05)
+        self.sessions.keys(s["id"], ["Enter"])                    # Approve: Claude Code says nothing until the tool ends
+        d = self.sessions.describe(rec)
+        self.assertEqual((d["activity"], d["message"]), ("working", ""))
+        time.sleep(0.05)
+        self.run_hook(s["id"], "claude", {"hook_event_name": "Notification", "message": "Claude needs your permission to use Write"})
+        self.assertEqual(self.sessions.describe(rec)["activity"], "approval")   # a new request comes back at once
+
     def test_codex_notify_and_terminal_activity(self):
         s = self.sessions.create("x", "shell", self.tmp)
         rec = {**self.sessions.store.get(s["id"]), "tool": "codex"}

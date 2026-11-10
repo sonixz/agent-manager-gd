@@ -48,6 +48,8 @@ with AGENTS.md (the rules), README.md (what the app does), DEVLOG.md (every loop
   titles from the Brain's own API, never content or a key); a live badge at the bottom left (every 10 s), a ✦ light on
   cards, Grid tiles and the header, a small Brain panel; capture step `brain-visible`; the website's hero and Brain
   section show them. Waits on the owner: his look at the badge and lights in the real app.
+- Loops 23 to 26 approved by the owner on 2026-11-09 (docs/brief/PLAN.md, end): 23 approvals that unstick (done),
+  24 permission levels, 25 orchestrator foundation, 26 orchestrator routing; 27 OpenCode only if he confirms.
 - Proposed, not started: the ✦ Brain tab (the Brain panel of Loop 22 is its first piece) (formerly « Loop 17 »: a ✦ Brain tab: connection, who holds a key, proposals from our sessions, timeline,
   settings; a first-run « Are you using Second Brain? »; « Resume all » after a reboot). Agent security:
   docs/brief/AGENT-SECURITY.md, recorded only, **do not build until he asks**.

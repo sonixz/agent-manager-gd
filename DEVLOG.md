@@ -572,3 +572,19 @@ today »); the ✦ next to each session is full violet when it documents, soft o
 session uses the Brain (Checkout flow orients, Sparks and Checkout flow propose their journal and the count goes up).
 The Brain section shows the new panel capture; the Docs describe the badge and the lights. `tools/site.sh` captures
 `brain-visible` too; `--check` all green (5.7 MB). Edge renders checked.
+
+## Loop 23: approvals that unstick (2026-11-09)
+The owner: an approval card « ne décolle pas, elle reste collée là », and wanted a ✕ to take a request off the
+top-left queue while it stays on the agent's card. Cause (verified in engine/sessions.py): after Enter, the session's
+hook state stayed « approval » until Claude Code's next event, which comes only when the tool you allowed ends (a test
+run can take minutes).
+- Engine: an answer from the app (keys or a reply) is remembered; a request older than your answer shows as
+  « working » until the agent's next event, and a new request comes back at once. Answered in the agent's own
+  terminal: when the prompt is gone and Claude Code works again, it is « working » too. Test added (78).
+- App: Approve and Refuse answer at once (« ✓ Approved · Flaky tests carries on », the card fades, the session's card
+  flashes); a ✕ on each queue card hides that request from the queue only (« 1 request hidden · show »), it stays on
+  the session's card and comes back if the agent asks again. Notifications: one per request (toast, taskbar flash
+  when the window is not in front, a soft two-note chime made in code, on by default, ◐ › Chime when an agent waits),
+  and the window title shows how many wait. A system toast on Windows was left out: it needs a registered app or a
+  third-party module.
+- Captures: step `approvals` (queue-before, approve-feedback, queue-dismissed), checked.

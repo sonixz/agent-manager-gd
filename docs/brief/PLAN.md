@@ -224,3 +224,32 @@ terminaux vivants), une section « Better together » avec Second Brain, les deu
 
 ### Loop 21 · Finition (fait le 2026-11-09 ; Loops 17 à 21 faites, reste la relecture du propriétaire)
 - Liens, accessibilité, mobile, poids (< 10 Mo), toutes les captures en une commande, relecture avec le propriétaire.
+
+## Le Brain visible, les approbations, les permissions et l'orchestrateur (demandés le 2026-11-09)
+
+### Loop 22 · Le Brain visible (fait le 2026-11-09)
+- Badge vivant en bas à gauche, voyant ✦ par session (clé, documente, silencieuse, problème), panneau Brain ; le site les montre.
+
+### Loop 23 · Des approbations qui décollent (fait le 2026-11-09)
+- Approuver ou Refuser répond tout de suite (« ✓ Approved », la carte s'efface, la session repasse « working » jusqu'au
+  prochain événement de l'agent) ; un ✕ retire une demande de la file en haut à gauche, elle reste sur la carte et
+  revient si l'agent redemande ; une seule notification par demande (toast, clignotement de la barre des tâches,
+  carillon désactivable, nombre en attente dans le titre de la fenêtre).
+
+### Loop 24 · Niveaux de permission
+- Par session et par défaut de groupe : Demander / Modifs auto / Sans permission (Claude `--dangerously-skip-permissions`,
+  Codex sans approbation), badge sur la carte, confirmation pour « Sans permission » ; chemins toujours interdits à tous
+  les niveaux (vérifier que Claude Code respecte les refus en mode sans permission ; sinon le dire avant d'aller plus
+  loin) ; un enfant n'a jamais plus de droits que son parent.
+
+### Loop 25 · L'orchestrateur, le socle
+- Panneau à droite (Ctrl+O) : son terminal et son plan ; rôle et directive ; outils MCP `list_repos`, `start_session`
+  (dépôt, worktree, niveau, modèle), `ask_owner`, `finish_session` ; plafonds (sessions simultanées, profondeur) ; ni
+  push ni fusion sur main sans l'OK du propriétaire ; bouton « Stop orchestrateur ». Par défaut : il propose son plan et
+  attend l'OK ; un seul orchestrateur pour tous les dépôts connectés.
+
+### Loop 26 · L'orchestrateur qui route
+- Plan en direct dans le panneau, règles de routage modifiables par le propriétaire, décisions de routage notées dans
+  le Brain, outil `usage` avec budget par jour.
+
+### Loop 27 · OpenCode (seulement si le propriétaire confirme)
