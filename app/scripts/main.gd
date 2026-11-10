@@ -118,6 +118,8 @@ var orch_min := false
 var orch_tab := "terminal"   # what fills the window: its terminal, its plan or its sessions
 var orch_tabs := {}          # tab name -> its button
 var orch_lists: ScrollContainer
+var orch_beta: Label
+var orch_grip: Label
 var orch_sub: Label        # minimised: only its title bar shows
 var orch_body: Array = []    # what hides when it is minimised
 var orch_drag := ""          # "move" or "size" while the mouse drags its title bar or its corner          # what the panel shows: rebuilt only when it changes (a rebuild resized the terminal: it jumped)
@@ -533,6 +535,10 @@ func _restyle() -> void:
 	toast.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL_2"), 10, approval_color(), 1, 12))
 	for t in terms.values():
 		_style_terminal(t)
+	if orch_panel:
+		_style_orch_panel()
+	if brain_badge and brain_glyph:
+		_render_brain_badge(false)
 
 
 func _style_terminal(t: Control) -> void:
@@ -844,10 +850,6 @@ func _build_orch_panel() -> void:
 	orch_panel.visible = false
 	# a floating, slightly translucent window over the app (Loop 26c): it never squeezes the views; move it by its
 	# title bar, resize it by its corner, minimise it to its title bar
-	var st := AmTheme.box(Color(AmTheme.col("BG_2"), 0.94), 14, Color(AmTheme.col("MINT"), 0.45), 1, 12)
-	st.shadow_color = Color(0, 0, 0, 0.45)
-	st.shadow_size = 18
-	orch_panel.add_theme_stylebox_override("panel", st)
 	add_child(orch_panel)
 	var vp := get_viewport_rect().size
 	var cfg := ConfigFile.new()
@@ -872,14 +874,9 @@ func _build_orch_panel() -> void:
 	orch_head.add_theme_color_override("font_color", AmTheme.col("MINT"))
 	top.add_child(orch_head)
 	var beta := Label.new()
+	orch_beta = beta
 	beta.text = " BETA "
 	beta.add_theme_font_size_override("font_size", 10)
-	beta.add_theme_font_override("font", AmTheme.ui_font(700))
-	beta.add_theme_color_override("font_color", AmTheme.col("ON_ACCENT"))
-	var bs := AmTheme.box(AmTheme.col("WARN"), 5, AmTheme.col("WARN"), 0, 0)
-	bs.content_margin_left = 6
-	bs.content_margin_right = 6
-	beta.add_theme_stylebox_override("normal", bs)
 	beta.mouse_filter = MOUSE_FILTER_PASS
 	beta.tooltip_text = "Powerful, still being tuned: watch what it does, and say what goes wrong"
 	beta.size_flags_vertical = SIZE_SHRINK_CENTER
@@ -967,8 +964,8 @@ func _build_orch_panel() -> void:
 				status_label.text = str(r["error"])
 			await refresh_orchestrator()), "Once today's tokens reach it, the orchestrator cannot start sessions"))
 	var grip := Label.new()
+	orch_grip = grip
 	grip.text = "◢"
-	grip.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 	grip.mouse_filter = MOUSE_FILTER_STOP
 	grip.mouse_default_cursor_shape = CURSOR_FDIAGSIZE
 	grip.tooltip_text = "Drag to resize"
@@ -987,6 +984,29 @@ func _build_orch_panel() -> void:
 	add_child(fade)
 	_build_rules_dialog()
 	_set_orch_tab("terminal")
+	_style_orch_panel()
+
+
+## Its colours follow the theme: called when it is built and when the theme changes.
+func _style_orch_panel() -> void:
+	var st := AmTheme.box(Color(AmTheme.col("BG_2"), 0.94), 14, Color(AmTheme.col("MINT"), 0.45), 1, 12)
+	st.shadow_color = Color(0, 0, 0, 0.45 if not AmTheme.is_light() else 0.18)
+	st.shadow_size = 18
+	orch_panel.add_theme_stylebox_override("panel", st)
+	orch_head.add_theme_color_override("font_color", AmTheme.col("MINT"))
+	orch_head.add_theme_font_override("font", AmTheme.ui_font(700))
+	orch_beta.add_theme_font_override("font", AmTheme.ui_font(700))
+	orch_beta.add_theme_color_override("font_color", AmTheme.col("ON_ACCENT"))
+	var bs := AmTheme.box(AmTheme.col("WARN"), 5, AmTheme.col("WARN"), 0, 0)
+	bs.content_margin_left = 6
+	bs.content_margin_right = 6
+	orch_beta.add_theme_stylebox_override("normal", bs)
+	orch_sub.add_theme_color_override("font_color", AmTheme.col("MINT"))
+	orch_foot.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	orch_grip.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+	orch_hint.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	orch_sig = ""   # its plan, sessions and Brain line are drawn again in the new colours
+	_render_orchestrator()
 
 
 func _set_orch_tab(tab: String) -> void:

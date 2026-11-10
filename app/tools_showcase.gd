@@ -209,6 +209,12 @@ func _run() -> void:
 			await shot("orchestrator-min")
 			main._toggle_orch_min()
 			await wait(0.4)
+			var was := AmTheme.current
+			await main.set_theme_name("paper")   # its window follows the theme
+			await wait(1.0)
+			await shot("orchestrator-paper")
+			await main.set_theme_name(was)
+			await wait(0.5)
 			await main._open_rules()
 			await wait(0.6)
 			await shot("routing-rules")
