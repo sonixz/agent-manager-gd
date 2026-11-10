@@ -122,12 +122,24 @@ def _epoch(iso) -> float:
         return 0.0
 
 
+def _after(ours: tuple, hs: dict, margin: float = 0.0, hook_first: bool = False) -> bool:
+    """Event order between something the engine did (ours: wall time, monotonic time) and the agent's last hook.
+    hook_first=False: our action came after the hook; True: the hook came more than `margin` after our action.
+    The monotonic clock is used when the hook wrote it (the wall clock can step back under WSL)."""
+    if "mono" in hs:
+        a, b = ours[1], float(hs["mono"])
+    else:
+        a, b = ours[0], float(hs.get("time", 0) or 0)
+    return b > a + margin if hook_first else a > b
+
+
 class Sessions:
     def __init__(self, store: Store, tmux: Tmux, home: str = "", brain=None):
         from .orchestra import Orchestra
         self.orchestra = Orchestra(home or os.path.dirname(os.path.dirname(store.path)))
+        self._wrapping: dict = {}  # per engine (the class-level dict was shared by every instance in one process)
         self._questions: dict[str, dict] = {}  # session id -> its pending question for the owner (ask_owner, finish_session)
-        self._answered: dict[str, float] = {}  # session id -> when you answered it (Approve, Refuse, a reply) from the app
+        self._answered: dict[str, tuple] = {}  # session id -> (wall time, monotonic time) of your answer from the app  # session id -> when you answered it (Approve, Refuse, a reply) from the app
         self.store = store
         self.tmux = tmux
         self.brain = brain  # engine.brain.Brain or None (tests, or the Brain switched off)
@@ -547,9 +559,9 @@ class Sessions:
             if st in ("approval", "waiting"):
                 # Claude Code says nothing between your answer and the end of the tool you allowed (a test run can take
                 # minutes): answered from the app, or the prompt is gone and it works again (answered in its terminal)
-                answered = self._answered.get(rec["id"], 0.0)
-                if answered > since:
-                    st, since, message = "working", answered, ""
+                answered = self._answered.get(rec["id"])
+                if answered and _after(answered, hs):
+                    st, since, message = "working", answered[0], ""
                 elif t and now - since > 3:
                     screen = self._screen(rec)
                     if CLAUDE_BUSY.search(screen) and not APPROVAL_HINTS.search("\n".join(screen.splitlines()[-12:])):
@@ -682,7 +694,7 @@ class Sessions:
         if self.get(sid)["state"] != "running":
             raise ValueError("the session is not running")
         self.tmux.send_text(self.tmux_name(sid), text, enter)
-        self._answered[sid] = time.time()
+        self._answered[sid] = (time.time(), time.monotonic())
         self._questions.pop(sid, None)
 
     KEYS = {"Enter", "Escape", "Up", "Down", "Left", "Right", "Tab", "BTab", "y", "n", "1", "2", "3"}
@@ -695,7 +707,7 @@ class Sessions:
         if bad or not keys or len(keys) > 8:
             raise ValueError("keys must be among " + ", ".join(sorted(self.KEYS)))
         self.tmux.run("send-keys", "-t", self.tmux_name(sid), *keys)
-        self._answered[sid] = time.time()
+        self._answered[sid] = (time.time(), time.monotonic())
 
     def restart(self, sid: str) -> dict:
         """Starts the tool again in the same session (fresh conversation); recreates the tmux session if it is gone."""
@@ -824,7 +836,7 @@ class Sessions:
         os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, time.strftime("summary-%Y%m%d-%H%M%S.md"))
         brain = BRAIN_HINT.format(name=d["name"], date=time.strftime("%Y-%m-%d")) if d.get("brain") else ""
-        self._wrapping[sid] = (time.time(), path, archive)
+        self._wrapping[sid] = ((time.time(), time.monotonic()), path, archive)
         self.tmux.send_text(self.tmux_name(sid), WRAPUP_PROMPT.format(path=path, brain=brain))
         return {**self.get(sid), "summary_path": path}
 
@@ -837,8 +849,9 @@ class Sessions:
                 self._wrapping.pop(sid, None)
                 continue
             hs = self.hook_state(sid)
-            settled = hs.get("state") in ("done", "waiting", "idle") and float(hs.get("time", 0)) > start + 1
-            if os.path.exists(path) and (settled or time.time() - start > 900):
+            settled = hs.get("state") in ("done", "waiting", "idle") and _after(start, hs, 1.0, hook_first=True)
+            waited = time.monotonic() - start[1]
+            if os.path.exists(path) and (settled or waited > 900):
                 with open(path, encoding="utf-8", errors="replace") as f:
                     text = f.read().strip()[:20000]
                 self.store.add_summary(sid, self.last_conversation(sid), rec["cwd"], path, text)
@@ -846,7 +859,7 @@ class Sessions:
                 if archive:
                     self.archive(sid)
                 finished.append(sid)
-            elif time.time() - start > 1800:  # gave up: the session stays as it is
+            elif waited > 1800:  # gave up: the session stays as it is
                 self._wrapping.pop(sid, None)
         return finished
 

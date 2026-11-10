@@ -62,7 +62,9 @@ def main(argv):
                 old = json.load(f)
         except (OSError, ValueError):
             pass
-        rec = {"state": state, "message": message, "time": time.time(), "tool": tool,
+        # « mono »: the system's monotonic clock, shared by every process on this machine and never stepped back (the
+        # wall clock can jump under WSL); the engine compares event order with it
+        rec = {"state": state, "message": message, "time": time.time(), "mono": time.monotonic(), "tool": tool,
                "conversation": conv or old.get("conversation", "")}
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:

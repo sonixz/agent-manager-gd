@@ -53,7 +53,7 @@ class SummaryTest(unittest.TestCase):
         self.agent_finishes(d["id"], w["summary_path"], "## What was done\nFixed the login redirect.\n## What is left\nTests for SSO.")
         self.s.list()
         got = self.s.get(d["id"])
-        self.assertEqual(got["state"], "archived")
+        self.assertEqual(got["state"], "archived", (self.s.hook_state(d["id"]), os.path.exists(w["summary_path"]), dict(self.s._wrapping)))
         (summary,) = self.s.store.summaries(sid=d["id"])
         self.assertIn("SSO", summary["text"])
         self.assertEqual(summary["conversation"], d["last_conversation"])

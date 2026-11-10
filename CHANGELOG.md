@@ -5,6 +5,10 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Fixed
+- Under WSL the wall clock can step back; the engine now orders the agents' events with the system's monotonic clock,
+  so a finished wrap-up is always archived and an answered approval always unsticks (it was the flaky test).
+
 ### Orchestrator (beta) · Loops 25–26
 - One orchestrator session for all your connected repositories, in a floating window (◆ Orchestrator · beta, or
   Ctrl+O): its terminal, its plan, its sessions; move it, resize it, minimise it.
