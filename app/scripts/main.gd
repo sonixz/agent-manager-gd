@@ -1457,11 +1457,21 @@ func _watch_transitions() -> Array:
 	return changed
 
 
-## Small sounds made here (no sound file), never a voice: a soft short blip when an agent waits for you, an even
+## Small sounds, never a voice (two short files made once with ElevenLabs, a tone made here if they are missing): a soft short blip when an agent waits for you, an even
 ## quieter lower tick when one finishes. The ♪ button at the top right mutes them.
 func _blip(waits: bool) -> void:
 	var p := chime if waits else blip_done
-	if p == null:
+	var made := "res://assets/audio/%s.mp3" % ("waits" if waits else "done")  # generated once (tools/sounds.sh)
+	if p == null and ResourceLoader.exists(made):
+		p = AudioStreamPlayer.new()
+		p.stream = load(made)
+		p.volume_db = -14.0 if waits else -20.0
+		add_child(p)
+		if waits:
+			chime = p
+		else:
+			blip_done = p
+	if p == null:  # the files are missing: a soft tone made here
 		var rate := 22050
 		var f := 740.0 if waits else 494.0
 		var data := PackedByteArray()

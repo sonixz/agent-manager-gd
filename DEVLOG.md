@@ -671,3 +671,8 @@ ding ») and a mute button at the top right. Spoken notices are gone (no voice w
 voice still answers when asked « who waits for me? »). Two small sounds made in code: a soft 0.12 s blip when an agent
 waits for you (6 ms attack, quick fade, -16 dB), an even quieter, lower tick when one finishes (-22 dB). A ♪ button at
 the top right mutes them (« ♪ off »); the old menu items (Spoken status, Chime) are removed.
+- Then, with the owner's OK for the paid call and his choice of key (Second Brain's): the two sounds are made once
+  with ElevenLabs (`tools/sounds.sh`, prompts in `tools/sound-prompts.txt`: a soft felt-marimba blip, a light wooden
+  tick, 0.5 s each), committed in app/assets/audio and played at -14 dB and -20 dB; the key is read through dotenvx in
+  ../second-brain-gd, never printed nor copied. The tone made in code stays as the fallback. Not listened to here (no
+  decoder on this machine): the owner judges.
