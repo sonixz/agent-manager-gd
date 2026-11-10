@@ -193,6 +193,13 @@ func _run() -> void:
 			await main.refresh()
 			await wait(1.0)
 			await shot("orchestrator-panel")
+			var sizes := []  # the panel's terminal must keep its size across refreshes (it used to jump every 2 s)
+			for i in 6:
+				await main.refresh()
+				await main.refresh_orchestrator()
+				await wait(0.05)
+				sizes.append(main.terms[oid].size if main.terms.has(oid) else Vector2.ZERO)
+			print("orchestrator terminal sizes: ", sizes)
 			await main._open_rules()
 			await wait(0.6)
 			await shot("routing-rules")

@@ -640,3 +640,16 @@ The owner decided it (« clairement, on va faire l'orchestrateur »), seen in a 
   add, remove, Save), Budget… (millions of tokens, 0 = none).
 - Tests 81 OK; capture step `orchestrator` (panel with plan and budget, routing rules) checked; Docs updated.
 Loops 23 to 26 done. Not tried for real yet: an orchestrator run with the owner's login.
+
+## Loop 26b: after the owner's first orchestrator run (2026-11-09)
+The owner ran it for real: it started a GD Project session connected to its repository (« c'est quand même des
+achats forts »). Three asks: emphasis on the Second Brain from the start, a glitch (« à toutes les secondes, il move
+up, il revient »), and a BETA mark (« pas tout rodé, mais puissant »).
+- Glitch, probable cause: every refresh (2 s) rebuilt the panel's plan and session lists; old and new rows lived
+  together for a frame, so the terminal above shrank and grew back and Claude Code redrew. Now the panel rebuilds only
+  when what it shows changes, removes old rows at once, and the plan and sessions scroll in a box of fixed height:
+  the terminal's size no longer depends on them (measured constant over six refreshes in the capture).
+- A BETA pill next to « ◆ Orchestrator » (tooltip: powerful, still being tuned); the header button reads
+  « ◆ Orchestrator · beta ».
+- A boxed line in the Brain's violet under the title: « ✦ Connected to your Second Brain · it documents · N calls · N
+  proposals »; before it starts: « Starts connected to your Second Brain… »; amber when the Brain is off or its key fails.

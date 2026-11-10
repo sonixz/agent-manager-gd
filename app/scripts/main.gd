@@ -110,6 +110,8 @@ var orch_term_box: VBoxContainer
 var orch_hint: Label
 var orch_list: VBoxContainer
 var orch_plan: VBoxContainer
+var orch_brain: Label
+var orch_sig := ""          # what the panel shows: rebuilt only when it changes (a rebuild resized the terminal: it jumped)
 var orch_foot: Label
 var orch_data := {}          # GET /orchestrator: its plan, the routing rules, the budget and today's tokens
 var rules_dialog: AcceptDialog
@@ -428,7 +430,7 @@ func _build() -> void:
 	resume_btn.pressed.connect(func() -> void: _resume(selected, ""))
 	hb.add_child(resume_btn)
 	orch_btn = Button.new()  # Loop 25: shows or hides the orchestrator's panel on the right
-	orch_btn.text = "◆ Orchestrator"
+	orch_btn.text = "◆ Orchestrator · beta"
 	orch_btn.tooltip_text = "The orchestrator: it plans, starts sessions and hands you their work (%s)" % key_text("orchestrator")
 	orch_btn.toggle_mode = true
 	orch_btn.pressed.connect(toggle_orchestrator)
@@ -838,6 +840,19 @@ func _build_orch_panel() -> void:
 	orch_head.add_theme_font_size_override("font_size", 16)
 	orch_head.add_theme_color_override("font_color", AmTheme.col("MINT"))
 	top.add_child(orch_head)
+	var beta := Label.new()
+	beta.text = " BETA "
+	beta.add_theme_font_size_override("font_size", 10)
+	beta.add_theme_font_override("font", AmTheme.ui_font(700))
+	beta.add_theme_color_override("font_color", AmTheme.col("ON_ACCENT"))
+	var bs := AmTheme.box(AmTheme.col("WARN"), 5, AmTheme.col("WARN"), 0, 0)
+	bs.content_margin_left = 6
+	bs.content_margin_right = 6
+	beta.add_theme_stylebox_override("normal", bs)
+	beta.mouse_filter = MOUSE_FILTER_PASS
+	beta.tooltip_text = "Powerful, still being tuned: watch what it does, and say what goes wrong"
+	beta.size_flags_vertical = SIZE_SHRINK_CENTER
+	top.add_child(beta)
 	orch_state = Label.new()
 	orch_state.size_flags_horizontal = SIZE_EXPAND_FILL
 	orch_state.add_theme_font_size_override("font_size", 12)
@@ -855,23 +870,38 @@ func _build_orch_panel() -> void:
 			set_view("focus")
 			select(str(o["id"])), "Open it in the main area"))
 	top.add_child(_small("✕", toggle_orchestrator, "Hide (%s)" % key_text("orchestrator")))
+	orch_brain = Label.new()
+	orch_brain.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	orch_brain.add_theme_font_size_override("font_size", 13)
+	orch_brain.add_theme_font_override("font", AmTheme.ui_font(600))
+	orch_brain.mouse_filter = MOUSE_FILTER_PASS
+	v.add_child(orch_brain)
 	orch_hint = _wrap("")
 	v.add_child(orch_hint)
 	orch_term_box = VBoxContainer.new()
 	orch_term_box.size_flags_vertical = SIZE_EXPAND_FILL
 	v.add_child(orch_term_box)
+	# the plan and its sessions scroll in a box of fixed height: the terminal above never changes size because of them
+	var lists_scroll := ScrollContainer.new()
+	lists_scroll.custom_minimum_size = Vector2(0, 230)
+	lists_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(lists_scroll)
+	var lists := VBoxContainer.new()
+	lists.size_flags_horizontal = SIZE_EXPAND_FILL
+	lists.add_theme_constant_override("separation", 6)
+	lists_scroll.add_child(lists)
 	orch_plan = VBoxContainer.new()
 	orch_plan.add_theme_constant_override("separation", 3)
-	v.add_child(orch_plan)
+	lists.add_child(orch_plan)
 	var sub := Label.new()
 	sub.text = "ITS SESSIONS"
 	sub.name = "SubTitle"
 	sub.add_theme_font_size_override("font_size", 11)
 	sub.add_theme_color_override("font_color", AmTheme.col("MINT"))
-	v.add_child(sub)
+	lists.add_child(sub)
 	orch_list = VBoxContainer.new()
 	orch_list.add_theme_constant_override("separation", 4)
-	v.add_child(orch_list)
+	lists.add_child(orch_list)
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 6)
 	v.add_child(foot)
@@ -902,9 +932,30 @@ func toggle_orchestrator() -> void:
 	_layout_view()
 
 
+## It works with the Second Brain from its first step: said at the top of its panel, in the Brain's violet.
+func _render_brain_line(o: Dictionary) -> void:
+	var info := brain_info(str(o.get("id", "")))
+	if not brain_ok:
+		orch_brain.text = "✦ Second Brain not connected: it would work without the project's memory"
+		orch_brain.add_theme_color_override("font_color", AmTheme.col("WARN"))
+	elif o.is_empty():
+		orch_brain.text = "✦ Starts connected to your Second Brain: it reads the project cards first, then records its plan, its routing choices and its journal"
+		orch_brain.add_theme_color_override("font_color", AmTheme.brain())
+	elif info.is_empty() or str(info.get("problem", "")) != "":
+		orch_brain.text = "✦ Second Brain: " + (str(info.get("problem", "")) if not info.is_empty() else "no key for it (start it again to get one)")
+		orch_brain.add_theme_color_override("font_color", AmTheme.col("WARN"))
+	else:
+		orch_brain.text = "✦ Connected to your Second Brain%s · %d calls · %d proposals" % [" · it documents" if info.get("document", false) else "", int(info.get("calls", 0)), int(info.get("proposals", 0))]
+		orch_brain.add_theme_color_override("font_color", AmTheme.brain())
+	orch_brain.tooltip_text = SessionCard.brain_look(info, true)[2] if not info.is_empty() else ""
+	var c: Color = orch_brain.get_theme_color("font_color")
+	orch_brain.add_theme_stylebox_override("normal", AmTheme.box(Color(c, 0.09), 9, Color(c, 0.55), 1, 9))
+
+
 ## Its plan, live: each task with its state, tool and model, and its session's state; a click opens the session.
 func _render_plan() -> void:
 	for c in orch_plan.get_children():
+		orch_plan.remove_child(c)
 		c.queue_free()
 	var plan: Dictionary = orch_data.get("plan", {})
 	var tasks: Array = plan.get("tasks", [])
@@ -1048,8 +1099,16 @@ static func _tokens(n: int) -> String:
 func _render_orchestrator() -> void:
 	if orch_panel == null or not orch_panel.visible:
 		return
-	_render_plan()
 	var o := orchestrator_session()
+	var sig := JSON.stringify([o.get("id", ""), o.get("state", ""), o.get("activity", ""), o.get("message", ""), orch_data.get("plan", {}),
+		orch_data.get("budget", {}), brain_ok, brain_info(str(o.get("id", ""))),
+		orchestrated().map(func(k): return [k["id"], k.get("activity", ""), k.get("state", ""), k.get("branch", ""), k.get("message", "")]),
+		sessions.map(func(k): return [k["id"], k.get("activity", "")])])
+	if sig == orch_sig:
+		return
+	orch_sig = sig
+	_render_brain_line(o)
+	_render_plan()
 	var running := not o.is_empty() and str(o.get("state", "")) == "running"
 	orch_start.visible = not running
 	orch_start.text = "Start" if o.is_empty() else "Resume"
@@ -1067,6 +1126,7 @@ func _render_orchestrator() -> void:
 			_ensure_terminal(str(o["id"]))
 	orch_hint.visible = orch_hint.text != ""
 	for c in orch_list.get_children():
+		orch_list.remove_child(c)
 		c.queue_free()
 	var kids := orchestrated()
 	var live := kids.filter(func(x): return str(x.get("state", "")) == "running").size()
