@@ -112,7 +112,11 @@ var orch_list: VBoxContainer
 var orch_plan: VBoxContainer
 var orch_brain: Label
 var orch_sig := ""
-var orch_min := false        # minimised: only its title bar shows
+var orch_min := false
+var orch_tab := "terminal"   # what fills the window: its terminal, its plan or its sessions
+var orch_tabs := {}          # tab name -> its button
+var orch_lists: ScrollContainer
+var orch_sub: Label        # minimised: only its title bar shows
 var orch_body: Array = []    # what hides when it is minimised
 var orch_drag := ""          # "move" or "size" while the mouse drags its title bar or its corner          # what the panel shows: rebuilt only when it changes (a rebuild resized the terminal: it jumped)
 var orch_foot: Label
@@ -831,7 +835,7 @@ func _build_orch_panel() -> void:
 	orch_panel.visible = false
 	# a floating, slightly translucent window over the app (Loop 26c): it never squeezes the views; move it by its
 	# title bar, resize it by its corner, minimise it to its title bar
-	var st := AmTheme.box(Color(AmTheme.col("BG_2"), 0.88), 14, Color(AmTheme.col("MINT"), 0.45), 1, 12)
+	var st := AmTheme.box(Color(AmTheme.col("BG_2"), 0.94), 14, Color(AmTheme.col("MINT"), 0.45), 1, 12)
 	st.shadow_color = Color(0, 0, 0, 0.45)
 	st.shadow_size = 18
 	orch_panel.add_theme_stylebox_override("panel", st)
@@ -898,16 +902,27 @@ func _build_orch_panel() -> void:
 	v.add_child(orch_brain)
 	orch_hint = _wrap("")
 	v.add_child(orch_hint)
+	# tabs: its terminal takes the whole window; its plan and its sessions each have their own tab
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 0)
+	v.add_child(tabs)
+	orch_body.append(tabs)
+	for t in [["terminal", "Terminal"], ["plan", "Plan"], ["sessions", "Sessions"]]:
+		var b := Button.new()
+		b.text = t[1]
+		b.toggle_mode = true
+		b.add_theme_font_size_override("font_size", 12)
+		b.pressed.connect(_set_orch_tab.bind(t[0]))
+		tabs.add_child(b)
+		orch_tabs[t[0]] = b
 	orch_term_box = VBoxContainer.new()
 	orch_term_box.size_flags_vertical = SIZE_EXPAND_FILL
 	v.add_child(orch_term_box)
-	orch_body.append(orch_term_box)
-	# the plan and its sessions scroll in a box of fixed height: the terminal above never changes size because of them
 	var lists_scroll := ScrollContainer.new()
-	lists_scroll.custom_minimum_size = Vector2(0, 230)
+	lists_scroll.size_flags_vertical = SIZE_EXPAND_FILL
 	lists_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	v.add_child(lists_scroll)
-	orch_body.append(lists_scroll)
+	orch_lists = lists_scroll
 	var lists := VBoxContainer.new()
 	lists.size_flags_horizontal = SIZE_EXPAND_FILL
 	lists.add_theme_constant_override("separation", 6)
@@ -921,6 +936,7 @@ func _build_orch_panel() -> void:
 	sub.add_theme_font_size_override("font_size", 11)
 	sub.add_theme_color_override("font_color", AmTheme.col("MINT"))
 	lists.add_child(sub)
+	orch_sub = sub
 	orch_list = VBoxContainer.new()
 	orch_list.add_theme_constant_override("separation", 4)
 	lists.add_child(orch_list)
@@ -961,6 +977,18 @@ func _build_orch_panel() -> void:
 				create_tween().tween_property(orch_panel, "modulate:a", want, 0.2))
 	add_child(fade)
 	_build_rules_dialog()
+	_set_orch_tab("terminal")
+
+
+func _set_orch_tab(tab: String) -> void:
+	orch_tab = tab
+	for k in orch_tabs:
+		orch_tabs[k].set_pressed_no_signal(k == tab)
+	orch_term_box.visible = tab == "terminal" and not orch_min
+	orch_lists.visible = tab != "terminal" and not orch_min
+	orch_plan.visible = tab == "plan"
+	orch_sub.visible = tab == "sessions"
+	orch_list.visible = tab == "sessions"
 
 
 func _orch_drag_input(e: InputEvent, what: String) -> void:
@@ -989,6 +1017,7 @@ func _toggle_orch_min() -> void:
 	for n in orch_body:
 		n.visible = not orch_min
 	orch_hint.visible = not orch_min and orch_hint.text != ""
+	_set_orch_tab(orch_tab)
 	if orch_min:
 		_orch_full = orch_panel.size
 		orch_panel.size = Vector2(orch_panel.size.x, 0)
@@ -1000,6 +1029,10 @@ func _toggle_orch_min() -> void:
 
 func toggle_orchestrator() -> void:
 	orch_panel.visible = not orch_panel.visible
+	if orch_panel.visible:  # the screen may be smaller than when it was placed: keep it whole and in view
+		var vp := get_viewport_rect().size
+		orch_panel.size = orch_panel.size.clamp(Vector2(420, 260), vp - Vector2(16, 72))
+		orch_panel.position = orch_panel.position.clamp(Vector2(0, 56), vp - orch_panel.size - Vector2(8, 8))
 	orch_btn.set_pressed_no_signal(orch_panel.visible)
 	if orch_panel.visible:
 		await refresh_orchestrator()
@@ -1037,9 +1070,10 @@ func _render_plan() -> void:
 	var plan: Dictionary = orch_data.get("plan", {})
 	var tasks: Array = plan.get("tasks", [])
 	if tasks.is_empty():
+		orch_plan.add_child(_wrap("No plan yet: it proposes one, waits for your OK, then writes it here and keeps it current."))
 		return
 	var h := Label.new()
-	h.text = "PLAN" + (("   " + str(plan.get("goal", ""))) if str(plan.get("goal", "")) != "" else "")
+	h.text = str(plan.get("goal", "")) if str(plan.get("goal", "")) != "" else "Its plan"
 	h.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	h.add_theme_font_size_override("font_size", 11)
 	h.add_theme_color_override("font_color", AmTheme.col("MINT"))
@@ -1207,7 +1241,11 @@ func _render_orchestrator() -> void:
 		c.queue_free()
 	var kids := orchestrated()
 	var live := kids.filter(func(x): return str(x.get("state", "")) == "running").size()
-	(orch_panel.find_child("SubTitle", true, false) as Label).text = ("ITS SESSIONS   %d running, 4 at most" % live) if not kids.is_empty() else "ITS SESSIONS   none yet"
+	(orch_panel.find_child("SubTitle", true, false) as Label).text = ("%d running, 4 at most" % live) if not kids.is_empty() else "None yet: it starts sessions after your OK"
+	var tasks: Array = (orch_data.get("plan", {}) as Dictionary).get("tasks", [])
+	var done := tasks.filter(func(t): return str(t.get("status", "")) in ["done", "dropped"]).size()
+	orch_tabs["plan"].text = ("Plan  %d/%d" % [done, tasks.size()]) if not tasks.is_empty() else "Plan"
+	orch_tabs["sessions"].text = ("Sessions  %d" % kids.size()) if not kids.is_empty() else "Sessions"
 	var b0: Dictionary = orch_data.get("budget", {})
 	var used := int(b0.get("used_today", 0))
 	var cap := int(b0.get("daily_tokens", 0))

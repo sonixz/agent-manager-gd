@@ -661,3 +661,6 @@ background and a shadow, more see-through when the mouse is elsewhere (solid und
 resized by its ◢ corner, « — » minimises it to its title bar, ✕ or « ◆ Orchestrator · beta » or Ctrl+O hide it; its
 place and size are remembered. The views are no longer squeezed. Toasts stay above it. Captured (open, minimised);
 its terminal keeps one size across refreshes.
+- Then (owner: « il est comme stocké à moitié de l'écran »): its terminal had only half the window, the plan and
+  sessions took the rest. Now tabs: Terminal (the whole height), Plan 0/3, Sessions 2; the window is kept whole and
+  in view when it opens (a smaller screen than when it was placed); its background a little less see-through.
