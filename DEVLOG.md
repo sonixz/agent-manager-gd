@@ -653,3 +653,11 @@ up, il revient »), and a BETA mark (« pas tout rodé, mais puissant »).
   « ◆ Orchestrator · beta ».
 - A boxed line in the Brain's violet under the title: « ✦ Connected to your Second Brain · it documents · N calls · N
   proposals »; before it starts: « Starts connected to your Second Brain… »; amber when the Brain is off or its key fails.
+
+## Loop 26c: the orchestrator floats (2026-11-09)
+The owner: docked on the right it « dépasse »; he wanted it to pop out over the app, a little translucent, reducible,
+opened from the button at the top. Now a floating window inside the app (no system window): slightly see-through
+background and a shadow, more see-through when the mouse is elsewhere (solid under the mouse), moved by its title bar,
+resized by its ◢ corner, « — » minimises it to its title bar, ✕ or « ◆ Orchestrator · beta » or Ctrl+O hide it; its
+place and size are remembered. The views are no longer squeezed. Toasts stay above it. Captured (open, minimised);
+its terminal keeps one size across refreshes.

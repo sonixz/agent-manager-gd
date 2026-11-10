@@ -111,7 +111,10 @@ var orch_hint: Label
 var orch_list: VBoxContainer
 var orch_plan: VBoxContainer
 var orch_brain: Label
-var orch_sig := ""          # what the panel shows: rebuilt only when it changes (a rebuild resized the terminal: it jumped)
+var orch_sig := ""
+var orch_min := false        # minimised: only its title bar shows
+var orch_body: Array = []    # what hides when it is minimised
+var orch_drag := ""          # "move" or "size" while the mouse drags its title bar or its corner          # what the panel shows: rebuilt only when it changes (a rebuild resized the terminal: it jumped)
 var orch_foot: Label
 var orch_data := {}          # GET /orchestrator: its plan, the routing rules, the budget and today's tokens
 var rules_dialog: AcceptDialog
@@ -480,6 +483,7 @@ func _build() -> void:
 	empty_label.grow_horizontal = GROW_DIRECTION_BOTH
 	area.add_child(empty_label)
 	toast = PanelContainer.new()
+	toast.z_index = 10  # above the floating orchestrator
 	toast.set_anchors_preset(PRESET_BOTTOM_RIGHT)
 	toast.grow_horizontal = GROW_DIRECTION_BEGIN
 	toast.grow_vertical = GROW_DIRECTION_BEGIN
@@ -824,15 +828,29 @@ func orchestrated() -> Array:
 func _build_orch_panel() -> void:
 	orch_panel = PanelContainer.new()
 	orch_panel.name = "Orchestrator"
-	orch_panel.custom_minimum_size = Vector2(520, 0)
 	orch_panel.visible = false
-	orch_panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("BG_2"), 0, AmTheme.col("BORDER"), 0, 12))
-	get_node("Root").add_child(orch_panel)
+	# a floating, slightly translucent window over the app (Loop 26c): it never squeezes the views; move it by its
+	# title bar, resize it by its corner, minimise it to its title bar
+	var st := AmTheme.box(Color(AmTheme.col("BG_2"), 0.88), 14, Color(AmTheme.col("MINT"), 0.45), 1, 12)
+	st.shadow_color = Color(0, 0, 0, 0.45)
+	st.shadow_size = 18
+	orch_panel.add_theme_stylebox_override("panel", st)
+	add_child(orch_panel)
+	var vp := get_viewport_rect().size
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS)
+	var rr: Rect2 = cfg.get_value("orchestrator", "rect", Rect2(vp.x - 640, 64, 600, vp.y - 110))
+	orch_panel.position = rr.position
+	orch_panel.size = rr.size
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	orch_panel.add_child(v)
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 6)
+	top.mouse_filter = MOUSE_FILTER_STOP
+	top.mouse_default_cursor_shape = CURSOR_MOVE
+	top.tooltip_text = "Drag to move it"
+	top.gui_input.connect(func(e: InputEvent) -> void: _orch_drag_input(e, "move"))
 	v.add_child(top)
 	orch_head = Label.new()
 	orch_head.text = "◆ Orchestrator"
@@ -869,8 +887,10 @@ func _build_orch_panel() -> void:
 		if not o.is_empty():
 			set_view("focus")
 			select(str(o["id"])), "Open it in the main area"))
+	top.add_child(_small("—", _toggle_orch_min, "Minimise to its title bar"))
 	top.add_child(_small("✕", toggle_orchestrator, "Hide (%s)" % key_text("orchestrator")))
 	orch_brain = Label.new()
+	orch_body.append(orch_brain)
 	orch_brain.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	orch_brain.add_theme_font_size_override("font_size", 13)
 	orch_brain.add_theme_font_override("font", AmTheme.ui_font(600))
@@ -881,11 +901,13 @@ func _build_orch_panel() -> void:
 	orch_term_box = VBoxContainer.new()
 	orch_term_box.size_flags_vertical = SIZE_EXPAND_FILL
 	v.add_child(orch_term_box)
+	orch_body.append(orch_term_box)
 	# the plan and its sessions scroll in a box of fixed height: the terminal above never changes size because of them
 	var lists_scroll := ScrollContainer.new()
 	lists_scroll.custom_minimum_size = Vector2(0, 230)
 	lists_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	v.add_child(lists_scroll)
+	orch_body.append(lists_scroll)
 	var lists := VBoxContainer.new()
 	lists.size_flags_horizontal = SIZE_EXPAND_FILL
 	lists.add_theme_constant_override("separation", 6)
@@ -905,6 +927,7 @@ func _build_orch_panel() -> void:
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 6)
 	v.add_child(foot)
+	orch_body.append(foot)
 	orch_foot = Label.new()
 	orch_foot.size_flags_horizontal = SIZE_EXPAND_FILL
 	orch_foot.add_theme_font_size_override("font_size", 12)
@@ -918,7 +941,61 @@ func _build_orch_panel() -> void:
 			if r.has("error"):
 				status_label.text = str(r["error"])
 			await refresh_orchestrator()), "Once today's tokens reach it, the orchestrator cannot start sessions"))
+	var grip := Label.new()
+	grip.text = "◢"
+	grip.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+	grip.mouse_filter = MOUSE_FILTER_STOP
+	grip.mouse_default_cursor_shape = CURSOR_FDIAGSIZE
+	grip.tooltip_text = "Drag to resize"
+	grip.gui_input.connect(func(e: InputEvent) -> void: _orch_drag_input(e, "size"))
+	foot.add_child(grip)
+	# a little see-through when the mouse is elsewhere, solid under the mouse
+	var fade := Timer.new()
+	fade.wait_time = 0.15
+	fade.autostart = true
+	fade.timeout.connect(func() -> void:
+		if orch_panel.visible:
+			var over := orch_panel.get_global_rect().has_point(get_global_mouse_position()) or orch_drag != ""
+			var want := 1.0 if over else 0.86
+			if absf(orch_panel.modulate.a - want) > 0.01:
+				create_tween().tween_property(orch_panel, "modulate:a", want, 0.2))
+	add_child(fade)
 	_build_rules_dialog()
+
+
+func _orch_drag_input(e: InputEvent, what: String) -> void:
+	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+		orch_drag = what if e.pressed else ""
+		if not e.pressed:
+			_save_orch_rect()
+	elif e is InputEventMouseMotion and orch_drag == what:
+		var vp := get_viewport_rect().size
+		if what == "move":
+			orch_panel.position = (orch_panel.position + e.relative).clamp(Vector2(-orch_panel.size.x + 120, 0), vp - Vector2(120, 40))
+		else:
+			orch_panel.size = (orch_panel.size + e.relative).clamp(Vector2(420, 260), vp - orch_panel.position)
+
+
+func _save_orch_rect() -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS)
+	cfg.set_value("orchestrator", "rect", Rect2(orch_panel.position, orch_panel.size if not orch_min else cfg.get_value("orchestrator", "rect", Rect2(0, 0, 600, 700)).size))
+	cfg.save(SETTINGS)
+
+
+var _orch_full := Vector2.ZERO
+func _toggle_orch_min() -> void:
+	orch_min = not orch_min
+	for n in orch_body:
+		n.visible = not orch_min
+	orch_hint.visible = not orch_min and orch_hint.text != ""
+	if orch_min:
+		_orch_full = orch_panel.size
+		orch_panel.size = Vector2(orch_panel.size.x, 0)
+		orch_panel.reset_size()
+	else:
+		orch_panel.size = _orch_full if _orch_full != Vector2.ZERO else Vector2(600, get_viewport_rect().size.y - 110)
+		_mount_orchestrator()
 
 
 func toggle_orchestrator() -> void:
@@ -1124,7 +1201,7 @@ func _render_orchestrator() -> void:
 		orch_hint.text = ("It asks you: " + msg + "\n(answer in its terminal below, or with Reply… in the queue)") if str(o.get("activity", "")) == "waiting" and msg != "" else ""
 		if running and not terms.has(str(o["id"])):
 			_ensure_terminal(str(o["id"]))
-	orch_hint.visible = orch_hint.text != ""
+	orch_hint.visible = orch_hint.text != "" and not orch_min
 	for c in orch_list.get_children():
 		orch_list.remove_child(c)
 		c.queue_free()
