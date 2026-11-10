@@ -71,6 +71,10 @@ class Store:
                 db.execute("ALTER TABLE sessions ADD COLUMN brain_document INTEGER NOT NULL DEFAULT 0")
             if "archived_at" not in cols:
                 db.execute("ALTER TABLE sessions ADD COLUMN archived_at REAL NOT NULL DEFAULT 0")
+            if "level" not in cols:  # Loop 24: its permission level (ask, edits, auto, full)
+                db.execute("ALTER TABLE sessions ADD COLUMN level TEXT NOT NULL DEFAULT 'auto'")
+            if "level" not in {r[1] for r in db.execute("PRAGMA table_info(groups)")}:  # a group's default level
+                db.execute("ALTER TABLE groups ADD COLUMN level TEXT NOT NULL DEFAULT ''")
 
     def _db(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=5)
@@ -106,7 +110,7 @@ class Store:
 
     def update(self, sid: str, **fields) -> None:
         allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived", "archived_at", "cwd", "worktree",
-                                                            "brain_client", "remote_control", "brain_document")}
+                                                            "brain_client", "remote_control", "brain_document", "level")}
         if not allowed:
             return
         sets = ", ".join(f"{k} = :{k}" for k in allowed)
@@ -191,6 +195,11 @@ class Store:
             db.execute("DELETE FROM review_comments WHERE id = ? AND status = 'open'", (cid,))
 
     # ---------------------------------------------------------------- groups (the project tree)
+    def set_group_level(self, name: str, level: str) -> None:
+        self.add_group(name)
+        with closing(self._db()) as db, db:
+            db.execute("UPDATE groups SET level = ? WHERE name = ?", (level, name))
+
     def groups(self) -> list[dict]:
         with closing(self._db()) as db:
             return [dict(r) for r in db.execute("SELECT * FROM groups ORDER BY position, name")]

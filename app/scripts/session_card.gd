@@ -7,6 +7,11 @@ signal picked(id: String)
 signal menu(id: String)
 signal rename(id: String)
 
+const LEVEL_BADGE := {  # Loop 24: the permission level, when it is not « auto » (Claude Code's own default)
+	"ask": ["asks first", "Asks before editing files or running commands"],
+	"edits": ["auto edits", "Auto edits: edits files without asking, asks before other commands"],
+	"full": ["⚠ no permission", "Never asks. Your keys, ~/.ssh and .env files stay out of reach of its file tools; a script it runs is not stopped"],
+}
 const TOOL_BADGE := {"claude": ["✻", Color("d97757")], "codex": ["◎", Color("10a37f")], "shell": ["❯", Color("8b98a8")]}
 
 var id := ""
@@ -74,6 +79,13 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	top.add_child(name)
 	top.add_child(_label(_ago(float(s.get("since", 0))), AmTheme.col("FAINT"), 11))
+	var lv := str(s.get("level", "auto"))
+	if str(s.get("tool", "")) != "shell" and lv in LEVEL_BADGE:
+		var b: Array = LEVEL_BADGE[lv]
+		var lm := _label(b[0], AmTheme.col("WARM") if lv == "full" else AmTheme.col("MUTED"), 11, 650 if lv == "full" else 400)
+		lm.mouse_filter = MOUSE_FILTER_PASS
+		lm.tooltip_text = b[1]
+		top.add_child(lm)
 	brain_mark = _label("", AmTheme.col("FAINT"), 15)
 	brain_mark.mouse_filter = MOUSE_FILTER_PASS
 	brain_mark.pivot_offset = Vector2(6, 9)

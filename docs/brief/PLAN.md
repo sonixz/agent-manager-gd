@@ -236,7 +236,7 @@ terminaux vivants), une section « Better together » avec Second Brain, les deu
   revient si l'agent redemande ; une seule notification par demande (toast, clignotement de la barre des tâches,
   carillon désactivable, nombre en attente dans le titre de la fenêtre).
 
-### Loop 24 · Niveaux de permission
+### Loop 24 · Niveaux de permission (fait le 2026-11-09)
 - Par session et par défaut de groupe : Demander / Modifs auto / Sans permission (Claude `--dangerously-skip-permissions`,
   Codex sans approbation), badge sur la carte, confirmation pour « Sans permission » ; chemins toujours interdits à tous
   les niveaux (vérifier que Claude Code respecte les refus en mode sans permission ; sinon le dire avant d'aller plus

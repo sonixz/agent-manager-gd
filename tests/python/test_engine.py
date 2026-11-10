@@ -205,6 +205,29 @@ class EngineTest(unittest.TestCase):
         self.run_hook(s["id"], "claude", {"hook_event_name": "Notification", "message": "Claude needs your permission to use Write"})
         self.assertEqual(self.sessions.describe(rec)["activity"], "approval")   # a new request comes back at once
 
+    def test_permission_levels_flags_denied_paths_group_default_and_child_cap(self):
+        from engine.sessions import LEVEL_FLAGS
+        cmd = self.sessions.command_for({"id": "lv000001", "tool": "claude", "level": "full"})
+        self.assertIn("--dangerously-skip-permissions", cmd)
+        with open(cmd[2], encoding="utf-8") as f:
+            deny = json.load(f)["permissions"]["deny"]
+        for rule in ("Read(~/.ssh/**)", "Edit(~/.ssh/**)", "Read(**/.env)", "Read(**/.env.keys)"):
+            self.assertIn(rule, deny)                                       # at every level, « No permission » too
+        self.assertIn("Read(/" + os.path.join(os.path.abspath(self.tmp), "keys") + "/**)", deny)   # //absolute: our keys
+        self.assertEqual(self.sessions.command_for({"id": "lv000002", "tool": "claude"})[3:5], ["--permission-mode", "auto"])
+        codex = self.sessions.command_for({"id": "lv000003", "tool": "codex", "level": "ask"})
+        self.assertEqual(codex[3:7], LEVEL_FLAGS["codex"]["ask"])
+        # the group's default, then a child never above its parent
+        self.sessions.store.set_group_level("Careful", "ask")
+        self.assertEqual(self.sessions.level_for("", "Careful"), "ask")
+        self.assertEqual(self.sessions.level_for("", "Other"), "auto")
+        parent = self.sessions.create("lead", "shell", self.tmp, grp="Careful")
+        self.assertEqual(parent["level"], "ask")
+        child = self.sessions.create("helper", "shell", self.tmp, parent=parent["id"], level="full")
+        self.assertEqual(child["level"], "ask")
+        with self.assertRaises(ValueError):
+            self.sessions.level_for("root")
+
     def test_codex_notify_and_terminal_activity(self):
         s = self.sessions.create("x", "shell", self.tmp)
         rec = {**self.sessions.store.get(s["id"]), "tool": "codex"}

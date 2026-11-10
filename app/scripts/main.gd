@@ -54,6 +54,14 @@ var board_previews := {}      # id -> Label (Board view)
 var f_worktree: CheckBox
 var f_brain: CheckBox
 var f_remote: CheckBox
+var f_level: OptionButton
+var level_menu: PopupMenu
+const LEVELS := {  # Loop 24: [menu label, card badge, what it means]
+	"ask": ["Ask before acting", "asks first", "Asks before editing files or running commands"],
+	"edits": ["Auto edits (asks for commands)", "auto edits", "Edits files without asking; asks before other commands"],
+	"auto": ["Auto (Claude Code decides, its default)", "", "Claude Code's own judgment decides what needs your OK (Codex: works in its folder without asking)"],
+	"full": ["No permission (skips every prompt)", "⚠ no permission", "Never asks: runs everything. Your keys, ~/.ssh and .env files stay out of reach of its file tools"],
+}
 var f_document: CheckBox
 var f_browse: Button
 var folder_dialog: FileDialog
@@ -572,6 +580,17 @@ func _build_new_dialog() -> void:
 	f_worktree.text = "In its own git branch (a worktree beside the repository)"
 	f_worktree.tooltip_text = "The session works in <repository>-worktrees/<name> on branch am/<name>; Finish merges it back."
 	g.add_child(f_worktree)
+	var lv_label := Label.new()
+	lv_label.text = "Permissions"
+	g.add_child(lv_label)
+	f_level = OptionButton.new()
+	for k in LEVELS:
+		f_level.add_item(LEVELS[k][0])
+		f_level.set_item_metadata(f_level.item_count - 1, k)
+		f_level.set_item_tooltip(f_level.item_count - 1, LEVELS[k][2])
+	f_level.select(2)
+	f_level.tooltip_text = "What the agent may do without asking you. Paths with your keys are refused at every level. A session started by an agent never gets more than its parent."
+	g.add_child(f_level)
 	g.add_child(Control.new())
 	f_brain = CheckBox.new()
 	f_brain.text = "Share the Second Brain (a key of its own, proposals wait for your OK)"
@@ -594,6 +613,7 @@ func _build_new_dialog() -> void:
 	f_cwd.text_changed.connect(func(_t: String) -> void: _check_brief())
 	f_tool.item_selected.connect(func(_i: int) -> void: _check_brief())
 	f_where.item_selected.connect(func(_i: int) -> void: _check_remote())
+	f_group.item_selected.connect(func(_i: int) -> void: _group_level_default())
 	new_dialog.confirmed.connect(_create)
 
 
@@ -706,6 +726,7 @@ func _open_new(where := "", tool := "") -> void:
 	for i in f_group.item_count:
 		if str(f_group.get_item_metadata(i)) == cur:
 			f_group.select(i)
+	_group_level_default()
 	for i in f_where.item_count:  # Loop 16: « Deploy » from the Sandboxes tab opens it ready for the cloud
 		if where != "" and str(f_where.get_item_metadata(i)) == where:
 			f_where.select(i)
@@ -1148,6 +1169,8 @@ func _render_header() -> void:
 		meta = "%s  ·  %s" % [s["tool_label"], short_path(str(s["cwd"]))]
 		if str(s.get("branch", "")) != "":
 			meta += "  ·  ⎇ " + str(s["branch"])
+		if str(s.get("tool", "")) != "shell":
+			meta += "  ·  " + str(LEVELS.get(str(s.get("level", "auto")), LEVELS["auto"])[0]).get_slice(" (", 0).to_lower()
 	header_meta.text = meta
 	var look := SessionCard.brain_look(brain_info(str(s.get("id", ""))), s and str(s.get("tool", "")) != "shell")
 	header_brain.visible = s and look[0] != ""
@@ -2883,13 +2906,32 @@ func open_palette() -> void:
 
 
 # ------------------------------------------------------------------ actions
+## The New session form follows the group's default permission level (« auto » when the group has none).
+func _group_level_default() -> void:
+	var gname := str(f_group.get_selected_metadata()) if f_group.item_count > 0 else ""
+	var lv := "auto"
+	for g in tree:
+		if str(g["name"]) == gname and str(g.get("level", "")) != "":
+			lv = str(g["level"])
+	for i in f_level.item_count:
+		if str(f_level.get_item_metadata(i)) == lv:
+			f_level.select(i)
+
+
 func _create() -> void:
+	if str(f_level.get_selected_metadata()) == "full":
+		_confirm("Start « %s » with no permission?\n\nIt will run every command and edit any file without asking you. Your keys, ~/.ssh and .env files stay out of reach of its file tools, but a script it runs could still read them. Use it on a project you trust, ideally in a worktree." % (f_name.text.strip_edges() if f_name.text.strip_edges() != "" else "this session"), _create_now)
+		return
+	await _create_now()
+
+
+func _create_now() -> void:
 	if str(f_where.get_selected_metadata()) == "sandbox":
 		_toast("Starting a cloud sandbox… (about 30 seconds)")
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled, "level": str(f_level.get_selected_metadata())}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return
@@ -3048,6 +3090,7 @@ func _build_menus() -> void:
 	group_menu = PopupMenu.new()
 	group_menu.add_item("Rename group…", 0)
 	group_menu.add_item("Delete group (its sessions stay)", 1)
+	group_menu.add_item("Default permission level…", 2)
 	group_menu.id_pressed.connect(func(mid: int) -> void:
 		var gname := menu_target
 		if mid == 0:
@@ -3058,8 +3101,24 @@ func _build_menus() -> void:
 				await refresh())
 		elif mid == 1:
 			await engine.call_api("POST", "/groups/%s/delete" % gname.uri_encode(), {})
-			await refresh())
+			await refresh()
+		elif mid == 2:
+			level_menu.popup(Rect2i(Vector2i(get_global_mouse_position()), Vector2i.ZERO)))
 	add_child(group_menu)
+	level_menu = PopupMenu.new()  # a group's default level for its new sessions
+	level_menu.add_item("No default (auto)")
+	level_menu.set_item_metadata(0, "")
+	for k in LEVELS:
+		level_menu.add_item(LEVELS[k][0])
+		level_menu.set_item_metadata(level_menu.item_count - 1, k)
+	level_menu.index_pressed.connect(func(i: int) -> void:
+		var r := await engine.call_api("POST", "/groups/%s/level" % menu_target.uri_encode(), {"level": str(level_menu.get_item_metadata(i))})
+		if r.has("error"):
+			status_label.text = str(r["error"])
+		else:
+			_toast("New sessions in « %s »: %s" % [menu_target, str(level_menu.get_item_text(i))])
+		await refresh())
+	add_child(level_menu)
 	theme_menu = PopupMenu.new()
 	for t in AmTheme.THEMES:
 		theme_menu.add_item(AmTheme.LABELS[t])

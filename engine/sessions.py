@@ -46,6 +46,15 @@ ACTIVE_SECONDS = 2.5
 CLAUDE_BUSY = re.compile(r"esc to interrupt", re.I)   # what Claude Code shows while it works
 STALE_WORKING_SECONDS = 15
 
+# Loop 24: permission levels, from the fewest rights to the most. Claude Code and Codex flags of this launch only.
+LEVELS = ["ask", "edits", "auto", "full"]
+LEVEL_FLAGS = {
+    "claude": {"ask": ["--permission-mode", "default"], "edits": ["--permission-mode", "acceptEdits"],
+               "auto": ["--permission-mode", "auto"], "full": ["--dangerously-skip-permissions"]},
+    "codex": {"ask": ["-a", "on-request", "-s", "workspace-write"], "edits": ["-a", "never", "-s", "workspace-write"],
+              "auto": ["-a", "never", "-s", "workspace-write"], "full": ["--dangerously-bypass-approvals-and-sandbox"]},
+}
+
 WRAPUP_PROMPT = (
     "Agent Manager GD is closing this session. Please write a short summary of it in Markdown to the file {path} "
     "with these sections: ## What was done, ## Decisions (and why), ## Files touched, ## What is left, "
@@ -132,6 +141,30 @@ class Sessions:
         """The name Remote Control shows in claude.ai/code: « Group · Session », or the session's name alone."""
         return (f"{rec['grp']} · {rec['name']}" if rec.get("grp") else rec["name"])[:80]
 
+    def level_for(self, level: str, grp: str = "", parent: str = "") -> str:
+        """The level asked for, or the group's default, or « auto » (Claude Code's own default in its terminal);
+        never more rights than the session that starts it (an agent's children stay at or below its level)."""
+        if level and level not in LEVELS:
+            raise ValueError("level must be one of " + ", ".join(LEVELS))
+        if not level:
+            level = next((g.get("level", "") for g in self.store.groups() if g["name"] == grp), "") or "auto"
+        if parent:
+            cap = (self.store.get(parent) or {}).get("level") or "auto"
+            if LEVELS.index(level) > LEVELS.index(cap):
+                level = cap
+        return level
+
+    def deny_rules(self) -> list[str]:
+        """Paths no agent may read or change, at every level, « No permission » included (Claude Code applies deny
+        rules in every mode). Its built-in file tools and the file commands it recognises in Bash are covered; a
+        script that opens files itself is not (only an OS sandbox would stop that)."""
+        paths = ["~/.ssh/**", "~/.aws/**", "~/.gnupg/**", "~/.config/gh/**", "**/.env", "**/.env.keys", "**/.env.local",
+                 "/" + os.path.join(os.path.abspath(self.home), "keys") + "/**"]
+        if self.brain and getattr(self.brain, "home", ""):
+            for sub in ("runtime", "mcp"):
+                paths.append("/" + os.path.join(os.path.abspath(self.brain.home), sub) + "/**")
+        return [f"Read({p})" for p in paths] + [f"Edit({p})" for p in paths]
+
     def command_for(self, rec: dict, mode: str = "new", conversation: str = "") -> list[str]:
         """The tool's command with this session's hooks: options of this launch only, never the user's settings.
         mode: new (a fresh conversation), resume (its own conversation), fork (a copy of a conversation)."""
@@ -139,13 +172,14 @@ class Sessions:
         if rec["tool"] == "claude":
             cmd = " ".join(_q(c) for c in hook + ["claude"])
             settings = {"hooks": {e: [{"matcher": "", "hooks": [{"type": "command", "command": cmd, "timeout": 5}]}]
-                                  for e in CLAUDE_EVENTS}}
+                                  for e in CLAUDE_EVENTS},
+                        "permissions": {"deny": self.deny_rules()}}
             folder = os.path.join(self.home, "sessions", rec["id"])
             os.makedirs(folder, exist_ok=True)
             path = os.path.join(folder, "claude-settings.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(settings, f)
-            base = ["claude", "--settings", path] + self._claude_mcp(rec)
+            base = ["claude", "--settings", path] + LEVEL_FLAGS["claude"][rec.get("level") or "auto"] + self._claude_mcp(rec)
             if rec.get("remote_control"):  # seen and driven from claude.ai/code or the Claude app, under this name
                 base += ["--remote-control", self.remote_name(rec)]
             # how git already authenticates here (the agent never goes looking for a key in ~/.ssh), and, when asked,
@@ -162,7 +196,7 @@ class Sessions:
             self.store.touch_conversation(rec["id"], "claude", new_id)
             return base + ["--session-id", new_id]
         if rec["tool"] == "codex":
-            notify = ["-c", "notify=" + json.dumps(hook + ["codex"])] + self._codex_mcp(rec)
+            notify = ["-c", "notify=" + json.dumps(hook + ["codex"])] + LEVEL_FLAGS["codex"][rec.get("level") or "auto"] + self._codex_mcp(rec)
             if mode == "resume":  # without a known id Codex shows its own picker
                 return ["codex", "resume"] + notify + ([conversation] if conversation else [])
             if mode == "fork":
@@ -247,7 +281,8 @@ class Sessions:
 
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
-               repo: str = "", host: str = "local", remote: bool = False, document: bool = False) -> dict:
+               repo: str = "", host: str = "local", remote: bool = False, document: bool = False,
+               level: str = "") -> dict:
         if host == "sandbox":
             return self.create_sandbox_session(name, tool, grp, repo, brain)
         if tool not in TOOLS:
@@ -267,9 +302,12 @@ class Sessions:
             cwd = wt
         if parent and not self.store.get(parent):
             raise ValueError("unknown parent session")
+        level = self.level_for(level, grp, parent)
         from .review import head
         rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent, start_commit=head(cwd),
                              repo_id=repo)
+        self.store.update(rec["id"], level=level)
+        rec = self.store.get(rec["id"])
         if remote and tool == "claude":
             self.store.update(rec["id"], remote_control=1)
             rec = self.store.get(rec["id"])
@@ -310,6 +348,7 @@ class Sessions:
                 "last_conversation": self.last_conversation(rec["id"]),
                 "brain": bool(rec.get("brain_client")),
                 "brain_document": bool(rec.get("brain_client") and rec.get("brain_document")),
+                "level": rec.get("level") or "auto",
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",
@@ -756,7 +795,7 @@ class Sessions:
         items = self.list()
         groups = [{"name": "", "folded": False, "sessions": [s for s in items if not s["grp"]]}]
         for g in self.store.groups():
-            groups.append({"name": g["name"], "folded": bool(g["folded"]),
+            groups.append({"name": g["name"], "folded": bool(g["folded"]), "level": g.get("level", ""),
                            "sessions": [s for s in items if s["grp"] == g["name"]]})
         return {"groups": groups}
 

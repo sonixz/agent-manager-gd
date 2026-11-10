@@ -63,6 +63,7 @@
         <a href="#history">History, resume, fork</a>
         <a href="#worktrees">A git branch per session</a>
         <a href="#review">Review</a>
+        <a href="#permissions">Permissions</a>
         <a href="#context">Wrap up and Brief</a>
         <a href="#voice">Voice</a>
         <a href="#usage">Usage</a>
@@ -223,6 +224,25 @@
           comment on it, or comment the whole file. <b>Send review</b> sends the open comments to the agent as one
           numbered request (file:line, your comment, the line's code). Sent comments stay visible until you mark them
           <b>Handled</b>.</p>
+
+        <h2 id="permissions">Permissions</h2>
+        <p>Each agent session has a level, chosen in <b>New session › Permissions</b>; a group can have its own default
+          (right click the group › <i>Default permission level…</i>). The card shows it when it is not <i>auto</i>.</p>
+        <ul>
+          <li><b>Ask before acting</b>: Claude Code asks before editing files or running commands (Codex: asks when it
+            needs to, works in its folder).</li>
+          <li><b>Auto edits</b>: edits files without asking, asks before other commands (Codex: never asks, stays in its
+            folder's sandbox).</li>
+          <li><b>Auto</b>, the default: Claude Code's own judgment decides what needs your OK.</li>
+          <li><b>No permission</b>: never asks (Claude Code <code>--dangerously-skip-permissions</code>, Codex
+            <code>--dangerously-bypass-approvals-and-sandbox</code>). Asked to confirm, marked <i>⚠ no permission</i> on the card.</li>
+        </ul>
+        <p>At every level, <i>No permission</i> included, Claude Code refuses to read or change <code>~/.ssh</code>,
+          <code>~/.aws</code>, <code>~/.gnupg</code>, the GitHub CLI's login, <code>.env</code> files, Agent Manager's
+          keys and the Second Brain's tokens (deny rules apply in every mode). This covers its file tools and the file
+          commands it recognises in a shell; <b>a script it writes and runs could still open those files</b>: only an
+          operating-system sandbox stops that. Codex has no such list: its sandbox limits writes to its folder. A
+          session started by an agent never gets a higher level than the agent that started it.</p>
 
         <h2 id="context">Wrap up and Brief</h2>
         <p><b>Wrap up</b> (right click) asks the agent to write its own summary: what was done, decisions, files touched,

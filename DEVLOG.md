@@ -588,3 +588,22 @@ run can take minutes).
   and the window title shows how many wait. A system toast on Windows was left out: it needs a registered app or a
   third-party module.
 - Captures: step `approvals` (queue-before, approve-feedback, queue-dismissed), checked.
+
+## Loop 24: permission levels (2026-11-09)
+The owner: « il faudrait définir un niveau de permission… j'aimerais ça être capable de lancer les agents en skip
+permission ». First the check he asked for: the Claude Code documentation (permission-modes, permissions,
+sandboxing) says « Deny rules block in every mode, including bypassPermissions »; they cover its file tools and the
+file commands it recognises in Bash (cat, head, sed…), not a script that opens files itself; the OS sandbox would
+stop that but needs bubblewrap, absent here (and Claude Code then runs unsandboxed). So: built, with that limit said.
+- Levels, from fewer rights to more: ask (`--permission-mode default`), edits (`acceptEdits`), auto (`--permission-mode
+  auto`, what Claude Code does in its terminal anyway, the default), full (`--dangerously-skip-permissions`). Codex:
+  ask = `-a on-request -s workspace-write`, edits/auto = `-a never -s workspace-write`, full =
+  `--dangerously-bypass-approvals-and-sandbox` (flags checked in codex-cli 0.155.1).
+- Always denied, every level: Read and Edit of ~/.ssh, ~/.aws, ~/.gnupg, ~/.config/gh, .env/.env.keys/.env.local,
+  Agent Manager's keys folder and the Brain's runtime and mcp folders (in each session's own --settings file).
+- A group can have a default level (right click › Default permission level…); a child never gets more than its parent
+  (the orchestrator's children will not either). New session › Permissions; « No permission » asks to confirm; the
+  card shows « asks first », « auto edits » or « ⚠ no permission »; the header names the level. A level is set when a
+  session starts (changing it means restarting the session).
+- Not verified with a real agent call: that Claude Code really refuses a denied path in bypass mode (it would use the
+  owner's login); the docs say so. Tests 79 OK; captures `permissions` checked; Docs section « Permissions ».
