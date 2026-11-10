@@ -1,3 +1,0 @@
-engine connected: true
-budget: {"monthly_usd":5.0,"stop_idle_minutes":30.0,"stop_over_budget":false}
-capture 42-sandbox-budget

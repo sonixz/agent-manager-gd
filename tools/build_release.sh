@@ -12,7 +12,7 @@ ship() {  # $1 folder: the engine, the sandbox image recipe, docs
   mkdir -p "$1/engine" "$1/sandbox"
   cp engine/*.py engine/doctor.sh "$1/engine/"
   cp sandbox/* "$1/sandbox/"
-  cp README.md THIRD_PARTY_NOTICES.md "$1/"
+  cp README.md THIRD_PARTY_NOTICES.md LICENSE CHANGELOG.md SECURITY.md "$1/"
   echo "$VER" > "$1/VERSION"
 }
 W=dist/AgentManagerGD-win64

@@ -34,7 +34,7 @@ case "$1" in
   keys)  n="$2"; shift 2; "${T[@]}" send-keys -t "$n" "$@" ;;
   snap)  "${T[@]}" resize-window -t "$2" -x "$4" -y "$5"; sleep 2.5
          "${T[@]}" capture-pane -e -p -t "$2" | scrub > "$HERE/scenes/$3@$4x$5.ans"
-         if grep -qE "$HOME|$(whoami)@|pmastery|agmgd-showcase" "$HERE/scenes/$3@$4x$5.ans"; then echo "personal text left in $3" >&2; exit 1; fi
+         if grep -qE "$HOME|$(whoami)@|agmgd-showcase" "$HERE/scenes/$3@$4x$5.ans"; then echo "personal text left in $3" >&2; exit 1; fi
          echo "saved $3@$4x$5" ;;
   show)  "${T[@]}" capture-pane -p -t "$2" | scrub ;;
   stop)  "${T[@]}" kill-server 2>/dev/null || true ;;

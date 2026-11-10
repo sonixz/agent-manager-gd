@@ -1,6 +1,6 @@
 # Working on this repository (for people and coding agents)
 
-Start with docs/HANDOFF.md: where things stand, how to run and check, what waits on the owner.
+How to build, test and contribute: CONTRIBUTING.md. What the app protects: SECURITY.md.
 
 - Godot 4.7 + Python. Local-first: nothing leaves the computer unless the user asks.
 - The terminal must be impeccable: a change that degrades it (accents, colours, keys, speed) is a regression.

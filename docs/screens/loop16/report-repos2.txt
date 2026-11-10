@@ -1,4 +1,0 @@
-engine connected: true
-own folder: /tmp/agmgd-shots-Fbkc/demo/gd-project / origin missing
-capture 53-repos-own-folder
-after Add it as origin: same

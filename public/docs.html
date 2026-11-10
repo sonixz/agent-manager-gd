@@ -111,7 +111,7 @@
           Godot 4.7 and run it. The app starts the engine itself.</p>
 
         <h2 id="setup-check">Setup check</h2>
-        <p><b>··· › Setup check</b> (and on its own at the first launch when the engine cannot start) lists what Agent
+        <p><b>◐ › Setup check</b> (and on its own at the first launch when the engine cannot start) lists what Agent
           Manager needs and what it found: python3 (3.10+), tmux, git, ssh, and the optional Claude Code, Codex and
           flyctl, each with its version and path, or the command to install it. <b>It only looks</b>: it installs and
           downloads nothing; you run the commands yourself.</p>
@@ -200,7 +200,7 @@
           <tr><td>Approve the first session waiting for an OK</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd></td></tr>
           <tr><td>Dictate, voice command (hold)</td><td><kbd>F8</kbd>, <kbd>F9</kbd></td></tr>
         </table>
-        <p>Change any of them in <b>··· › Shortcuts</b>: click one, press the new keys (<kbd>Escape</kbd> cancels).</p>
+        <p>Change any of them in <b>◐ › Shortcuts</b>: click one, press the new keys (<kbd>Escape</kbd> cancels).</p>
 
         <h2 id="history">History, resume, fork</h2>
         <p>Every session keeps every conversation id it ever had: Claude Code gets its id from Agent Manager at launch;
@@ -268,12 +268,12 @@
           (gpt-4o-transcribe, gpt-4o-mini-transcribe, whisper-1…) and says what to allow in the project's limits.</p>
 
         <h2 id="usage">Usage</h2>
-        <p><b>··· › Usage</b>: tokens per session, per day and per tool, read from the agents' own logs on this computer
+        <p><b>◐ › Usage</b>: tokens per session, per day and per tool, read from the agents' own logs on this computer
           (Claude Code, Codex). No money amount for agents: their logs carry none, and subscriptions have no per-token
           price. Cloud sandbox costs are in <a href="#sandboxes">Sandboxes</a>.</p>
 
         <h2 id="brain">The Second Brain</h2>
-        <p>When <a href="https://github.com/sonixz/second-brain-gd" rel="noopener">Second Brain GD</a> runs on the same
+        <p>When <b>Second Brain GD</b> (its companion app) runs on the same
           computer, the badge at the bottom left says <i>✦ Second Brain ● connected</i>, with how many agents are linked
           and how many proposals they made today, and each Claude Code or Codex session can share it:</p>
         <ul>
@@ -292,7 +292,7 @@
             Brain; hover it for its calls and proposals. The badge is checked every 10 seconds and opens a small panel:
             every session's light, the latest proposals and how they ended. Agent Manager reads these counts from the
             Brain and keeps only titles and numbers, never a key.</li>
-          <li><b>Keys</b>: <b>··· › Keys</b> lists every Brain key Agent Manager made and what uses it; unused ones can be
+          <li><b>Keys</b>: <b>◐ › Keys</b> lists every Brain key Agent Manager made and what uses it; unused ones can be
             revoked, one by one or all at once, always confirmed.</li>
           <li><b>In the cloud</b>: a sandbox reaches the Brain through its SSH tunnel and the engine, with a secret of its
             own; the Brain's keys never leave your computer.</li>
@@ -311,7 +311,7 @@
           <tr><td><code>wait_for_session</code></td><td>until a child is done or waits</td><td>its own children only</td></tr>
         </table>
         <p>No tool presses keys in someone else's session: an agent never approves on another's behalf.
-          <b>··· › Connect other tools</b> gives the command to plug the same server into Claude Code, Codex or any MCP
+          <b>◐ › Connect other tools</b> gives the command to plug the same server into Claude Code, Codex or any MCP
           client outside the app; such a tool can list, read and start sessions, never type into one or approve.</p>
 
         <h2 id="orchestrator">The orchestrator</h2>
@@ -385,7 +385,7 @@
           them.</div>
 
         <h2 id="keys">Keys and secrets</h2>
-        <p><b>··· › Keys</b> holds your own API keys: OpenAI (voice dictation; Codex in sandboxes), Fly.io (sandboxes),
+        <p><b>◐ › Keys</b> holds your own API keys: OpenAI (voice dictation; Codex in sandboxes), Fly.io (sandboxes),
           Anthropic (Claude Code in sandboxes). On Windows each one is encrypted with DPAPI for your Windows user; on
           Linux the file is protected by its permissions (0600), and the screen says so. A key is never shown again,
           never written to a log, and read only when a feature needs it. Below them, the
@@ -449,7 +449,7 @@
 
   <footer class="site-footer">
     <div class="container">
-      <span>Agent Manager GD · MIT licence · part of <a href="https://github.com/sonixz/gd-project" rel="noopener">GD Project</a></span>
+      <span>Agent Manager GD · MIT licence</span>
       <span><a href="index.html">Home</a> · <a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
     </div>
   </footer>

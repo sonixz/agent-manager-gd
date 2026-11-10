@@ -140,7 +140,7 @@ def page(done: list[dict], coming: list[tuple[str, str]]) -> str:
 
   <footer class="site-footer">
     <div class="container">
-      <span>Agent Manager GD · MIT licence · part of <a href="https://github.com/sonixz/gd-project" rel="noopener">GD Project</a></span>
+      <span>Agent Manager GD · MIT licence</span>
       <span><a href="index.html">Home</a> · <a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
     </div>
   </footer>

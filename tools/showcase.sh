@@ -35,4 +35,4 @@ for step in "${@:-hero}"; do
   grep -vE "^Godot Engine|^OpenGL|V-Sync|set_use_vsync|libspeechd|^$" "$ROOT/godot.log" || true
 done
 # nothing personal may reach the website
-if grep -rlaE "$HOME|$(whoami)@|pmastery" "$REPORTS"/report-*.txt 2>/dev/null; then echo "personal text in a report" >&2; exit 1; fi
+if grep -rlaE "$HOME|$(whoami)@" "$REPORTS"/report-*.txt 2>/dev/null; then echo "personal text in a report" >&2; exit 1; fi

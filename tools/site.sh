@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ "${1:-}" != "--check" ]]; then
   # the home page's screenshots, then one run per How-to guide
-  tools/showcase.sh hero new-session agents repos brain-keys brain-visible review voice sandboxes palette
+  tools/showcase.sh hero new-session agents repos brain-keys brain-visible orchestrator review voice sandboxes palette
   tools/showcase.sh $(python3 tools/howto/guides.py --ids | tr ' ' '\n' | sed 's/^/howto-/')
   python3 tools/howto/build_page.py
 fi
@@ -39,7 +39,7 @@ print("\n".join(bad) or "ok")
 sys.exit(1 if bad else 0)
 EOF
 echo "== nothing personal in the capture reports"
-if grep -rlaE "$HOME|$(whoami)@|pmastery" build/showcase/report-*.txt 2>/dev/null; then fail=1; else echo ok; fi
+if grep -rlaE "$HOME|$(whoami)@" build/showcase/report-*.txt 2>/dev/null; then fail=1; else echo ok; fi
 echo "== weight (under 10 MB)"
 kb=$(du -sk public | cut -f1); echo "${kb} KB"; (( kb < 10240 )) || fail=1
 exit $fail

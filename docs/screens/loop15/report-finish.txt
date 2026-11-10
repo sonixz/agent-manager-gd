@@ -1,5 +1,0 @@
-engine connected: true
-capture 43-setup-check
-capture 44-shortcuts
-capture 45-connect-tools
-connect: claude mcp add --scope user agent-manager -- python3 /mnt/c/git-2026/agent-manager-gd/engine/mcp_agents.py

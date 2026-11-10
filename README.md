@@ -1,124 +1,122 @@
-# Agent Manager GD
+<p align="center">
+  <img src="public/assets/logo.svg" alt="" width="88" height="88">
+</p>
 
-Your AI coding agents, side by side, in a live and themable desktop app.
+<h1 align="center">Agent Manager GD</h1>
 
-Run Claude Code, Codex and other agent CLIs in real terminals inside one window: every session persists in tmux,
-shows its live state, revives on its own conversation, forks, and works in its own git worktree. Every session is
-wired to your [Second Brain](https://github.com/sonixz/second-brain-gd) over MCP, so what one agent learns, the next
-one knows.
+<p align="center"><b>Every coding agent. One control room.</b><br>
+Claude Code, Codex and your shells side by side, in real terminals that never die.</p>
 
-Status: **alpha.** Open source under the MIT licence (`LICENSE`). The plan is `docs/brief/PLAN.md`; the story, loop by loop, is in `DEVLOG.md`.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-8fe3ef" alt="MIT licence"></a>
+  <img src="https://img.shields.io/badge/status-alpha-f5cf74" alt="Status: alpha">
+  <img src="https://img.shields.io/badge/Godot-4.7-478cbf" alt="Godot 4.7">
+  <img src="https://img.shields.io/badge/platform-Windows%20%C2%B7%20Linux-c8b6ff" alt="Windows and Linux">
+  <a href="https://github.com/sonixz/agent-manager-gd/actions/workflows/tests.yml"><img src="https://github.com/sonixz/agent-manager-gd/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+</p>
 
-## Install (Windows)
+<p align="center">
+  <img src="public/assets/showcase/hero-grid.webp" alt="Agent Manager GD: four live terminals in a grid, the session tree on the left with each agent's state, and the queue of agents waiting for you." width="900">
+</p>
 
-`tools/build_release.sh` makes `dist/AgentManagerGD-<version>-win64.zip`. Unzip it, then right-click `install.ps1` →
-*Run with PowerShell*: it copies the app to `%LOCALAPPDATA%\Programs\AgentManagerGD` and adds a Start menu shortcut,
-for your user only, **without administrator rights**, and downloads nothing. `uninstall.ps1` removes it (your
-sessions, keys and settings stay). The first launch opens the **Setup check** if something is missing (WSL, python3,
-tmux, git, ssh; Claude Code, Codex and flyctl are optional). Details: `docs/INSTALL.md`.
+You run several coding agents at once. Agent Manager GD puts them in one window and tells you, at a glance, who is
+working, who waits for your OK and who has a question. Answer without switching windows, review their diffs, let one
+agent start others, and give every session the same memory: your Second Brain. Everything runs on your computer, with
+your own installed agent CLIs and your own logins.
 
-## Run it (development)
+## Highlights
 
-Needs, where tmux lives (Linux, or WSL on Windows): `python3` (3.10+, standard library only) and `tmux`.
+**A control room for agents.** Real terminals (libghostty-vt, inside Godot) for Claude Code, Codex and shells. Each
+session lives in a private tmux server, so closing the app never stops your agents. A tree of projects and groups,
+live states, a queue of what waits for you with Approve, Refuse and Reply… right there, a small sound when someone
+waits. Focus, Grid and Board views, seven themes, a command palette.
 
-1. Build the terminal extension once: `tools/build_native.sh` (see `native/vtterm/README.md` for the toolchain).
-2. Open `app/` with Godot 4.7 (Linux, or Windows with WSL) and run it. The app starts the engine
-   (`python3 -m engine`, 127.0.0.1:8790, a token in `~/.local/share/agent-manager-gd/runtime/`) through WSL on Windows.
-3. « + New session »: Claude Code, Codex or a shell, in a folder (a Windows path is fine). Close the app: the sessions
-   keep running in a private tmux server (`tmux -L agmgd ls`); reopen it and they are there.
+**The orchestrator** <sub>beta</sub>. One agent that plans and delegates across all your connected repositories. It
+reads your Second Brain, proposes a plan and waits for your OK, starts each task in its own worktree with the tool and
+model your routing rules choose, follows the work and hands you every result to review. It never pushes nor merges.
 
-## Using it
+<p align="center"><img src="public/assets/showcase/orchestrator-panel.webp" alt="The orchestrator's floating window: connected to the Second Brain, its question to the owner with the plan, its live terminal, and its sessions." width="900"></p>
 
-- **Views** (top right): **Focus** one terminal · **Grid** up to four terminals side by side (right click a session →
-  Show in grid) · **Board** a tile per session with a live preview of its screen.
-- **Themes** (◐): the Second Brain's seven themes (Focus, Terminal, Neon, Evening, Forest, Morning, Paper) for the
-  interface and the terminal's colours.
-- **Never lose a conversation**: every session keeps every conversation id it ever had (Claude Code gets its id from
-  the app at launch; Codex reports it). **Resume** starts a session again on its own conversation — after a reboot,
-  after it ended, or from the archive. **Fork…** opens a new session on a copy of a conversation. **Archive** puts a
-  session away; **History** (Ctrl+Shift+H) lists every session ever made with its conversations, searchable by name,
-  folder, group or id, each resumable at any time.
-- **The Second Brain in every session**: when the Second Brain runs on this computer, each Claude Code or Codex
-  session gets an MCP key of its own (named « Agent Manager · <session> », level « propose items »: it reads and
-  searches the Brain, and what it proposes waits for your OK in the Brain). The key is passed at launch only
-  (`--mcp-config` / `-c mcp_servers…`) through the Brain's own relay; a fork gets its own key; removing a session
-  revokes it. The Brain's timeline shows which session proposed what. `AGMGD_BRAIN=off` turns it off.
-- **Sessions that document themselves** (New session → « ↳ Document this session in the Brain as it works », under
-  the Brain, Claude Code only for now): the agent gets a directive at launch (`--append-system-prompt`, never written
-  into the repository). It orients in the Brain first (the project card, the last session journal, open questions,
-  recent decisions, your documentation guidelines note), checks that against `git log` and the other live sessions,
-  says where the project stands, then proposes your words, decisions and a session journal at each milestone, and
-  updates the journal and the project card before the end. Everything still goes through the Brain's archivist.
-- **Agents pilot agents**: every agent session is also offered Agent Manager's own MCP server (`agent-manager`):
-  `list_sessions`, `session_status`, `read_screen` for any session; `start_session` makes a child session (shown
-  « ↳ parent » on its card), `send_to_session` and `wait_for_session` work on its own children only. No tool presses
-  keys for another session, so an agent never approves on someone else's behalf.
-- **Context that survives**: **Wrap up** (right click) asks the agent to write its own summary (what was done,
-  decisions, files touched, what is left, how to continue) to a file and, when the session shares the Second Brain, to
-  propose it there with its own key (you approve it in the Brain). When the agent is done, the summary is kept with
-  the session (History, searchable, « Read ») and the session is archived. A new session in the same folder can start
-  from it: « Brief it with the latest summary of this folder » sends a short first message pointing to that summary.
-- **Review** (Ctrl+Shift+R): the selected session's changes, file by file (arrow keys), coloured, with line numbers:
-  uncommitted changes, everything since the session started, or its branch against the target. Click a line to
-  comment it (or comment the whole file); **Send review** sends the open comments to the agent as one numbered request
-  (file:line, the comment, the line's code); sent comments stay visible until marked handled.
-- **Shortcuts** (◐ → Shortcuts…): change any shortcut (click it, press the new keys); the voice keys are held keys.
-- **Connect other tools** (◐ → Connect other tools (MCP)…): the command to plug Agent Manager's MCP into Claude Code,
-  Codex or any MCP client outside the app. Such a tool may list sessions, read their screens and start new ones; it
-  can never type into a session or approve anything.
-- **Setup check** (◐ → Setup check…): what is found, what is missing, and the command to run yourself.
-- **Second Brain keys** (◐ → Keys…, below your API keys): every Brain key Agent Manager made, with the session or
-  sandbox using it. Unused ones can be revoked (one, or all unused at once, confirmed); a key in use goes away with
-  its session or sandbox.
-- **Keys** (◐ → Keys…): paste your own API keys (OpenAI for the voice, Fly.io and Anthropic for cloud sandboxes).
-  On Windows they are encrypted with DPAPI for your Windows user; they are never shown again or logged, and are read
-  only when a feature needs them.
-- **Dictation**: hold **F8** and speak; on release the text is written into the active session's prompt (as a paste,
-  never with Enter): you read it and press Enter yourself. Transcription by OpenAI with your key (≈ $0.003/min, shown).
-- **Voice commands**: hold **F9** and say « approve Themes », « refuse Docs », « go to Cart refactor », « grid view »,
-  « who is waiting? », « wrap up Docs », « new session … » (French or English). Understood by plain rules, no model.
-  Approving, refusing and wrapping up always ask for a visible confirmation first.
-- **Spoken status** (◐ → Spoken status, off by default): short spoken notices with your system's own voice (free,
-  offline): « Themes attend ton OK », « Docs a fini ».
-- **Usage** (◐ → Usage…): tokens per session, per day and per tool, read from the agents' own logs (Claude Code,
-  Codex) on this computer. No money amount is shown for agents: their logs carry none (and subscriptions have no
-  per-token price).
-- **Cloud sandboxes** (☁ Sandboxes; New session → Where: a cloud sandbox): a throw-away Fly.io machine for one session,
-  with your Fly token (Keys). « Prepare » once makes an app and our image (`sandbox/Dockerfile`) in your organisation's
-  private registry; then a sandbox is ready in about 30 s. Its terminal opens like any session; the same SSH
-  connection carries a tunnel so the agent reaches your Second Brain (through the engine, authenticated by the
-  sandbox's own secret; the Brain's keys never leave Windows). The manager shows each sandbox's machine, running time,
-  estimated cost, and its connection (terminal, tunnel, latency, Brain reachable); Start, Stop (pause), Mark finished,
-  **Destroy** — only by you, confirmed, after Agent Manager showed the work not pushed. Machines of your organisation
-  it does not know are listed, never touched unless you destroy them (« Destroy… », confirmed, after listing what an
-  app holds). Agent Manager never destroys a sandbox on its own.
-  The tab works in steps: the image (what it holds, deploy it once, rebuild), deploy a sandbox (the estimate first,
-  then a shell or an agentic coding session), costs (today, this month, a chart; measured from Fly's machine history),
-  and a live card per sandbox (time on, tunnel, MCP, branch, unpushed work, cost). A sandbox always keeps its session
-  in the list. **Budget**: a monthly amount (this month's estimate shown against it, a warning past 80 %, no new sandbox at
-  100 %), and two caps you can turn on that only *pause*: a sandbox idle for N minutes, or every sandbox once the
-  budget is reached. « Stop everything » pauses all running sandboxes.
-- **Connected repositories** (⎇ Repos): add a repository's SSH address; Agent Manager makes a deploy key for it only,
-  shows the public key to add on GitHub (*Deploy keys*, with write access), checks it, and sessions started on that
-  repository use that key only. Rotate or disconnect any time. Details: `docs/REPOSITORIES.md`.
-- **Git branch per session**: tick « In its own git branch » when creating a session: it works in
-  `<repository>-worktrees/<name>` on branch `am/<name>`. **Finish its git branch…** shows what is ahead and
-  uncommitted, can merge it into the repository's current branch (a conflicting merge is undone) and removes the
-  worktree; uncommitted work blocks it, and the branch is deleted only if merged.
-- **They wait for you**: sessions waiting for your OK (Approve / Refuse) or an answer (Reply… without opening them).
-- **Shortcuts** (Ctrl alone works outside a terminal; with Shift they work everywhere, since a terminal keeps plain
-  Ctrl keys for its programs): Ctrl+Shift+K command palette · Ctrl+Shift+N new session · Ctrl+Shift+F / G / B Focus,
-  Grid, Board · Ctrl+Shift+↑ / ↓ previous / next session · Ctrl+Shift+A approve the first waiting session.
-  In a terminal: Ctrl+Shift+C / V copy and paste, Shift+drag selects even when the program uses the mouse.
+**Your Second Brain in every session.** With [Second Brain GD](#the-second-brain) on the same computer, every agent
+gets a key of its own: it reads the project's memory and proposes what it learned, through the Brain's archivist. A
+badge shows the Brain is there; a ✦ light on each session shows its key, whether it documents its work, and pulses
+when it uses the Brain.
 
-## The website
+**Safe by default, fast when you want.** Four permission levels per session or per group, from *Ask before acting* to
+*No permission*. At every level, agents' file tools cannot touch `~/.ssh`, `.env` files or your keys. Each connected
+repository gets its own deploy key, so git just works without ever exposing your personal SSH key.
 
-`public/` is the project's website: the home page, 12 How-to guides with a real screenshot per step, and the Docs.
-Open `public/index.html` in a browser. It is not published anywhere. `tools/site.sh` remakes it all in one command:
-every screenshot from the real app on a private virtual display (a fictional workspace, the agents' real recorded
-screens), the How-to page from `tools/howto/guides.py`, then the checks (links, images, nothing personal, weight).
+**And more.** Resume any conversation, fork it, give a session its own git branch. Review a diff and comment lines.
+Wrap a session up into a summary and brief the next one with it. Hold F8 to dictate, F9 for voice commands. Run an
+agent in a throw-away cloud sandbox. See token usage per session and day.
 
-Tests: `python3 -m unittest discover -s tests/python -t .`; the app end to end on a virtual display:
-`tools/app_shots.sh <out-dir> [a folder Claude Code already trusts]`.
+## Install
 
-Stack: Godot 4.7 (interface) + Python (engine), local-first. Licence: MIT (`LICENSE`); third-party parts in `THIRD_PARTY_NOTICES.md`. Part of [GD Project](https://github.com/sonixz/gd-project).
+**Windows** (WSL with `python3` and `tmux`):
+
+1. Download the latest `AgentManagerGD-<version>-win64.zip` from the Releases page and unzip it.
+2. Right-click `install.ps1` › *Run with PowerShell*. It installs for your user only, **without administrator
+   rights**, and downloads nothing.
+3. Start *Agent Manager GD* from the Start menu. The **Setup check** says what is missing (WSL, python3, tmux, git;
+   Claude Code and Codex are optional) and the command to run yourself.
+
+Details and uninstalling: [docs/INSTALL.md](docs/INSTALL.md).
+
+**From source** (Linux, or Windows with WSL): Python 3.10+ (standard library only) and tmux where the engine runs,
+Godot 4.7 for the window.
+
+```bash
+tools/build_native.sh            # the terminal extension, once (toolchain: native/vtterm/README.md)
+godot --path app                 # or open app/ in Godot 4.7 and press Play
+```
+
+The app starts its engine (`python3 -m engine`, on 127.0.0.1 only, behind a token) and stops it when you quit; your
+sessions keep running in tmux (`tmux -L agmgd ls`).
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph You["Your computer"]
+    App["Godot app<br/>terminals · tree · views"] -- "local API (token)" --> Engine["Python engine<br/>127.0.0.1"]
+    Engine --> Tmux["private tmux server"]
+    Tmux --> A1["Claude Code"]
+    Tmux --> A2["Codex"]
+    Tmux --> A3["shell"]
+    A1 -- "MCP" --> AM["Agent Manager MCP<br/>agents start agents"]
+    A1 -- "MCP, its own key" --> Brain["Second Brain GD"]
+    A2 -- "MCP, its own key" --> Brain
+    AM --> Engine
+  end
+  Engine -. "SSH tunnel (optional)" .-> Fly["Fly.io sandbox"]
+```
+
+- **Local-first.** Nothing leaves your computer unless you ask: agents talk to their own providers with your login;
+  the engine listens on 127.0.0.1 only.
+- **Your tools, your logins.** Agent CLIs are launched as you installed and configured them. Agent Manager never reads,
+  copies or relays their login tokens.
+- **No silent downloads.** Nothing is installed behind your back; third-party binaries are fetched only on purpose,
+  pinned and checked.
+
+## The Second Brain
+
+[Second Brain GD](https://github.com/sonixz) is the companion app: your notes, documents and projects, kept on your
+computer, with an archivist that files what agents propose. Agent Manager works without it; with it, every session
+shares the same memory. Turn it off with `AGMGD_BRAIN=off`.
+
+## Documentation
+
+- **Docs and How-to**: the project's website lives in [`public/`](public/). Open `public/index.html`, then *How-to*
+  (twelve guides, a real screenshot per step) and *Docs* (every feature, the MCP tools, the local API, security,
+  troubleshooting).
+- [Install](docs/INSTALL.md) · [Repositories and deploy keys](docs/REPOSITORIES.md) · [Changelog](CHANGELOG.md)
+- [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+
+## Status
+
+Alpha: it works on Windows with WSL and on Linux, and it moves fast. Expect rough edges, especially in the
+orchestrator (beta). Issues and ideas are welcome.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE). Third-party parts and their licences: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
