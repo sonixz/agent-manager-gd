@@ -100,6 +100,7 @@ var brain_glyph: Label
 var brain_line1: Label
 var brain_line2: Label
 var header_brain: Button
+var orch_btn: Button
 var orch_panel: PanelContainer   # Loop 25: the orchestrator, on the right (Ctrl+O): its terminal, its question, its sessions
 var orch_head: Label
 var orch_state: Label
@@ -426,6 +427,12 @@ func _build() -> void:
 	resume_btn.visible = false
 	resume_btn.pressed.connect(func() -> void: _resume(selected, ""))
 	hb.add_child(resume_btn)
+	orch_btn = Button.new()  # Loop 25: shows or hides the orchestrator's panel on the right
+	orch_btn.text = "◆ Orchestrator"
+	orch_btn.tooltip_text = "The orchestrator: it plans, starts sessions and hands you their work (%s)" % key_text("orchestrator")
+	orch_btn.toggle_mode = true
+	orch_btn.pressed.connect(toggle_orchestrator)
+	hb.add_child(orch_btn)
 	var sbx_btn := Button.new()
 	sbx_btn.text = "☁ Sandboxes"
 	sbx_btn.tooltip_text = "Cloud sandboxes: the manager and their connections"
@@ -886,6 +893,7 @@ func _build_orch_panel() -> void:
 
 func toggle_orchestrator() -> void:
 	orch_panel.visible = not orch_panel.visible
+	orch_btn.set_pressed_no_signal(orch_panel.visible)
 	if orch_panel.visible:
 		await refresh_orchestrator()
 		var o := orchestrator_session()
@@ -3194,6 +3202,7 @@ func open_palette() -> void:
 	items.append({"label": "History", "hint": "every session and conversation · Ctrl+Shift+H", "run": set_view.bind("history")})
 	items.append({"label": "Review the changes", "hint": "diff and line comments · Ctrl+Shift+R", "run": set_view.bind("review")})
 	items.append({"label": "Repositories", "hint": "connected repositories and deploy keys", "run": set_view.bind("repos")})
+	items.append({"label": "Orchestrator", "hint": "show or hide its panel · " + key_text("orchestrator"), "run": toggle_orchestrator})
 	items.append({"label": "Keys", "hint": "your API keys: OpenAI (voice), Fly.io, Anthropic", "run": set_view.bind("keys")})
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
 	items.append({"label": "Sandboxes", "hint": "cloud sandboxes: manager, connections, costs", "run": set_view.bind("sandboxes")})
