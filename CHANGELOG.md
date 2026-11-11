@@ -5,7 +5,19 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Permissions on an open agent · Loop 27
+- Right click a session › Permissions…: change its level and apply it on the same conversation, at once when it is
+  idle, at the end of its turn when it works, or at its next start. Its sessions above the new level come down to it.
+- A new level, « Per my config »: Agent Manager passes no level option and your own Claude Code or Codex settings
+  decide (sessions you start only).
+- Each change is logged; the engine's API token is now refused to the agents' file tools too.
+
 ### Fixed
+- An `ask_owner` question clears as soon as you answer, also when you type in the session's terminal; the state reads
+  « asks you something » (the header: « asks you: … »).
+- Claude Code's idle reminder after a turn no longer shows a session as asking you something.
+- The orchestrator and the sessions it starts have Remote Control (a child follows its parent; `start_session` can
+  force it); a child without a group is named « Parent · Session » in claude.ai/code.
 - Under WSL the wall clock can step back; the engine now orders the agents' events with the system's monotonic clock,
   so a finished wrap-up is always archived and an answered approval always unsticks (it was the flaky test).
 

@@ -238,6 +238,60 @@ class EngineTest(unittest.TestCase):
         crec = {**self.sessions.store.get(child["id"]), "tool": "claude"}
         self.assertEqual(self.sessions.describe(crec)["activity"], "waiting")
 
+    def as_claude(self, sid):
+        """A real tmux session (a shell) recorded as Claude Code, so nothing real is launched."""
+        from contextlib import closing
+        with closing(self.sessions.store._db()) as db, db:
+            db.execute("UPDATE sessions SET tool = 'claude' WHERE id = ?", (sid,))
+
+    def test_the_owner_changes_a_level_and_it_applies_on_the_same_conversation(self):
+        relaunched = []
+        self.sessions.tmux.respawn = lambda name, cwd, cmd: relaunched.append(cmd)
+        lead = self.sessions.create("Lead", "shell", self.tmp)
+        kid = self.sessions.create("Kid", "shell", self.tmp, parent=lead["id"], level="auto")
+        for x in (lead, kid):
+            self.as_claude(x["id"])
+        self.sessions.store.touch_conversation(lead["id"], "claude", "conv-lead")
+        for x in (lead, kid):
+            self.run_hook(x["id"], "claude", {"hook_event_name": "SessionStart"})      # ready, nothing asked
+        # idle: « Apply and restart » resumes at once, same conversation, new flags
+        r = self.sessions.set_level(lead["id"], "ask", "turn")
+        self.assertEqual((r["was"], r["level"], r["applied"]), ("auto", "ask", "restarted"))
+        cmd = relaunched[0]                                                     # itself first, then its child
+        self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "default")
+        self.assertEqual(cmd[cmd.index("--resume") + 1], "conv-lead")
+        self.assertEqual(r["lowered"], [kid["id"]])                              # its child came down with it
+        self.assertEqual(self.sessions.store.get(kid["id"])["level"], "ask")
+        self.assertEqual(relaunched[1][relaunched[1].index("--permission-mode") + 1], "default")   # it restarted too
+        # a child never above its parent, and never « per my config »
+        with self.assertRaises(ValueError):
+            self.sessions.set_level(kid["id"], "full")
+        with self.assertRaises(ValueError):
+            self.sessions.set_level(kid["id"], "config")
+        # working: it waits for the end of its turn, then restarts by itself
+        self.run_hook(lead["id"], "claude", {"hook_event_name": "PreToolUse"})
+        n = len(relaunched)
+        r = self.sessions.set_level(lead["id"], "config", "turn")
+        self.assertEqual(r["applied"], "at the end of its turn")
+        self.assertTrue(self.sessions.get(lead["id"])["level_pending"])
+        self.assertEqual(len(relaunched), n)
+        self.run_hook(lead["id"], "claude", {"hook_event_name": "Stop"})
+        self.sessions.get(lead["id"])                                             # the app's next look applies it
+        self.assertEqual(len(relaunched), n + 1)
+        self.assertNotIn("--permission-mode", relaunched[-1])                      # « per my config »: no level option
+        self.assertNotIn("--dangerously-skip-permissions", relaunched[-1])
+        self.assertFalse(self.sessions.get(lead["id"])["level_pending"])
+        # « next start » changes nothing now; every change is logged
+        self.sessions.set_level(lead["id"], "edits", "next")
+        self.assertEqual(len(relaunched), n + 1)
+        self.assertEqual([e["level"] for e in self.sessions.level_log(lead["id"])],
+                         [["auto", "ask"], ["ask", "config"], ["config", "edits"]])
+        # a shell has no level; the engine's API token is out of reach of the agents' file tools
+        sh = self.sessions.create("sh", "shell", self.tmp)
+        with self.assertRaises(ValueError):
+            self.sessions.set_level(sh["id"], "ask")
+        self.assertIn("Read(/" + os.path.join(os.path.abspath(self.tmp), "runtime") + "/**)", self.sessions.deny_rules())
+
     def test_permission_levels_flags_denied_paths_group_default_and_child_cap(self):
         from engine.sessions import LEVEL_FLAGS
         cmd = self.sessions.command_for({"id": "lv000001", "tool": "claude", "level": "full"})

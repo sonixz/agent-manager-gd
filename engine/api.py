@@ -215,8 +215,8 @@ def make_handler(sessions: Sessions, token: str):
                         sessions.store.rename_group(g, new)
                     elif act == "level":
                         lv = str(b.get("level", ""))
-                        if lv and lv not in ("ask", "edits", "auto", "full"):
-                            raise ValueError("level must be ask, edits, auto or full")
+                        if lv and lv not in ("ask", "edits", "auto", "full", "config"):
+                            raise ValueError("level must be ask, edits, auto, full or config")
                         sessions.store.set_group_level(g, lv)
                     elif act == "fold":
                         sessions.store.fold_group(g, bool(b.get("folded", True)))
@@ -258,6 +258,11 @@ def make_handler(sessions: Sessions, token: str):
                     if method == "POST" and action == "keys":
                         sessions.keys(sid, [str(k) for k in self._body().get("keys", [])])
                         return self._reply(200, {"ok": True})
+                    if method == "POST" and action == "level":   # Loop 27: the owner, from the app
+                        b = self._body()
+                        return self._reply(200, sessions.set_level(sid, str(b.get("level", "")), str(b.get("when", "turn"))))
+                    if method == "GET" and action == "level":
+                        return self._reply(200, {"log": sessions.level_log(sid)})
                     if method == "POST" and action == "resume":
                         return self._reply(200, sessions.resume(sid, str(self._body().get("conversation", ""))))
                     if method == "POST" and action == "fork":

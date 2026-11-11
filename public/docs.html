@@ -237,7 +237,15 @@
           <li><b>Auto</b>, the default: Claude Code's own judgment decides what needs your OK.</li>
           <li><b>No permission</b>: never asks (Claude Code <code>--dangerously-skip-permissions</code>, Codex
             <code>--dangerously-bypass-approvals-and-sandbox</code>). Asked to confirm, marked <i>⚠ no permission</i> on the card.</li>
+          <li><b>Per my config</b>: Agent Manager passes no level option; your own Claude Code or Codex settings decide.
+            Only for sessions you start.</li>
         </ul>
+        <p><b>Change it on an open agent</b>: right click the session › <i>Permissions…</i>. A level is set when the agent
+          starts, so it starts again on its own conversation (nothing is lost): at once when it is idle, at the end of its
+          turn when it works (the card says <i>↻ new level after this turn</i>), or at its next start. Its sessions above
+          the new level come down to it. Only you change a level, from the app; no agent tool does it, and the engine's
+          token is out of reach of the agents' file tools. Each change is kept in the session's
+          <code>permissions.log</code>.</p>
         <p>At every level, <i>No permission</i> included, Claude Code refuses to read or change <code>~/.ssh</code>,
           <code>~/.aws</code>, <code>~/.gnupg</code>, the GitHub CLI's login, <code>.env</code> files, Agent Manager's
           keys and the Second Brain's tokens (deny rules apply in every mode). This covers its file tools and the file

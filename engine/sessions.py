@@ -74,12 +74,22 @@ ORCH_NOTE = (
 
 # Loop 24: permission levels, from the fewest rights to the most. Claude Code and Codex flags of this launch only.
 LEVELS = ["ask", "edits", "auto", "full"]
+# « config » (Loop 27): Agent Manager passes no level option, so the owner's own Claude Code or Codex settings decide;
+# only for a session the owner starts (an agent's child gets a known level)
+OWNER_LEVELS = LEVELS + ["config"]
 LEVEL_FLAGS = {
     "claude": {"ask": ["--permission-mode", "default"], "edits": ["--permission-mode", "acceptEdits"],
-               "auto": ["--permission-mode", "auto"], "full": ["--dangerously-skip-permissions"]},
+               "auto": ["--permission-mode", "auto"], "full": ["--dangerously-skip-permissions"], "config": []},
     "codex": {"ask": ["-a", "on-request", "-s", "workspace-write"], "edits": ["-a", "never", "-s", "workspace-write"],
-              "auto": ["-a", "never", "-s", "workspace-write"], "full": ["--dangerously-bypass-approvals-and-sandbox"]},
+              "auto": ["-a", "never", "-s", "workspace-write"], "full": ["--dangerously-bypass-approvals-and-sandbox"],
+              "config": []},
 }
+APPLY_WHEN = ("now", "turn", "next")   # restart at once, at the end of its turn, or at its next start
+
+
+def level_rank(level: str) -> int:
+    """For caps: « config » counts as « auto » (what Claude Code does by default)."""
+    return LEVELS.index(level if level in LEVELS else "auto")
 
 WRAPUP_PROMPT = (
     "Agent Manager GD is closing this session. Please write a short summary of it in Markdown to the file {path} "
@@ -138,6 +148,7 @@ class Sessions:
         from .orchestra import Orchestra
         self.orchestra = Orchestra(home or os.path.dirname(os.path.dirname(store.path)))
         self._wrapping: dict = {}  # per engine (the class-level dict was shared by every instance in one process)
+        self._pending_level: dict[str, bool] = {}  # session id -> a new level waits for the end of its turn (Loop 27)
         self._questions: dict[str, dict] = {}  # session id -> its pending question for the owner (ask_owner, finish_session)
         self._answered: dict[str, tuple] = {}  # session id -> (wall time, monotonic time) of your answer from the app  # session id -> when you answered it (Approve, Refuse, a reply) from the app
         self.store = store
@@ -187,15 +198,79 @@ class Sessions:
     def level_for(self, level: str, grp: str = "", parent: str = "") -> str:
         """The level asked for, or the group's default, or « auto » (Claude Code's own default in its terminal);
         never more rights than the session that starts it (an agent's children stay at or below its level)."""
-        if level and level not in LEVELS:
-            raise ValueError("level must be one of " + ", ".join(LEVELS))
+        if level and level not in OWNER_LEVELS:
+            raise ValueError("level must be one of " + ", ".join(OWNER_LEVELS))
         if not level:
             level = next((g.get("level", "") for g in self.store.groups() if g["name"] == grp), "") or "auto"
         if parent:
-            cap = (self.store.get(parent) or {}).get("level") or "auto"
-            if LEVELS.index(level) > LEVELS.index(cap):
+            cap = self._cap(parent)
+            if level == "config" or level_rank(level) > level_rank(cap):
                 level = cap
         return level
+
+    def _cap(self, parent: str) -> str:
+        """The most a child of `parent` may get: its level (« config » counts as « auto »)."""
+        cap = (self.store.get(parent) or {}).get("level") or "auto"
+        return cap if cap in LEVELS else "auto"
+
+    def set_level(self, sid: str, level: str, when: str = "turn") -> dict:
+        """Loop 27: the owner changes an agent's permission level (from the app; no agent tool does this). A level is
+        set at launch, so it applies when the session starts again on its own conversation (resume): now, at the end
+        of its turn, or at its next start. Its children above the new level come down to it too."""
+        rec = self.store.get(sid)
+        if not rec:
+            raise ValueError("no such session")
+        if rec["tool"] not in ("claude", "codex"):
+            raise ValueError("a shell has no permission level")
+        if level not in OWNER_LEVELS:
+            raise ValueError("level must be one of " + ", ".join(OWNER_LEVELS))
+        if when not in APPLY_WHEN:
+            raise ValueError("when must be one of " + ", ".join(APPLY_WHEN))
+        if rec.get("parent"):
+            cap = self._cap(rec["parent"])
+            if level == "config":
+                raise ValueError("« per my config » is for sessions you start; an agent's child gets a known level")
+            if level_rank(level) > level_rank(cap):
+                raise ValueError(f"never more than the session that started it ({cap})")
+        old = rec.get("level") or "auto"
+        self.store.update(sid, level=level)
+        lowered = []
+        for d in self.descendants(sid):
+            if level_rank(d.get("level") or "auto") > level_rank(level) or d.get("level") == "config":
+                self.store.update(d["id"], level=self._cap(d["parent"]))
+                lowered.append(d["id"])
+        self._log_level(sid, old, level, lowered)
+        applied = {sid: self._apply_level(sid, when)}
+        for c in lowered:
+            applied[c] = self._apply_level(c, "turn" if when == "now" else when)
+        return {"id": sid, "level": level, "was": old, "applied": applied[sid], "lowered": lowered, "children": applied}
+
+    def _apply_level(self, sid: str, when: str) -> str:
+        """« restarted », « at the end of its turn » or « at its next start »."""
+        d = self.get(sid)
+        if d["state"] != "running" or when == "next":
+            self._pending_level.pop(sid, None)
+            return "at its next start"
+        if when == "turn" and d["activity"] in ("working", "approval", "wrapping"):
+            self._pending_level[sid] = True
+            return "at the end of its turn"
+        self._pending_level.pop(sid, None)
+        self.resume(sid)
+        return "restarted"
+
+    def _log_level(self, sid: str, old: str, new: str, lowered: list) -> None:
+        """Each change is kept in the session's folder (permissions.log, one JSON line each)."""
+        folder = os.path.join(self.home, "sessions", sid)
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, "permissions.log"), "a", encoding="utf-8") as f:
+            f.write(json.dumps({"at": time.time(), "by": "owner", "level": [old, new], "children_lowered": lowered}) + "\n")
+
+    def level_log(self, sid: str) -> list[dict]:
+        try:
+            with open(os.path.join(self.home, "sessions", sid, "permissions.log"), encoding="utf-8") as f:
+                return [json.loads(x) for x in f if x.strip()]
+        except (OSError, ValueError):
+            return []
 
     # ---------------------------------------------------------------- the session tree (Loop 25)
     def root_of(self, sid: str) -> str:
@@ -320,7 +395,9 @@ class Sessions:
         rules in every mode). Its built-in file tools and the file commands it recognises in Bash are covered; a
         script that opens files itself is not (only an OS sandbox would stop that)."""
         paths = ["~/.ssh/**", "~/.aws/**", "~/.gnupg/**", "~/.config/gh/**", "**/.env", "**/.env.keys", "**/.env.local",
-                 "/" + os.path.join(os.path.abspath(self.home), "keys") + "/**"]
+                 "/" + os.path.join(os.path.abspath(self.home), "keys") + "/**",
+                 # the engine's API token: with it an agent could call the app's own routes (change its level, Loop 27)
+                 "/" + os.path.join(os.path.abspath(self.home), "runtime") + "/**"]
         if self.brain and getattr(self.brain, "home", ""):
             for sub in ("runtime", "mcp"):
                 paths.append("/" + os.path.join(os.path.abspath(self.brain.home), sub) + "/**")
@@ -520,6 +597,12 @@ class Sessions:
         elif rec["id"] in self._questions and state == "running" and not self._answered_in_terminal(rec["id"], hs):
             q = self._questions[rec["id"]]
             activity, message = "waiting", q["question"] + ("  [" + " / ".join(q["options"]) + "]" if q["options"] else "")
+        if rec["id"] in self._pending_level and state == "running" and activity in ("done", "idle", "waiting"):
+            self._pending_level.pop(rec["id"], None)   # its turn is over: start it again with its new level
+            try:
+                self.resume(rec["id"])
+            except Exception:
+                pass
         return {**rec, "tool_label": TOOLS.get(rec["tool"], {}).get("label", rec["tool"]), "state": state,
                 "activity": activity, "message": message, "conversation": hs.get("conversation", ""),
                 "since": float(hs.get("time", 0) or (t.activity if t else 0) or rec["created"]),
@@ -527,6 +610,7 @@ class Sessions:
                 "brain": bool(rec.get("brain_client")),
                 "brain_document": bool(rec.get("brain_client") and rec.get("brain_document")),
                 "level": rec.get("level") or "auto",
+                "level_pending": rec["id"] in self._pending_level,
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",

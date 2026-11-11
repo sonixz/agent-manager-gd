@@ -11,6 +11,7 @@ const LEVEL_BADGE := {  # Loop 24: the permission level, when it is not « auto 
 	"ask": ["asks first", "Asks before editing files or running commands"],
 	"edits": ["auto edits", "Auto edits: edits files without asking, asks before other commands"],
 	"full": ["⚠ no permission", "Never asks. Your keys, ~/.ssh and .env files stay out of reach of its file tools; a script it runs is not stopped"],
+	"config": ["your config", "Agent Manager passes no permission option: your own Claude Code or Codex settings decide"],
 }
 const TOOL_BADGE := {"claude": ["✻", Color("d97757")], "codex": ["◎", Color("10a37f")], "shell": ["❯", Color("8b98a8")]}
 
@@ -86,6 +87,11 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 		lm.mouse_filter = MOUSE_FILTER_PASS
 		lm.tooltip_text = b[1]
 		top.add_child(lm)
+	if s.get("level_pending", false):  # Loop 27: a new level waits for the end of its turn
+		var pm := _label("↻ new level after this turn", AmTheme.col("MUTED"), 11)
+		pm.mouse_filter = MOUSE_FILTER_PASS
+		pm.tooltip_text = "It starts again on its own conversation with its new permission level when its turn ends"
+		top.add_child(pm)
 	brain_mark = _label("", AmTheme.col("FAINT"), 15)
 	brain_mark.mouse_filter = MOUSE_FILTER_PASS
 	brain_mark.pivot_offset = Vector2(6, 9)

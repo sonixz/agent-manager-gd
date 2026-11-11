@@ -58,11 +58,15 @@ var f_brain: CheckBox
 var f_remote: CheckBox
 var f_level: OptionButton
 var level_menu: PopupMenu
+var perm_dialog: ConfirmationDialog   # Loop 27: an open agent's permission level, applied on the same conversation
+var perm_level: OptionButton
+var perm_info: Label
 const LEVELS := {  # Loop 24: [menu label, card badge, what it means]
 	"ask": ["Ask before acting", "asks first", "Asks before editing files or running commands"],
 	"edits": ["Auto edits (asks for commands)", "auto edits", "Edits files without asking; asks before other commands"],
 	"auto": ["Auto (Claude Code decides, its default)", "", "Claude Code's own judgment decides what needs your OK (Codex: works in its folder without asking)"],
 	"full": ["No permission (skips every prompt)", "⚠ no permission", "Never asks: runs everything. Your keys, ~/.ssh and .env files stay out of reach of its file tools"],
+	"config": ["Per my config (Agent Manager sets no level)", "your config", "Agent Manager passes no permission option: your own Claude Code or Codex settings decide. Only for sessions you start; an agent's child gets a known level"],
 }
 var f_document: CheckBox
 var f_browse: Button
@@ -2199,6 +2203,63 @@ func _archive(id: String) -> void:
 		_layout_view()
 
 
+## Loop 27: change an open agent's permission level. A level is set at launch, so it applies when the session starts
+## again on its own conversation (nothing is lost): at once when it is idle, else at the end of its turn.
+func _open_permissions(id: String) -> void:
+	var s := _session(id)
+	if s.is_empty():
+		return
+	menu_target = id
+	var has_parent := str(s.get("parent", "")) != ""
+	var cap := ""
+	if has_parent:
+		cap = str(_session(str(s["parent"])).get("level", "auto"))
+		if cap == "config" or cap == "":
+			cap = "auto"
+	var order := ["ask", "edits", "auto", "full"]
+	perm_level.clear()
+	for k in LEVELS:
+		if k == "config" and has_parent:
+			continue
+		perm_level.add_item(LEVELS[k][0])
+		var i := perm_level.item_count - 1
+		perm_level.set_item_metadata(i, k)
+		perm_level.set_item_tooltip(i, LEVELS[k][2])
+		if has_parent and k != "config" and order.find(k) > order.find(cap):
+			perm_level.set_item_disabled(i, true)
+		if k == str(s.get("level", "auto")):
+			perm_level.select(i)
+	var busy := str(s.get("activity", "")) in ["working", "approval", "wrapping"]
+	var running := str(s.get("state", "")) == "running"
+	var lines := ["A level is set when the agent starts: it starts again", "on its own conversation, nothing is lost."]
+	if has_parent:
+		lines.append("Started by « %s »: never more than its level" % str(_session(str(s["parent"])).get("name", "its parent")))
+		lines.append("(%s)." % str(LEVELS[cap][0]).get_slice(" (", 0).to_lower())
+	if running and busy:
+		lines.append("It is working: the change applies at the end of its turn.")
+	elif not running:
+		lines.append("It is not running: the change applies at its next start.")
+	lines.append("Its sessions above the new level come down to it.")
+	lines.append("Your keys, ~/.ssh and .env stay refused at every level.")
+	perm_info.text = "\n".join(lines)
+	perm_dialog.title = "Permissions · " + str(s.get("name", ""))
+	perm_dialog.ok_button_text = ("Apply at the end of its turn" if busy else "Apply and restart") if running else "Save"
+	perm_dialog.reset_size()
+	perm_dialog.popup_centered()
+
+
+func _apply_permissions(when: String) -> void:
+	var id := menu_target
+	var lv := str(perm_level.get_selected_metadata())
+	var r := await engine.call_api("POST", "/sessions/%s/level" % id, {"level": lv, "when": when})
+	if r.has("error"):
+		status_label.text = str(r["error"])
+		return
+	var more := ("  ·  %d of its sessions came down to it" % (r["lowered"] as Array).size()) if (r["lowered"] as Array).size() > 0 else ""
+	_toast("%s: %s, %s%s" % [str(_session(id).get("name", "")), str(LEVELS.get(lv, [lv])[0]).get_slice(" (", 0), str(r["applied"]), more])
+	await refresh()
+
+
 func _open_finish(id: String) -> void:
 	var r := await engine.call_api("GET", "/sessions/%s/worktree" % id)
 	if r.has("error") or str(r.get("worktree", "")) == "":
@@ -3603,6 +3664,7 @@ func _build_menus() -> void:
 	row_menu.add_item("Quick reply…", 5)
 	row_menu.add_item("Show in grid", 6)
 	row_menu.add_item("Rename…", 0)
+	row_menu.add_item("Permissions…", 12)
 	row_menu.add_separator()
 	row_menu.add_item("Resume its conversation", 7)
 	row_menu.add_item("Fork…", 8)
@@ -3629,6 +3691,7 @@ func _build_menus() -> void:
 		var agent := str(s.get("tool", "")) != "shell"
 		row_menu.set_item_disabled(row_menu.get_item_index(7), not agent)
 		row_menu.set_item_disabled(row_menu.get_item_index(8), not agent)
+		row_menu.set_item_disabled(row_menu.get_item_index(12), not agent)
 		row_menu.set_item_disabled(row_menu.get_item_index(9), str(s.get("worktree", "")) == "")
 		row_menu.set_item_disabled(row_menu.get_item_index(11), not agent or str(s.get("state", "")) != "running"))
 	row_menu.id_pressed.connect(_on_row_menu)
@@ -3706,6 +3769,23 @@ func _build_menus() -> void:
 	read_text.add_theme_color_override("default_color", AmTheme.col("TEXT"))
 	read_dialog.add_child(read_text)
 	add_child(read_dialog)
+	perm_dialog = ConfirmationDialog.new()
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 8)
+	pv.custom_minimum_size = Vector2(460, 0)
+	perm_level = OptionButton.new()
+	pv.add_child(perm_level)
+	perm_info = Label.new()
+	perm_info.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	perm_info.add_theme_font_size_override("font_size", 12)
+	pv.add_child(perm_info)
+	perm_dialog.add_child(pv)
+	perm_dialog.add_button("At its next start", true, "next")
+	perm_dialog.confirmed.connect(func() -> void: _apply_permissions("turn"))
+	perm_dialog.custom_action.connect(func(action: StringName) -> void:
+		perm_dialog.hide()
+		_apply_permissions(str(action)))
+	add_child(perm_dialog)
 	finish_dialog = ConfirmationDialog.new()
 	finish_dialog.title = "Finish this git branch"
 	finish_dialog.ok_button_text = "Finish"
@@ -3782,6 +3862,9 @@ func _on_row_menu(mid: int) -> void:
 		return
 	if mid == 11:
 		_wrap_up(menu_target)
+		return
+	if mid == 12:
+		_open_permissions(menu_target)
 		return
 	selected = menu_target
 	if mid == 2:
