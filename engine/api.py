@@ -234,7 +234,8 @@ def make_handler(sessions: Sessions, token: str):
                                                             str(b.get("parent", "")), bool(b.get("brief", False)),
                                                             str(b.get("repo", "")), str(b.get("host", "local")),
                                                             (bool(b["remote"]) if "remote" in b else None), bool(b.get("document", False)),
-                                                            str(b.get("level", "")), str(b.get("model", ""))))
+                                                            str(b.get("level", "")), str(b.get("model", "")), "",
+                                                            str(b.get("access", "")), b.get("extra_dirs") or []))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
@@ -265,7 +266,9 @@ def make_handler(sessions: Sessions, token: str):
                         b = self._body()
                         opt = lambda k: bool(b[k]) if k in b else None  # noqa: E731
                         return self._reply(200, sessions.set_permissions(sid, str(b.get("level", "")), opt("git_push"),
-                                                                         opt("git_merge"), str(b.get("when", "turn"))))
+                                                                         opt("git_merge"), str(b.get("when", "turn")),
+                                                                         str(b.get("access", "")),
+                                                                         b["extra_dirs"] if isinstance(b.get("extra_dirs"), list) else None))
                     if method == "GET" and action == "level":
                         return self._reply(200, {"log": sessions.level_log(sid)})
                     if method == "POST" and action == "resume":

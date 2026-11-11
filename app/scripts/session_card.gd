@@ -87,6 +87,12 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 		lm.mouse_filter = MOUSE_FILTER_PASS
 		lm.tooltip_text = b[1]
 		top.add_child(lm)
+	var access := str(s.get("access", "open"))
+	if str(s.get("tool", "")) != "shell" and access in ["contained", "readonly"]:   # Loop 29
+		var am := _label("▣ contained" if access == "contained" else "▣ read only", AmTheme.col("MUTED"), 11)
+		am.mouse_filter = MOUSE_FILTER_PASS
+		am.tooltip_text = "Its file tools stay in its folder (and the extra ones)" + (", without editing" if access == "readonly" else "") + ". Shell commands are not contained: a guard rail."
+		top.add_child(am)
 	var gr: Dictionary = s.get("git_rights", {})
 	if str(s.get("tool", "")) == "claude" and not gr.is_empty() and bool(gr.get("push", false)) and not bool(gr.get("default", true)):
 		var gp := _label("⇡ may push", AmTheme.col("WARM"), 11)   # Loop 28: the owner enabled git push for it

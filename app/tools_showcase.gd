@@ -240,7 +240,7 @@ func _run() -> void:
 			await wait(0.4)
 			await shot("level-badges")
 		"permissions-change":  # Loop 27: an open agent's level, changed and applied on the same conversation
-			var careful: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Careful fix", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true, "level": "ask"})
+			var careful: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Careful fix", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true, "level": "ask", "access": "contained"})
 			await main.refresh()
 			main.set_view("focus")
 			main.select(str(careful["id"]))

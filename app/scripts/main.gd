@@ -57,13 +57,23 @@ var f_worktree: CheckBox
 var f_brain: CheckBox
 var f_remote: CheckBox
 var f_level: OptionButton
+var f_access: OptionButton   # Loop 29: file access (open, contained, read only)
+const ACCESS := {  # [menu label, card badge, what it means]
+	"open": ["Open (reads anywhere, writes in its folder)", "", "Claude Code's default: its file tools read anywhere except your keys, and ask or follow the level to write outside its folder"],
+	"contained": ["Contained (its folder only)", "▣ contained", "Its file tools neither read nor write outside its folder and the extra folders (Claude Code's own setting). Shell commands are not contained: a guard rail, not a sandbox"],
+	"readonly": ["Read only (its folder only, no edits)", "▣ read only", "Reads its folder only and edits nothing (Codex: its read-only sandbox). Shell commands are not contained"],
+}
 var level_menu: PopupMenu
 var perm_dialog: ConfirmationDialog   # Loop 27: an open agent's permission level, applied on the same conversation
 var perm_level: OptionButton
 var perm_info: Label
 var perm_push: CheckBox    # Loop 28: lifts the git push deny rules for this session
 var perm_merge: CheckBox   # and git merge / rebase
-var perm_git := {}         # its git rights when the dialog opened (only a change is sent)
+var perm_git := {}
+var perm_access: OptionButton
+var perm_rw: LineEdit      # extra folders, read and write (« ; » between)
+var perm_ro: LineEdit      # extra folders, read only
+var perm_was := {}         # access and folders when the dialog opened         # its git rights when the dialog opened (only a change is sent)
 const LEVELS := {  # Loop 24: [menu label, card badge, what it means]
 	"ask": ["Ask before acting", "asks first", "Asks before editing files or running commands"],
 	"edits": ["Auto edits (asks for commands)", "auto edits", "Edits files without asking; asks before other commands"],
@@ -646,6 +656,16 @@ func _build_new_dialog() -> void:
 	f_level.select(2)
 	f_level.tooltip_text = "What the agent may do without asking you. Paths with your keys are refused at every level. A session started by an agent never gets more than its parent."
 	g.add_child(f_level)
+	var ac_label := Label.new()
+	ac_label.text = "File access"
+	g.add_child(ac_label)
+	f_access = OptionButton.new()
+	for k in ACCESS:
+		f_access.add_item(ACCESS[k][0])
+		f_access.set_item_metadata(f_access.item_count - 1, k)
+		f_access.set_item_tooltip(f_access.item_count - 1, ACCESS[k][2])
+	f_access.tooltip_text = "Where the agent's file tools may read and write. A guard rail on Claude's own tools, not a sandbox for shell commands."
+	g.add_child(f_access)
 	g.add_child(Control.new())
 	f_brain = CheckBox.new()
 	f_brain.text = "Share the Second Brain (a key of its own, proposals wait for your OK)"
@@ -2233,6 +2253,21 @@ func _open_permissions(id: String) -> void:
 		if k == str(s.get("level", "auto")):
 			perm_level.select(i)
 	perm_git = s.get("git_rights", {"push": true, "merge": true, "default": true})
+	var acc := str(s.get("access", "open"))
+	var floor := str(_session(str(s.get("parent", ""))).get("access", "open")) if has_parent else "open"
+	var aorder := ["open", "contained", "readonly"]
+	for i in perm_access.item_count:
+		var k := str(perm_access.get_item_metadata(i))
+		perm_access.set_item_disabled(i, aorder.find(k) < aorder.find(floor))
+		if k == acc:
+			perm_access.select(i)
+	var rw: Array = []
+	var ro: Array = []
+	for d in s.get("extra_dirs", []):
+		(rw if bool(d.get("write", true)) else ro).append(str(d["path"]))
+	perm_rw.text = "; ".join(rw)
+	perm_ro.text = "; ".join(ro)
+	perm_was = {"access": acc, "rw": perm_rw.text, "ro": perm_ro.text}
 	var claude := str(s.get("tool", "")) == "claude"
 	perm_push.button_pressed = bool(perm_git.get("push", true))
 	perm_merge.button_pressed = bool(perm_git.get("merge", true))
@@ -2267,11 +2302,22 @@ func _apply_permissions(when: String) -> void:
 		body["git_push"] = perm_push.button_pressed
 	if not perm_merge.disabled and perm_merge.button_pressed != bool(perm_git.get("merge", true)):
 		body["git_merge"] = perm_merge.button_pressed
+	if str(perm_access.get_selected_metadata()) != str(perm_was.get("access", "open")):
+		body["access"] = str(perm_access.get_selected_metadata())
+	if perm_rw.text != str(perm_was.get("rw", "")) or perm_ro.text != str(perm_was.get("ro", "")):
+		var dirs: Array = []
+		for pair in [[perm_rw.text, true], [perm_ro.text, false]]:
+			for p in str(pair[0]).split(";", false):
+				if p.strip_edges() != "":
+					dirs.append({"path": p.strip_edges(), "write": pair[1]})
+		body["extra_dirs"] = dirs
 	var r := await engine.call_api("POST", "/sessions/%s/permissions" % id, body)
 	if r.has("error"):
 		status_label.text = str(r["error"])
 		return
 	var more := ("  ·  %d of its sessions came down to it" % (r["lowered"] as Array).size()) if (r["lowered"] as Array).size() > 0 else ""
+	if body.has("access"):
+		more += "  ·  files: " + str(ACCESS[body["access"]][0]).get_slice(" (", 0).to_lower()
 	if body.has("git_push") or body.has("git_merge"):
 		more += "  ·  git push %s, merge %s" % ["on" if perm_push.button_pressed else "off", "on" if perm_merge.button_pressed else "off"]
 	_toast("%s: %s, %s%s" % [str(_session(id).get("name", "")), str(LEVELS.get(lv, [lv])[0]).get_slice(" (", 0), str(r["applied"]), more])
@@ -3556,7 +3602,7 @@ func _create_now() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled, "level": str(f_level.get_selected_metadata())}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled, "level": str(f_level.get_selected_metadata()), "access": str(f_access.get_selected_metadata())}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return
@@ -3793,6 +3839,18 @@ func _build_menus() -> void:
 	pv.custom_minimum_size = Vector2(460, 0)
 	perm_level = OptionButton.new()
 	pv.add_child(perm_level)
+	perm_access = OptionButton.new()
+	for k in ACCESS:
+		perm_access.add_item("File access: " + ACCESS[k][0])
+		perm_access.set_item_metadata(perm_access.item_count - 1, k)
+		perm_access.set_item_tooltip(perm_access.item_count - 1, ACCESS[k][2])
+	pv.add_child(perm_access)
+	perm_rw = LineEdit.new()
+	perm_rw.placeholder_text = "Extra folders, read and write (separate with ;)"
+	pv.add_child(perm_rw)
+	perm_ro = LineEdit.new()
+	perm_ro.placeholder_text = "Extra folders, read only (separate with ;)"
+	pv.add_child(perm_ro)
 	perm_push = CheckBox.new()
 	perm_push.text = "Enable git push"
 	perm_push.tooltip_text = "Lifts Claude Code's deny rules on git push for this session. By default the orchestrator's sessions may not push; yours may."

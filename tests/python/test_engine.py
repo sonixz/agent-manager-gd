@@ -327,6 +327,50 @@ class EngineTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.sessions.set_permissions(sh["id"], git_push=True)
 
+    def test_file_access_presets_fill_the_native_settings(self):
+        relaunched = []
+        self.sessions.tmux.respawn = lambda name, cwd, cmd: relaunched.append(cmd)
+        extra, docs = tempfile.mkdtemp(prefix="agmgd-extra-"), tempfile.mkdtemp(prefix="agmgd-docs-")  # outside its data
+        for d in (extra, docs):
+            self.addCleanup(shutil.rmtree, d, True)
+
+        def perms(sid):
+            with open(self.sessions.command_for({**self.sessions.store.get(sid), "tool": "claude"})[2], encoding="utf-8") as f:
+                return json.load(f)["permissions"]
+        lead = self.sessions.create("Lead", "shell", self.tmp)
+        self.as_claude(lead["id"])
+        self.run_hook(lead["id"], "claude", {"hook_event_name": "SessionStart"})
+        p = perms(lead["id"])                                                     # open: nothing added (today's behaviour)
+        self.assertNotIn("blockReadsOutsideWorkingDirectories", p)
+        self.assertNotIn("additionalDirectories", p)
+        # contained, with one extra folder read and write and one read only: Claude Code's own keys
+        r = self.sessions.set_permissions(lead["id"], access="contained",
+                                          extra_dirs=[{"path": extra, "write": True}, {"path": docs, "write": False}])
+        self.assertEqual((r["access"], r["applied"]), ("contained", "restarted"))
+        p = perms(lead["id"])
+        self.assertTrue(p["blockReadsOutsideWorkingDirectories"] and p["blockWritesOutsideWorkingDirectories"])
+        self.assertEqual(p["additionalDirectories"], [extra, docs])
+        self.assertIn(f"Edit(/{docs}/**)", p["deny"])
+        self.assertNotIn(f"Edit(/{extra}/**)", p["deny"])
+        self.assertIn("Read(~/.ssh/**)", p["deny"])                                # the fixed rules stay
+        # read only: no edit in its own folder either
+        self.sessions.set_permissions(lead["id"], access="readonly")
+        self.assertIn(f"Edit(/{os.path.abspath(self.tmp)}/**)", perms(lead["id"])["deny"])
+        # a child is never less restricted than its parent; Codex read only is its own sandbox
+        kid = self.sessions.create("Kid", "shell", self.tmp, parent=lead["id"], access="open")
+        self.assertEqual(self.sessions.store.get(kid["id"])["access"], "readonly")
+        with self.assertRaises(ValueError):
+            self.as_claude(kid["id"])
+            self.sessions.set_permissions(kid["id"], access="open")
+        codex = self.sessions.command_for({**self.sessions.store.get(lead["id"]), "tool": "codex", "level": "full"})
+        self.assertIn("read-only", codex)
+        self.assertNotIn("--dangerously-bypass-approvals-and-sandbox", codex)
+        # Agent Manager's own data and missing folders are refused
+        for bad in ([{"path": self.tmp}], [{"path": os.path.join(self.tmp, "nope")}]):
+            with self.assertRaises(ValueError):
+                self.sessions.set_permissions(lead["id"], extra_dirs=bad)
+        self.assertEqual([e.get("access") for e in self.sessions.level_log(lead["id"])], [["open", "contained"], ["contained", "readonly"]])
+
     def test_permission_levels_flags_denied_paths_group_default_and_child_cap(self):
         from engine.sessions import LEVEL_FLAGS
         cmd = self.sessions.command_for({"id": "lv000001", "tool": "claude", "level": "full"})

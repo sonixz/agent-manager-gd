@@ -76,6 +76,9 @@ class Store:
                     db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
             if "level" not in cols:  # Loop 24: its permission level (ask, edits, auto, full)
                 db.execute("ALTER TABLE sessions ADD COLUMN level TEXT NOT NULL DEFAULT 'auto'")
+            if "access" not in cols:  # Loop 29: file access, '' (open), contained, readonly; extra folders as JSON
+                db.execute("ALTER TABLE sessions ADD COLUMN access TEXT NOT NULL DEFAULT ''")
+                db.execute("ALTER TABLE sessions ADD COLUMN extra_dirs TEXT NOT NULL DEFAULT '[]'")
             for col in ("git_push", "git_merge"):  # Loop 28: the owner's git rights for it: '' (by origin), on, off
                 if col not in cols:
                     db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
@@ -117,7 +120,7 @@ class Store:
     def update(self, sid: str, **fields) -> None:
         allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived", "archived_at", "cwd", "worktree",
                                                             "brain_client", "remote_control", "brain_document", "level", "role", "model",
-                                                            "git_push", "git_merge")}
+                                                            "git_push", "git_merge", "access", "extra_dirs")}
         if not allowed:
             return
         sets = ", ".join(f"{k} = :{k}" for k in allowed)

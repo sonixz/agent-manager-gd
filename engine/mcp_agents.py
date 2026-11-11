@@ -31,6 +31,7 @@ TOOLS = [
                      "level": {"type": "string", "enum": ["ask", "edits", "auto", "full"], "description": "permissions; capped at yours"},
                      "model": {"type": "string", "description": "the model to run, e.g. opus, sonnet, haiku (Claude Code) or a Codex model"},
                      "document": {"type": "boolean", "description": "Claude Code: documents itself in the Second Brain"},
+                     "access": {"type": "string", "enum": ["open", "contained", "readonly"], "description": "file access: open, contained (its file tools stay in its folder) or readonly; never less restricted than yours"},
                      "remote": {"type": "boolean", "description": "Claude Code: Remote Control, so the owner can follow it from claude.ai/code or the Claude app; yours by default"}}, "required": ["name", "tool"]}},
     {"name": "send_to_session", "description": "Types a message into one of YOUR child sessions and presses Enter.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]}},
@@ -111,6 +112,8 @@ def run_tool(eng, name, a):
                 "cwd": str(a.get("cwd") or mine.get("cwd") or "~"), "group": str(a.get("group", mine.get("grp", ""))),
                 "repo": str(a.get("repo", "")), "worktree": bool(a.get("worktree", False)), "level": str(a.get("level", "")),
                 "model": str(a.get("model", "")), "document": bool(a.get("document", False))}
+        if a.get("access"):
+            body["access"] = str(a["access"])
         if "remote" in a:  # otherwise the engine gives the child its parent's Remote Control
             body["remote"] = bool(a["remote"])
         r = eng.call("POST", "/sessions", body)

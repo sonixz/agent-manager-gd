@@ -251,6 +251,13 @@
           are yours); a session you start may. A box lifts or adds the matching deny rules for that session only, applied
           like a level; the card shows <i>⇡ may push</i> when you enabled it for an orchestrator's session. Like every deny
           rule, it covers the commands Claude writes, not a script that runs git itself.</p>
+        <p><b>File access</b>, in New session and in Permissions…: <i>Open</i> (Claude Code's default: its file tools read
+          anywhere except your keys), <i>Contained</i> (its file tools neither read nor write outside its folder and the extra
+          folders you list: Claude Code's own <code>blockReadsOutsideWorkingDirectories</code> and
+          <code>blockWritesOutsideWorkingDirectories</code>), <i>Read only</i> (its folder only, no edits; Codex: its
+          read-only sandbox). Extra folders are read and write or read only; Agent Manager's own data is refused. A session
+          started by an agent is never less restricted than its parent. <b>Shell commands are not contained</b>: this is a
+          guard rail on Claude's own file tools, not an operating-system sandbox.</p>
         <p>At every level, <i>No permission</i> included, Claude Code refuses to read or change <code>~/.ssh</code>,
           <code>~/.aws</code>, <code>~/.gnupg</code>, the GitHub CLI's login, <code>.env</code> files, Agent Manager's
           keys and the Second Brain's tokens (deny rules apply in every mode). This covers its file tools and the file

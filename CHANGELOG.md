@@ -5,6 +5,11 @@ Newest first.
 
 ## Unreleased: alpha
 
+### File access · Loop 29
+- In New session and Permissions…: Open, Contained (its file tools stay in its folder) or Read only, plus extra folders
+  (read and write, or read only). Filled with Claude Code's own settings; Codex read only is its read-only sandbox.
+  A child is never less restricted than its parent. A guard rail on file tools, not a sandbox for shell commands.
+
 ### Git rights per session · Loop 28
 - In Permissions…: « Enable git push » and « Enable git merge and rebase », per session. The orchestrator's sessions
   start without them, yours with them; a box lifts or adds Claude Code's deny rules, applied on the same conversation.

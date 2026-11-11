@@ -86,7 +86,11 @@ LEVEL_FLAGS = {
               "auto": ["-a", "never", "-s", "workspace-write"], "full": ["--dangerously-bypass-approvals-and-sandbox"],
               "config": []},
 }
-APPLY_WHEN = ("now", "turn", "next")   # restart at once, at the end of its turn, or at its next start
+APPLY_WHEN = ("now", "turn", "next")
+# Loop 29: file access, from the least to the most restricted. Claude Code's own keys do it (v2.1.314+): its file tools
+# refuse reads and writes outside its working directories; « readonly » also refuses edits inside. Shell commands are not
+# covered (only an OS sandbox does that, Loop 30). Codex: readonly is its own read-only sandbox.
+ACCESS = ["open", "contained", "readonly"]   # restart at once, at the end of its turn, or at its next start
 
 
 def level_rank(level: str) -> int:
@@ -210,19 +214,36 @@ class Sessions:
                 level = cap
         return level
 
+    def access_for(self, access: str, parent: str = "") -> str:
+        """The file access asked for (« open » by default); a child is never less restricted than its parent."""
+        if access and access not in ACCESS:
+            raise ValueError("access must be one of " + ", ".join(ACCESS))
+        access = access or "open"
+        if parent:
+            floor = self.access_of(self.store.get(parent) or {})
+            if ACCESS.index(access) < ACCESS.index(floor):
+                access = floor
+        return access
+
     def _cap(self, parent: str) -> str:
         """The most a child of `parent` may get: its level (« config » counts as « auto »)."""
         cap = (self.store.get(parent) or {}).get("level") or "auto"
         return cap if cap in LEVELS else "auto"
 
     def set_permissions(self, sid: str, level: str = "", git_push: bool | None = None, git_merge: bool | None = None,
-                        when: str = "turn") -> dict:
+                        when: str = "turn", access: str = "", extra_dirs: list | None = None) -> dict:
         """Loop 27-28: the owner's permissions for one agent (from the app; no agent tool does this): its level, and
         its git rights (« Enable git push », « Enable git merge and rebase », Claude Code only: they lift the deny rules).
         Applied like a level, on the same conversation."""
         rec = self.store.get(sid)
         if not rec:
             raise ValueError("no such session")
+        if access or extra_dirs is not None:
+            self._set_access(rec, access, extra_dirs)
+            if git_push is None and git_merge is None and (not level or level == (rec.get("level") or "auto")):
+                return {"id": sid, "level": rec.get("level") or "auto", "was": rec.get("level") or "auto",
+                        "access": self.access_of(self.store.get(sid)), "applied": self._apply_level(sid, when),
+                        "lowered": [], "children": {}}
         if git_push is None and git_merge is None:
             return self.set_level(sid, level or rec.get("level") or "auto", when)
         if rec["tool"] != "claude":
@@ -236,6 +257,24 @@ class Sessions:
             return self.set_level(sid, level, when)   # restarts once, with both changes
         return {"id": sid, "level": rec.get("level") or "auto", "was": rec.get("level") or "auto", "git": after,
                 "applied": self._apply_level(sid, when), "lowered": [], "children": {}}
+
+    def _set_access(self, rec: dict, access: str, extra_dirs: list | None) -> None:
+        """Loop 29: its file access and extra folders. Never less restricted than its parent; its children follow."""
+        if rec["tool"] not in ("claude", "codex"):
+            raise ValueError("a shell has no file access setting")
+        sid, old = rec["id"], self.access_of(rec)
+        new = self.access_for(access or old, rec.get("parent", ""))
+        if access and new != access:
+            raise ValueError(f"never less restricted than the session that started it ({new})")
+        fields = {"access": new}
+        if extra_dirs is not None:
+            fields["extra_dirs"] = json.dumps(self._clean_dirs(extra_dirs))
+        self.store.update(sid, **fields)
+        for d in self.descendants(sid):
+            if ACCESS.index(self.access_of(d)) < ACCESS.index(new):
+                self.store.update(d["id"], access=new)
+                self._apply_level(d["id"], "turn")
+        self._log(sid, {"access": [old, new], **({"extra_dirs": json.loads(fields["extra_dirs"])} if "extra_dirs" in fields else {})})
 
     def set_level(self, sid: str, level: str, when: str = "turn") -> dict:
         """Loop 27: the owner changes an agent's permission level (from the app; no agent tool does this). A level is
@@ -414,6 +453,48 @@ class Sessions:
         self._questions[child] = {"question": what + how, "options": [], "at": time.time(), "review": True}
         return {"ok": True, "note": "the owner reviews and merges it; you do not push nor merge"}
 
+    @staticmethod
+    def extra_dirs(rec: dict) -> list[dict]:
+        raw = rec.get("extra_dirs") or "[]"   # JSON in the store, already a list in a described session
+        try:
+            dirs = raw if isinstance(raw, list) else json.loads(raw)
+        except ValueError:
+            return []
+        return [d for d in dirs if isinstance(d, dict) and d.get("path")]
+
+    def _clean_dirs(self, dirs: list) -> list[dict]:
+        """Extra folders: absolute, existing, never Agent Manager's own data; each read and write or read only."""
+        out = []
+        for d in dirs or []:
+            path, write = (d.get("path", ""), bool(d.get("write", True))) if isinstance(d, dict) else (str(d), True)
+            path = os.path.abspath(os.path.expanduser(str(path).strip()))
+            if not str(path).strip() or not os.path.isdir(path):
+                raise ValueError(f"not a folder: {path}")
+            home = os.path.abspath(self.home)
+            if path == home or path.startswith(home + os.sep) or home.startswith(path + os.sep):
+                raise ValueError("Agent Manager's own data folder cannot be given to an agent")
+            if path not in [x["path"] for x in out]:
+                out.append({"path": path, "write": write})
+        return out[:12]
+
+    def access_of(self, rec: dict) -> str:
+        return rec.get("access") if rec.get("access") in ACCESS else "open"
+
+    def access_settings(self, rec: dict) -> dict:
+        """The native permissions keys for its file access (merged into its per-launch settings)."""
+        access, out, deny = self.access_of(rec), {}, []
+        dirs = self.extra_dirs(rec)
+        if dirs:
+            out["additionalDirectories"] = [d["path"] for d in dirs]
+            deny += [f"Edit(/{d['path']}/**)" for d in dirs if not d["write"]]
+        if access in ("contained", "readonly"):
+            out["blockReadsOutsideWorkingDirectories"] = True
+            out["blockWritesOutsideWorkingDirectories"] = True
+        if access == "readonly":
+            deny.append(f"Edit(/{os.path.abspath(os.path.expanduser(rec['cwd']))}/**)")
+            deny += [f"Edit(/{d['path']}/**)" for d in dirs if d["write"]]
+        return {"keys": out, "deny": deny}
+
     def deny_rules(self, rec: dict | None = None) -> list[str]:
         """Paths no agent may read or change, at every level, « No permission » included (Claude Code applies deny
         rules in every mode). Its built-in file tools and the file commands it recognises in Bash are covered; a
@@ -447,6 +528,9 @@ class Sessions:
             settings = {"hooks": {e: [{"matcher": "", "hooks": [{"type": "command", "command": cmd, "timeout": 5}]}]
                                   for e in CLAUDE_EVENTS},
                         "permissions": {"deny": self.deny_rules(rec)}}
+            acc = self.access_settings(rec)
+            settings["permissions"].update(acc["keys"])
+            settings["permissions"]["deny"] += acc["deny"]
             folder = os.path.join(self.home, "sessions", rec["id"])
             os.makedirs(folder, exist_ok=True)
             path = os.path.join(folder, "claude-settings.json")
@@ -472,7 +556,10 @@ class Sessions:
             self.store.touch_conversation(rec["id"], "claude", new_id)
             return base + ["--session-id", new_id]
         if rec["tool"] == "codex":
-            notify = ["-c", "notify=" + json.dumps(hook + ["codex"])] + LEVEL_FLAGS["codex"][rec.get("level") or "auto"] + self._codex_mcp(rec)
+            flags = LEVEL_FLAGS["codex"][rec.get("level") or "auto"]
+            if self.access_of(rec) == "readonly":   # Codex's own read-only sandbox, whatever its level
+                flags = ["-a", flags[1] if flags[:1] == ["-a"] else "never", "-s", "read-only"]
+            notify = ["-c", "notify=" + json.dumps(hook + ["codex"])] + flags + self._codex_mcp(rec)
             if rec.get("model"):
                 notify += ["-m", rec["model"]]
             if mode == "resume":  # without a known id Codex shows its own picker
@@ -560,7 +647,7 @@ class Sessions:
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
                repo: str = "", host: str = "local", remote: bool | None = None, document: bool = False,
-               level: str = "", model: str = "", role: str = "") -> dict:
+               level: str = "", model: str = "", role: str = "", access: str = "", extra_dirs: list | None = None) -> dict:
         if host == "sandbox":
             return self.create_sandbox_session(name, tool, grp, repo, brain)
         if tool not in TOOLS:
@@ -588,7 +675,8 @@ class Sessions:
         from .review import head
         rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent, start_commit=head(cwd),
                              repo_id=repo)
-        self.store.update(rec["id"], level=level, model=model, role=role)
+        self.store.update(rec["id"], level=level, model=model, role=role, access=self.access_for(access, parent),
+                          extra_dirs=json.dumps(self._clean_dirs(extra_dirs or [])))
         rec = self.store.get(rec["id"])
         if remote is None:  # not said: a child follows its parent (the orchestrator's children too), else no
             remote = bool(parent and (self.store.get(parent) or {}).get("remote_control"))
@@ -644,6 +732,7 @@ class Sessions:
                 "level": rec.get("level") or "auto",
                 "level_pending": rec["id"] in self._pending_level,
                 "git_rights": self.git_rights(rec),
+                "access": self.access_of(rec), "extra_dirs": self.extra_dirs(rec),
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",
