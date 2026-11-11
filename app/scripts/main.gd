@@ -97,6 +97,8 @@ var last_spoken := ""
 var voice_overlay: PanelContainer
 var voice_label: Label
 var voice_meter: ProgressBar
+var voice_kept := {}            # a recording that could not be written down, kept to be sent again: speech is never lost
+const VOICE_MAX_SECONDS := 300  # a key release that got lost (the window lost the focus) must not record for ever
 var keys_list: VBoxContainer
 var usage_box: VBoxContainer
 var perms_box: VBoxContainer   # Loop 31: the Agent Permissions view
@@ -2171,7 +2173,7 @@ func _load_history() -> void:
 	if history_list == null or not is_instance_valid(history_list):
 		return
 	var q := history_search.text.strip_edges() if is_instance_valid(history_search) else ""
-	var r := await engine.call_api("GET", "/history?q=" + q.uri_encode())
+	var r := await engine.call_api("GET", "/history?q=" + q.uri_encode(), null, true, 30.0)
 	if r.has("error") or not is_instance_valid(history_list):
 		return
 	for c in history_list.get_children():
@@ -2483,7 +2485,16 @@ func _build_voice_overlay(area: Control) -> void:
 	voice_meter.max_value = 1.0
 	v.add_child(voice_meter)
 	area.add_child(voice_overlay)
-	dictation.level.connect(func(x: float) -> void: voice_meter.value = lerpf(voice_meter.value, x * 3.0, 0.4))
+	dictation.level.connect(func(x: float) -> void:
+		voice_meter.value = lerpf(voice_meter.value, x * 3.0, 0.4)
+		# how long it has been listening, so a long dictation shows it is still heard; and never for ever
+		var s := (Time.get_ticks_msec() - dictation.started_ms) / 1000
+		voice_meter.tooltip_text = "%d:%02d" % [s / 60, s % 60]
+		if voice_label.text.begins_with("🎙"):
+			voice_label.text = voice_label.text.get_slice("   ·   ", 0) + "   ·   %d:%02d" % [s / 60, s % 60]
+		if s >= VOICE_MAX_SECONDS and dictation.recording:
+			_toast("Stopped listening after %d minutes: it is being written down" % (VOICE_MAX_SECONDS / 60))
+			_voice_stop())
 
 
 func _voice_start() -> void:
@@ -2508,24 +2519,42 @@ func _voice_stop() -> void:
 	if float(rec["seconds"]) < 0.4:
 		voice_overlay.visible = false
 		return
-	voice_label.text = "Writing it down…"
-	var target := selected
-	var r := await engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(rec["wav"]), "seconds": rec["seconds"]})
+	await _write_down({"wav": rec["wav"], "seconds": rec["seconds"], "target": selected, "mode": voice_mode})
+
+
+## Sends a recording to be written down, then uses the text. The longer the speech, the longer it takes: the call
+## waits as long as the engine itself may (it gives the transcription 90 s). Before, it gave up after 10 s, so a long
+## dictation was thrown away while it was still being written. A recording that fails is kept, to be sent again.
+func _write_down(rec: Dictionary) -> void:
+	var secs := float(rec["seconds"])
+	voice_label.text = "Writing it down…" + ("   (%d s of speech: a moment)" % int(secs) if secs > 15.0 else "")
+	voice_overlay.visible = true
+	voice_overlay.reset_size()
+	var r := await engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(rec["wav"]), "seconds": secs}, true, 150.0)
 	voice_overlay.visible = false
 	if r.has("error"):
-		_toast(str(r["error"]))
-		if str(r["error"]).contains("Keys"):
+		voice_kept = rec
+		var why := str(r["error"])
+		status_label.text = "Voice: " + why
+		_toast("%s. Your recording is kept: %s › Send my last recording again" % [why, key_text("palette")])
+		if why.contains("Keys"):
 			set_view("keys")
 		return
-	if voice_mode == "command":
+	voice_kept = {}
+	if str(rec["mode"]) == "command":
 		await run_voice_command(str(r.get("text", "")))
 	else:
-		on_transcribed(target, str(r.get("text", "")), float(r.get("cost_usd", 0)))
+		on_transcribed(str(rec["target"]), str(r.get("text", "")), float(r.get("cost_usd", 0)))
 
 
 ## The dictated text goes into the session's prompt as a paste: never with Enter. The owner reads, then sends.
 func on_transcribed(id: String, text: String, cost: float) -> void:
-	if text.strip_edges() == "" or not terms.has(id):
+	if text.strip_edges() == "":
+		_toast("Nothing was heard in that recording")
+		return
+	if not terms.has(id):  # its terminal closed meanwhile: the words are not lost
+		DisplayServer.clipboard_set(text.strip_edges())
+		_toast("That session's terminal is closed: what you said is in the clipboard")
 		return
 	terms[id].paste_text(text.strip_edges())
 	terms[id].grab_focus()
@@ -3096,7 +3125,7 @@ static func _tok(n: int) -> String:
 
 
 func _load_usage() -> void:
-	var r := await engine.call_api("GET", "/usage")
+	var r := await engine.call_api("GET", "/usage", null, true, 60.0)  # it reads the agents' own logs: a lot of them takes a while
 	if r.has("error") or usage_box == null or not is_instance_valid(usage_box):
 		return
 	for c in usage_box.get_children():
@@ -3598,7 +3627,7 @@ func _review_path() -> String:
 func _load_review() -> void:
 	if selected == "" or review_files == null or not is_instance_valid(review_files):
 		return
-	var r := await engine.call_api("GET", "/sessions/%s/diff?mode=%s" % [selected, review_mode])
+	var r := await engine.call_api("GET", "/sessions/%s/diff?mode=%s" % [selected, review_mode], null, true, 60.0)  # git on a large repository
 	if not is_instance_valid(review_files):
 		return
 	if r.has("error"):
@@ -3771,6 +3800,8 @@ func open_palette() -> void:
 	for v in [["focus", "Focus view", "Ctrl+Shift+F"], ["grid", "Grid view", "Ctrl+Shift+G"], ["board", "Board view", "Ctrl+Shift+B"]]:
 		items.append({"label": v[1], "hint": v[2], "run": set_view.bind(v[0])})
 	items.append({"label": "List: tiles" if density == "line" else "List: one session per line", "hint": "the session list on the left", "run": set_list.bind("tile" if density == "line" else "line")})
+	if not voice_kept.is_empty():
+		items.append({"label": "Send my last recording again", "hint": "%d s of speech that could not be written down" % int(voice_kept.get("seconds", 0)), "run": func() -> void: _write_down(voice_kept)})
 	for t in AmTheme.THEMES:
 		items.append({"label": "Theme: " + AmTheme.LABELS[t], "hint": "", "run": set_theme_name.bind(t)})
 	if selected != "":

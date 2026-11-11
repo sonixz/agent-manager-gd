@@ -82,7 +82,12 @@ func _health() -> bool:
 
 
 ## Returns the JSON reply, or {"error": …}.
-func call_api(method: String, path: String, body: Variant = null, auth := true, timeout := 10.0) -> Dictionary:
+func call_api(method: String, path: String, body: Variant = null, auth := true, timeout := 0.0) -> Dictionary:
+	if timeout <= 0.0:
+		# Reading is asked every 2 seconds and must not pile up behind a slow answer: 10 s. Acting (a merge or a clone
+		# on a slow disk, a restart, a transcription) takes what it takes: 60 s, more where the caller says so. With
+		# 10 s for everything, the app gave up on work the engine then finished alone (a long dictation, Loop 33).
+		timeout = 10.0 if method == "GET" else 60.0
 	var http := HTTPRequest.new()
 	http.timeout = timeout  # a cloud sandbox takes ~20 s to start: its creation passes a longer timeout
 	# In its own thread: without it the request moves one step per drawn frame (connect, send, read…), which made

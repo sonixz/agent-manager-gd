@@ -252,6 +252,33 @@ func _run() -> void:
 			await wait(0.8)
 			await shot("list-tile")
 			main.set_list("line")
+		"voice-long":  # a check: a long dictation, slow to write down, must reach the terminal (run with AGMGD_VOICE_FAKE=<text> AGMGD_VOICE_FAKE_DELAY=<s>)
+			main.select(made["Test runner"])
+			await wait(2.5)
+			await main.engine.call_api("POST", "/sessions/%s/send" % made["Test runner"], {"text": "clear"})
+			await wait(0.8)
+			var tone := PackedVector2Array()  # forty seconds of a quiet tone stand for forty seconds of speech
+			tone.resize(int(AudioServer.get_mix_rate()) * 40)
+			for i in tone.size():
+				var v := 0.1 * sin(i * 0.05)
+				tone[i] = Vector2(v, v)
+			main.voice_mode = "dictate"
+			main.dictation.frames = tone
+			main.dictation.recording = true
+			main.dictation.started_ms = Time.get_ticks_msec() - 40000
+			var began := Time.get_ticks_msec()
+			await main._voice_stop()
+			var took := (Time.get_ticks_msec() - began) / 1000.0
+			await wait(1.0)
+			var seen: Dictionary = await main.engine.call_api("GET", "/sessions/%s/preview?lines=14" % made["Test runner"])
+			var said := OS.get_environment("AGMGD_VOICE_FAKE")
+			report.append("voice-long: 40 s of speech, written down after %.0f s | it reached the terminal: %s | kept for another try: %s | status line: « %s »" % [
+				took, said != "" and str(seen.get("text", "")).contains(said.left(30)), not main.voice_kept.is_empty(), main.status_label.text])
+			await shot("voice-long")
+			# the same request with the 10 s the app used to give it: what the owner got for a long dictation
+			began = Time.get_ticks_msec()
+			var old: Dictionary = await main.engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(Dictation.to_wav(tone, AudioServer.get_mix_rate())), "seconds": 40.0}, true, 10.0)
+			report.append("voice-long, with the old limit of 10 s: after %.0f s the app got « %s »" % [(Time.get_ticks_msec() - began) / 1000.0, str(old.get("error", old.get("text", "")))])
 		"sandbox-open":  # a check: « Deploy + agentic coding session » from the Sandboxes tab must end on the new session, opened
 			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
 			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})

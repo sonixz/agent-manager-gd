@@ -18,7 +18,7 @@ func _ready() -> void:
 	AudioServer.add_bus(bus)
 	AudioServer.set_bus_name(bus, "Dictation")
 	capture = AudioEffectCapture.new()
-	capture.buffer_length = 0.5
+	capture.buffer_length = 5.0  # it is emptied at every frame; with 0.5 s, a half-second stall of the app lost words
 	AudioServer.add_bus_effect(bus, capture)
 	AudioServer.set_bus_volume_db(bus, -80.0)  # captured, never played back
 	player = AudioStreamPlayer.new()

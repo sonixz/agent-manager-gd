@@ -304,6 +304,10 @@
         </ul>
         <p>If your OpenAI project does not allow a transcription model, Agent Manager tries the next one
           (gpt-4o-transcribe, gpt-4o-mini-transcribe, whisper-1…) and says what to allow in the project's limits.</p>
+        <p><b>Long dictations</b>: the panel shows how long it has been listening; the longer you speak, the longer the
+          writing takes, and Agent Manager waits for it. What you said is never lost: if it cannot be written down, the
+          recording is kept and <b>Ctrl+K › Send my last recording again</b> sends it once more; if the session's
+          terminal closed meanwhile, the text goes to the clipboard. Listening stops by itself after 5 minutes.</p>
 
         <h2 id="usage">Usage</h2>
         <p><b>◐ › Usage</b>: tokens per session, per day and per tool, read from the agents' own logs on this computer

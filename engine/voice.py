@@ -33,6 +33,8 @@ def _multipart(fields: dict, file_bytes: bytes) -> tuple[bytes, str]:
 def transcribe(wav: bytes, key: str, seconds: float, language: str = "") -> dict:
     fake = os.environ.get("AGMGD_VOICE_FAKE")
     if fake:
+        import time
+        time.sleep(float(os.environ.get("AGMGD_VOICE_FAKE_DELAY") or 0))  # checks: a long dictation takes a while to write down
         return {"text": fake, "model": "fake", "cost_usd": 0.0}
     if not key:
         raise ValueError("no OpenAI key yet: paste one in Keys to use the voice")

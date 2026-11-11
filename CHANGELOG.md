@@ -51,6 +51,11 @@ Newest first.
 - Each change is logged; the engine's API token is now refused to the agents' file tools too.
 
 ### Fixed
+- A long dictation was thrown away: the app waited 10 seconds for the text while the writing of a long recording
+  takes longer, then said « engine unreachable ». It now waits as long as the writing may take. A recording that
+  cannot be written down is kept (Ctrl+K › Send my last recording again); the panel shows how long it has been
+  listening and stops by itself after 5 minutes; nothing heard, or a terminal closed meanwhile, is said.
+- The same 10 seconds applied to every action (a merge, a clone, a restart on a slow disk): actions now get 60.
 - A cloud sandbox whose terminal could not connect ended on « Pane is dead », sometimes with a Python error, and the
   session looked ended although the machine was there. Its terminal now says what it does (« connecting… », « still
   waiting… »), reopens its tunnel when it fell, tries three times, then waits for Enter: the session stays alive. A
