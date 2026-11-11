@@ -164,6 +164,8 @@ def make_handler(sessions: Sessions, token: str):
                 if parts == ["history"] and method == "GET":
                     q = parse_qs(url.query).get("q", [""])[0]
                     return self._reply(200, {"sessions": sessions.history(q)})
+                if parts == ["permissions"] and method == "GET":   # Loop 31: the Agent Permissions view
+                    return self._reply(200, sessions.permissions_overview())
                 if parts == ["sandbox"] and method == "GET":   # Loop 30: can Claude Code's own sandbox run here?
                     return self._reply(200, sessions.native_sandbox())
                 if parts == ["orchestrator"] and method == "GET":
@@ -220,6 +222,11 @@ def make_handler(sessions: Sessions, token: str):
                         if lv and lv not in ("ask", "edits", "auto", "full", "config"):
                             raise ValueError("level must be ask, edits, auto, full or config")
                         sessions.store.set_group_level(g, lv)
+                    elif act == "access":
+                        ac = str(b.get("access", ""))
+                        if ac and ac not in ("open", "contained", "readonly"):
+                            raise ValueError("access must be open, contained or readonly")
+                        sessions.store.set_group_access(g, ac)
                     elif act == "fold":
                         sessions.store.fold_group(g, bool(b.get("folded", True)))
                     elif act == "delete":

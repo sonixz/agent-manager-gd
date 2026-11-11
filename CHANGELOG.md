@@ -5,6 +5,10 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Agent permissions · Loop 31
+- ◐ › Agent permissions…: every agent with its level, file access, shell sandbox and git rights, and Edit… for each;
+  a default file access per group (right click the group), beside its default level.
+
 ### Shell commands contained · Loop 30 (ready, waiting for bubblewrap)
 - In Permissions…: « Contain shell commands too », Claude Code's own sandbox, filled from the file access (its home
   closed except its folder, keys never readable, read-only folders not writable), never a silent fallback. Offered only

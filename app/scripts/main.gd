@@ -95,6 +95,8 @@ var voice_label: Label
 var voice_meter: ProgressBar
 var keys_list: VBoxContainer
 var usage_box: VBoxContainer
+var perms_box: VBoxContainer   # Loop 31: the Agent Permissions view
+var access_menu: PopupMenu     # a group's default file access
 var sbx_box: VBoxContainer
 var f_where: OptionButton
 var repos_list: VBoxContainer
@@ -1595,7 +1597,7 @@ func _render_list() -> void:
 			hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 			hint.add_theme_font_size_override("font_size", 12)
 			list_box.add_child(hint)
-	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect"]
+	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]
 
 
 func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
@@ -1777,7 +1779,7 @@ func select(id: String) -> void:
 	if not grid_ids.has(id):
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
-	if view in ["board", "history", "repos", "keys", "usage", "sandboxes"]:
+	if view in ["board", "history", "repos", "keys", "usage", "sandboxes", "permissions"]:
 		view = "focus"  # picking a session opens it (Review follows the selected session)
 	if view == "review":
 		review_file = 0
@@ -1803,7 +1805,7 @@ func set_view(v: String) -> void:
 		for id in grid_ids:
 			await _ensure_terminal(id)
 	content.modulate.a = 0.0
-	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect"]
+	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.18)
 	_render_header()
@@ -1849,7 +1851,7 @@ func _park_all() -> void:
 func _layout_view() -> void:
 	_park_all()
 	_mount_orchestrator.call_deferred()
-	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect"]:
+	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]:
 		return
 	match view:
 		"focus":
@@ -1883,6 +1885,9 @@ func _layout_view() -> void:
 		"usage":
 			content.add_child(_usage_view())
 			_load_usage()
+		"permissions":
+			content.add_child(_permissions_view())
+			_load_permissions()
 		"setup":
 			content.add_child(_page(_setup_rows()))
 		"shortcuts":
@@ -2343,6 +2348,8 @@ func _apply_permissions(when: String) -> void:
 		more += "  ·  git push %s, merge %s" % ["on" if perm_push.button_pressed else "off", "on" if perm_merge.button_pressed else "off"]
 	_toast("%s: %s, %s%s" % [str(_session(id).get("name", "")), str(LEVELS.get(lv, [lv])[0]).get_slice(" (", 0), str(r["applied"]), more])
 	await refresh()
+	if view == "permissions":
+		_load_permissions()
 
 
 func _open_finish(id: String) -> void:
@@ -2889,6 +2896,91 @@ func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 
 
 # ------------------------------------------------------------------ usage (Loop 14)
+## Loop 31: every agent and what it may do, at a glance; Edit… opens its Permissions dialog.
+func _permissions_view() -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	perms_box = VBoxContainer.new()
+	perms_box.size_flags_horizontal = SIZE_EXPAND_FILL
+	perms_box.add_theme_constant_override("separation", 12)
+	scroll.add_child(perms_box)
+	return scroll
+
+
+func _load_permissions() -> void:
+	var r := await engine.call_api("GET", "/permissions")
+	if r.has("error") or perms_box == null or not is_instance_valid(perms_box):
+		return
+	for c in perms_box.get_children():
+		c.queue_free()
+	var title := Label.new()
+	title.text = "Agent permissions"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	perms_box.add_child(title)
+	var sb: Dictionary = r.get("sandbox", {})
+	perms_box.add_child(_muted("What each agent may do. Edit… changes it; it applies on the same conversation. ▣ a guard rail on Claude's file tools · ■ shell commands contained by the system" +
+		("" if bool(sb.get("available", false)) else "  (needs %s: %s)" % [" and ".join(sb.get("missing", [])), str(sb.get("install", ""))])))
+	var agents: Array = r.get("agents", [])
+	if agents.is_empty():
+		perms_box.add_child(_muted("No agent yet (shells have no permissions to show)."))
+	else:
+		var grid := GridContainer.new()
+		grid.columns = 8
+		grid.add_theme_constant_override("h_separation", 22)
+		grid.add_theme_constant_override("v_separation", 8)
+		perms_box.add_child(grid)
+		for h in ["Agent", "Group", "Level", "Files", "Shell", "Git push", "Merge · rebase", ""]:
+			var hl := _muted(h)
+			hl.add_theme_font_size_override("font_size", 12)
+			grid.add_child(hl)
+		for a in agents:
+			var gr: Dictionary = a.get("git_rights", {})
+			var lv := str(a.get("level", "auto"))
+			var acc := str(a.get("access", "open"))
+			var name := Label.new()
+			name.text = ("✻ " if str(a["tool"]) == "claude" else "◎ ") + str(a["name"]) + ("  ↻" if a.get("level_pending", false) else "")
+			name.tooltip_text = "A new setting waits for the end of its turn" if a.get("level_pending", false) else str(a.get("state", ""))
+			name.mouse_filter = Control.MOUSE_FILTER_PASS
+			grid.add_child(name)
+			grid.add_child(_muted(str(a.get("grp", "")) if str(a.get("grp", "")) != "" else ("under the orchestrator" if str(a.get("parent", "")) != "" else "—")))
+			var lvl := Label.new()
+			lvl.text = str(LEVELS.get(lv, [lv])[0]).get_slice(" (", 0)
+			if lv == "full":
+				lvl.add_theme_color_override("font_color", AmTheme.col("WARM"))
+			grid.add_child(lvl)
+			var dirs := (a.get("extra_dirs", []) as Array).size()
+			grid.add_child(_muted(str(ACCESS.get(acc, [acc])[0]).get_slice(" (", 0) + ("  +%d folder%s" % [dirs, "s" if dirs > 1 else ""] if dirs > 0 else "")))
+			grid.add_child(_muted("■ contained" if a.get("os_sandbox", false) else ("—" if str(a["tool"]) == "claude" else "its own")))
+			var yes_no := func(v: bool) -> Label:
+				var l := Label.new()
+				l.text = "yes" if v else "no"
+				l.add_theme_color_override("font_color", AmTheme.col("WARM") if v else AmTheme.col("MUTED"))
+				return l
+			if str(a["tool"]) == "claude":
+				grid.add_child(yes_no.call(bool(gr.get("push", false))))
+				grid.add_child(yes_no.call(bool(gr.get("merge", false))))
+			else:
+				grid.add_child(_muted("—"))
+				grid.add_child(_muted("—"))
+			var edit := Button.new()
+			edit.text = "Edit…"
+			var aid := str(a["id"])
+			edit.pressed.connect(func() -> void: _open_permissions(aid))
+			grid.add_child(edit)
+	var groups: Array = r.get("groups", [])
+	if not groups.is_empty():
+		var gt := Label.new()
+		gt.text = "Group defaults (for new sessions)"
+		gt.add_theme_font_override("font", AmTheme.ui_font(650))
+		perms_box.add_child(gt)
+		for g in groups:
+			var lv := str(g.get("level", ""))
+			var acc := str(g.get("access", ""))
+			perms_box.add_child(_muted("%s  ·  level: %s  ·  files: %s   (right click the group to change)" % [str(g["name"]),
+				str(LEVELS.get(lv, ["auto"])[0]).get_slice(" (", 0) if lv != "" else "auto", str(ACCESS.get(acc, ["open"])[0]).get_slice(" (", 0) if acc != "" else "open"]))
+
+
 func _usage_view() -> Control:
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -3568,6 +3660,7 @@ func open_palette() -> void:
 	items.append({"label": "Repositories", "hint": "connected repositories and deploy keys", "run": set_view.bind("repos")})
 	items.append({"label": "Orchestrator", "hint": "show or hide its panel · " + key_text("orchestrator"), "run": toggle_orchestrator})
 	items.append({"label": "Keys", "hint": "your API keys: OpenAI (voice), Fly.io, Anthropic", "run": set_view.bind("keys")})
+	items.append({"label": "Agent permissions", "hint": "every agent: level, file access, shell sandbox, git rights", "run": set_view.bind("permissions")})
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
 	items.append({"label": "Sandboxes", "hint": "cloud sandboxes: manager, connections, costs", "run": set_view.bind("sandboxes")})
 	items.append({"label": "Dictate (hold %s)" % key_text("dictate"), "hint": "speak into the active session; you press Enter", "run": func() -> void: _toast("Hold %s and speak, release to write it into the prompt" % key_text("dictate"))})
@@ -3785,6 +3878,7 @@ func _build_menus() -> void:
 	group_menu.add_item("Rename group…", 0)
 	group_menu.add_item("Delete group (its sessions stay)", 1)
 	group_menu.add_item("Default permission level…", 2)
+	group_menu.add_item("Default file access…", 3)
 	group_menu.id_pressed.connect(func(mid: int) -> void:
 		var gname := menu_target
 		if mid == 0:
@@ -3797,7 +3891,9 @@ func _build_menus() -> void:
 			await engine.call_api("POST", "/groups/%s/delete" % gname.uri_encode(), {})
 			await refresh()
 		elif mid == 2:
-			level_menu.popup(Rect2i(Vector2i(get_global_mouse_position()), Vector2i.ZERO)))
+			level_menu.popup(Rect2i(Vector2i(get_global_mouse_position()), Vector2i.ZERO))
+		elif mid == 3:
+			access_menu.popup(Rect2i(Vector2i(get_global_mouse_position()), Vector2i.ZERO)))
 	add_child(group_menu)
 	level_menu = PopupMenu.new()  # a group's default level for its new sessions
 	level_menu.add_item("No default (auto)")
@@ -3813,6 +3909,22 @@ func _build_menus() -> void:
 			_toast("New sessions in « %s »: %s" % [menu_target, str(level_menu.get_item_text(i))])
 		await refresh())
 	add_child(level_menu)
+	access_menu = PopupMenu.new()  # Loop 31: a group's default file access for its new sessions
+	access_menu.add_item("No default (open)")
+	access_menu.set_item_metadata(0, "")
+	for k in ACCESS:
+		access_menu.add_item(ACCESS[k][0])
+		access_menu.set_item_metadata(access_menu.item_count - 1, k)
+	access_menu.index_pressed.connect(func(i: int) -> void:
+		var r := await engine.call_api("POST", "/groups/%s/access" % menu_target.uri_encode(), {"access": str(access_menu.get_item_metadata(i))})
+		if r.has("error"):
+			status_label.text = str(r["error"])
+		else:
+			_toast("New sessions in « %s »: %s" % [menu_target, str(access_menu.get_item_text(i))])
+		await refresh()
+		if view == "permissions":
+			_load_permissions())
+	add_child(access_menu)
 	theme_menu = PopupMenu.new()
 	for t in AmTheme.THEMES:
 		theme_menu.add_item(AmTheme.LABELS[t])
@@ -3820,6 +3932,8 @@ func _build_menus() -> void:
 	theme_menu.add_separator()
 	theme_menu.add_item("Usage…")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__usage")
+	theme_menu.add_item("Agent permissions…")
+	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__permissions")
 	theme_menu.add_item("Keys…")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__keys")
 	theme_menu.add_item("Shortcuts…")
@@ -3836,6 +3950,8 @@ func _build_menus() -> void:
 			set_view(m.substr(2))
 		elif m == "__usage":
 			set_view("usage")
+		elif m == "__permissions":
+			set_view("permissions")
 		else:
 			set_theme_name(m))
 	add_child(theme_menu)

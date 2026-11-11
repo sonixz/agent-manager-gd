@@ -249,6 +249,13 @@ func _run() -> void:
 			await wait(0.5)
 			await shot("permissions-change")
 			main.perm_dialog.hide()
+		"permissions-overview":  # Loop 31: every agent and what it may do
+			await main.engine.call_api("POST", "/sessions", {"name": "Careful fix", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true, "level": "ask", "access": "contained"})
+			await main.engine.call_api("POST", "/sessions", {"name": "Night refactor", "tool": "claude", "cwd": code.path_join("pixel-forge"), "group": "Pixel Forge", "brain": true, "level": "full", "access": "readonly"})
+			await main.refresh()
+			main.set_view("permissions")
+			await wait(2.0)
+			await shot("permissions-overview")
 		"approvals":  # Loop 23: Approve answers at once and the card leaves; ✕ hides a request from the queue only
 			main.set_view("focus")
 			main.select(made["Checkout flow"])

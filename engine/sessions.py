@@ -214,6 +214,21 @@ class Sessions:
                 level = cap
         return level
 
+    def _group_access(self, grp: str) -> str:
+        return next((g.get("access", "") for g in self.store.groups() if g["name"] == grp), "") if grp else ""
+
+    def permissions_overview(self) -> dict:
+        """Loop 31: every agent with what it may do (the Agent Permissions view), and each group's defaults."""
+        rows = []
+        for d in self.list():
+            if d["tool"] == "shell" or d.get("archived"):
+                continue
+            rows.append({k: d.get(k) for k in ("id", "name", "tool", "grp", "parent", "state", "activity", "level",
+                                              "level_pending", "access", "extra_dirs", "os_sandbox", "git_rights", "role")})
+        groups = [{"name": g["name"], "level": g.get("level", ""), "access": g.get("access", "")}
+                  for g in self.store.groups() if g["name"]]
+        return {"agents": rows, "groups": groups, "sandbox": self.native_sandbox()}
+
     def access_for(self, access: str, parent: str = "") -> str:
         """The file access asked for (« open » by default); a child is never less restricted than its parent."""
         if access and access not in ACCESS:
@@ -736,7 +751,7 @@ class Sessions:
         from .review import head
         rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent, start_commit=head(cwd),
                              repo_id=repo)
-        self.store.update(rec["id"], level=level, model=model, role=role, access=self.access_for(access, parent),
+        self.store.update(rec["id"], level=level, model=model, role=role, access=self.access_for(access or self._group_access(grp), parent),
                           extra_dirs=json.dumps(self._clean_dirs(extra_dirs or [])),
                           os_sandbox=int(self.os_sandbox_for(os_sandbox, parent)))
         rec = self.store.get(rec["id"])
@@ -1256,7 +1271,7 @@ class Sessions:
         items = self.list()
         groups = [{"name": "", "folded": False, "sessions": [s for s in items if not s["grp"]]}]
         for g in self.store.groups():
-            groups.append({"name": g["name"], "folded": bool(g["folded"]), "level": g.get("level", ""),
+            groups.append({"name": g["name"], "folded": bool(g["folded"]), "level": g.get("level", ""), "access": g.get("access", ""),
                            "sessions": [s for s in items if s["grp"] == g["name"]]})
         return {"groups": groups}
 

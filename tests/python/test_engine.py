@@ -412,6 +412,27 @@ class EngineTest(unittest.TestCase):
                 self.sessions.set_permissions(kid["id"], os_sandbox=False)
             self.assertTrue(self.sessions.get(lead["id"])["os_sandbox"])
 
+    def test_the_agent_permissions_overview_and_a_groups_default_file_access(self):
+        self.sessions.store.set_group_access("Careful", "contained")
+        a = self.sessions.create("In careful", "shell", self.tmp, grp="Careful")
+        b = self.sessions.create("Elsewhere", "shell", self.tmp)
+        self.assertEqual(self.sessions.store.get(a["id"])["access"], "contained")   # the group's default
+        self.assertEqual(self.sessions.store.get(b["id"])["access"], "open")
+        self.assertEqual(self.sessions.store.get(
+            self.sessions.create("Asked", "shell", self.tmp, grp="Careful", access="readonly")["id"])["access"], "readonly")
+        orch = self.sessions.create("Orchestrator", "shell", self.tmp, role="orchestrator")
+        worker = self.sessions.create("Worker", "shell", self.tmp, parent=orch["id"])
+        for x in (a, orch, worker):
+            self.as_claude(x["id"])
+        ov = self.sessions.permissions_overview()
+        rows = {r["name"]: r for r in ov["agents"]}
+        self.assertNotIn("Elsewhere", rows)                                  # shells have no permissions to show
+        self.assertEqual((rows["In careful"]["access"], rows["In careful"]["level"]), ("contained", "auto"))
+        self.assertFalse(rows["Worker"]["git_rights"]["push"])
+        self.assertTrue(rows["In careful"]["git_rights"]["push"])
+        self.assertEqual(ov["groups"], [{"name": "Careful", "level": "", "access": "contained"}])
+        self.assertIn("available", ov["sandbox"])
+
     def test_permission_levels_flags_denied_paths_group_default_and_child_cap(self):
         from engine.sessions import LEVEL_FLAGS
         cmd = self.sessions.command_for({"id": "lv000001", "tool": "claude", "level": "full"})

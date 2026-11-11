@@ -90,7 +90,7 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 	var access := str(s.get("access", "open"))
 	if str(s.get("tool", "")) != "shell" and access in ["contained", "readonly"]:   # Loop 29
 		var sys_on := bool(s.get("os_sandbox", false))
-		var am := _label(("🔒 " if sys_on else "▣ ") + ("contained" if access == "contained" else "read only"), AmTheme.col("MUTED"), 11)
+		var am := _label(("■ " if sys_on else "▣ ") + ("contained" if access == "contained" else "read only"), AmTheme.col("MUTED"), 11)
 		am.mouse_filter = MOUSE_FILTER_PASS
 		am.tooltip_text = "Its file tools stay in its folder (and the extra ones)" + (", without editing" if access == "readonly" else "") + (". Shell commands too: contained by the system (Claude Code's sandbox)." if sys_on else ". Shell commands are not contained: a guard rail.")
 		top.add_child(am)

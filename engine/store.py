@@ -84,8 +84,11 @@ class Store:
             for col in ("git_push", "git_merge"):  # Loop 28: the owner's git rights for it: '' (by origin), on, off
                 if col not in cols:
                     db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
-            if "level" not in {r[1] for r in db.execute("PRAGMA table_info(groups)")}:  # a group's default level
+            gcols = {r[1] for r in db.execute("PRAGMA table_info(groups)")}
+            if "level" not in gcols:  # a group's default level
                 db.execute("ALTER TABLE groups ADD COLUMN level TEXT NOT NULL DEFAULT ''")
+            if "access" not in gcols:  # Loop 31: a group's default file access
+                db.execute("ALTER TABLE groups ADD COLUMN access TEXT NOT NULL DEFAULT ''")
 
     def _db(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=5)
@@ -211,6 +214,11 @@ class Store:
         self.add_group(name)
         with closing(self._db()) as db, db:
             db.execute("UPDATE groups SET level = ? WHERE name = ?", (level, name))
+
+    def set_group_access(self, name: str, access: str) -> None:
+        self.add_group(name)
+        with closing(self._db()) as db, db:
+            db.execute("UPDATE groups SET access = ? WHERE name = ?", (access, name))
 
     def groups(self) -> list[dict]:
         with closing(self._db()) as db:
