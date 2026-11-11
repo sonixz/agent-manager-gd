@@ -115,6 +115,70 @@ class SandboxesTest(unittest.TestCase):
         self.assertFalse(any("fake-token" in a for c in self.fly.calls for a in c))            # the Fly token never in arguments
         self.assertEqual(sb["brain_client"], "cbrain1")
 
+    def test_a_new_machine_that_is_not_in_the_list_at_once_is_still_found(self):
+        self.s.sandboxes.prepare()
+        listed, real = [], self.fly.json
+
+        def late(*args):  # Fly's list shows the new machine only the second time it is asked
+            out = real(*args)
+            if args[:2] == ("machine", "list"):
+                listed.append(1)
+                if len(listed) == 1:
+                    return [m for m in out if not m["name"].startswith("sandbox-") or m["name"] == "sandbox-old"]
+            return out
+        self.fly.json = late
+        d = self.s.create("Slow list", "shell", "", host="sandbox")
+        sb = self.s.sandboxes.by_session(d["id"])
+        self.assertEqual(sb["machine"], "m-sandbox-" + sb["id"])  # before: recorded without its machine, never reachable
+
+    def test_the_sandbox_terminal_says_what_it_does_reopens_its_tunnel_and_tries_again(self):
+        from engine import sandbox_attach as sa
+
+        class Tunnel:
+            def __init__(self, fell):
+                self.fell = fell
+
+            def poll(self):
+                return 1 if self.fell else None
+
+        # the tunnel fell while the machine was starting: it is opened again, and the wait ends when the sandbox answers
+        told, opened, answers = [], [], iter([False, False, True])
+        ok, tunnel = sa.wait_until_reachable(lambda: next(answers), Tunnel(True), lambda: (opened.append(1), Tunnel(False))[1],
+                                             pause=0, tell=told.append)
+        self.assertEqual((ok, len(opened), tunnel.fell), (True, 1, False))
+        # it never answers: a line every ten tries says so, then the wait gives up
+        ok, _ = sa.wait_until_reachable(lambda: False, Tunnel(False), lambda: Tunnel(False), tries=20, pause=0, tell=told.append)
+        self.assertFalse(ok)
+        self.assertEqual(len([t for t in told if "still waiting" in t]), 2)
+
+        def scripted(outcomes):
+            calls, left = [], iter(outcomes)
+
+            def connect(may_start):
+                calls.append(may_start)
+                o = next(left)
+                if isinstance(o, Exception):
+                    raise o
+                return o
+            return calls, connect
+
+        # a failure, a lost connection, a failure: three tries, then it waits for Enter and tries again; never a traceback
+        told, asked = [], []
+        calls, connect = scripted([RuntimeError("it did not answer"), sa.SSH_LOST, RuntimeError("Traceback…\nno such tool"), 0])
+        self.assertEqual(sa.keep_connected(connect, tell=told.append, ask=lambda: asked.append(1), pause=0), 0)
+        self.assertEqual(calls, [True, False, False, True])  # only the first try and the one after Enter may start the machine
+        self.assertEqual(len(asked), 1)
+        self.assertIn("Press Enter to try again", told[2])
+        self.assertIn("no such tool", told[2])
+        self.assertNotIn("Traceback", "".join(told))
+        # paused by a cap while connected: never started again by itself, it asks at once
+        told, asked = [], []
+        calls, connect = scripted([sa.SSH_LOST, sa.Paused(), 0])
+        self.assertEqual(sa.keep_connected(connect, tell=told.append, ask=lambda: asked.append(1), pause=0), 0)
+        self.assertEqual((calls, len(asked)), ([True, False, True], 1))
+        self.assertIn("paused", told[-1])
+        self.assertIn("Press Enter to start it", told[-1])
+
     def test_overview_costs_and_orphans_never_touched(self):
         self.s.sandboxes.prepare()
         d = self.s.create("Cloud work", "shell", "", host="sandbox")

@@ -51,6 +51,11 @@ Newest first.
 - Each change is logged; the engine's API token is now refused to the agents' file tools too.
 
 ### Fixed
+- A cloud sandbox whose terminal could not connect ended on « Pane is dead », sometimes with a Python error, and the
+  session looked ended although the machine was there. Its terminal now says what it does (« connecting… », « still
+  waiting… »), reopens its tunnel when it fell, tries three times, then waits for Enter: the session stays alive. A
+  lost connection reconnects by itself, to the same session in the sandbox. A sandbox paused by a cap or by you is
+  never started again without you: its terminal asks first.
 - An `ask_owner` question clears as soon as you answer, also when you type in the session's terminal; the state reads
   « asks you something » (the header: « asks you: … »).
 - Claude Code's idle reminder after a turn no longer shows a session as asking you something.

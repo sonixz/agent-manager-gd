@@ -108,6 +108,8 @@ class DemoFly:
         return dict(os.environ)
 
     def run(self, *args, timeout=0, cwd=None, inp=None):
+        if args[:2] == ("machine", "run"):  # a real machine takes 6 to 30 seconds to start: the checks can ask for that wait
+            time.sleep(float(os.environ.get("AGMGD_DEMO_FLY_DELAY") or 0))
         return 0, "demo"
 
     def json(self, *args):
@@ -254,7 +256,12 @@ class Sandboxes:
         if rc != 0:
             shutil.rmtree(os.path.dirname(self.key_path(sbid)), ignore_errors=True)
             raise ValueError("the sandbox did not start: " + out[-300:])
-        machine = next((m["id"] for m in self.machines() if m.get("name") == "sandbox-" + sbid), "")
+        machine = ""
+        for _ in range(1 if isinstance(self.fly, DemoFly) else 10):  # a new machine can take a few seconds to show in Fly's list
+            machine = next((m["id"] for m in self.machines() if m.get("name") == "sandbox-" + sbid), "")
+            if machine:  # without its id the sandbox could never be reached (the terminal looks it up again, by name)
+                break
+            time.sleep(1)
         with closing(self._db()) as db, db:
             db.execute("INSERT INTO sandboxes (id, session_id, app, machine, region, size, secret, repo_id, created) "
                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (sbid, session_id, st["app"], machine, st["region"], size,

@@ -252,6 +252,32 @@ func _run() -> void:
 			await wait(0.8)
 			await shot("list-tile")
 			main.set_list("line")
+		"sandbox-open":  # a check: « Deploy + agentic coding session » from the Sandboxes tab must end on the new session, opened
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
+			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), OS.get_environment("AGMGD_HOME"), str(a["id"]), str(b["id"])], [])
+			await main.refresh()
+			main.set_view("sandboxes")
+			await wait(2.0)
+			await main._open_new("sandbox", "claude")
+			await wait(0.5)
+			main.f_name.text = "Cloud check"
+			main.new_dialog.hide()
+			var began := Time.get_ticks_msec()
+			await main._create()
+			var took := (Time.get_ticks_msec() - began) / 1000.0
+			await wait(2.0)
+			var sid := _sid("Cloud check")
+			var mounted: bool = sid != "" and main.terms.has(sid) and is_instance_valid(main.terms[sid]) and main.terms[sid].get_parent() != main.parking
+			report.append("sandbox-open: creation answered after %.0f s | session made: %s | selected: %s | view: %s | its terminal on screen: %s | status line: « %s »" % [
+				took, sid != "", sid != "" and main.selected == sid, main.view, mounted, main.status_label.text])
+			await shot("sandbox-open")
+			# here Fly is a fake one, so its terminal cannot connect: it must say so in plain words, try again, then
+			# wait for Enter, and the session must stay alive (before: a traceback and « Pane is dead »)
+			await wait(13.0)
+			await main.refresh()
+			report.append("sandbox-open, 15 s later: the session is « %s »" % str(main._session(sid).get("state", "?")))
+			await shot("sandbox-open-later")
 		"speed":  # Loop 33: how long the common gestures take with 6, 12 and 20 sessions (numbers in the report, no picture)
 			var ids: Array = made.values()
 			await _speed(ids)

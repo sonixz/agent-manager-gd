@@ -47,46 +47,124 @@ def say(msg: str) -> None:
     sys.stdout.flush()
 
 
-def main() -> int:
-    sbid = sys.argv[1]
-    home = os.environ["AGMGD_HOME"]
-    engine_port = int(os.environ.get("AGMGD_PORT", "8790"))
+SSH_LOST = 255  # ssh's own exit code when the connection could not be made or was lost
+
+
+def wait_until_reachable(reachable, proxy, reopen, tries: int = 90, pause: float = 1.0, tell=say, clock=time.monotonic):
+    """Waits for the sandbox to answer: (True, the tunnel) once it does, (False, the tunnel) after `tries`.
+    The tunnel is opened again when it fell: a machine that just started is not always reachable at once, and
+    flyctl proxy gives up when it is not. Before, the wait went on against a dead tunnel and said nothing."""
+    began = clock()
+    for i in range(tries):
+        if proxy.poll() is not None:
+            proxy = reopen()
+        if reachable():
+            return True, proxy
+        if i % 10 == 9:
+            tell("still waiting for the sandbox to answer (%d s)…" % (clock() - began))
+        time.sleep(pause)
+    return False, proxy
+
+
+class Paused(Exception):
+    """The machine is stopped and this try may not start it."""
+
+
+def keep_connected(connect, tell=say, ask=input, pause: float = 5.0, rounds: int = 3) -> int:
+    """Connects, and connects again when it could not or when the connection was lost: three tries, then it waits
+    for Enter, as long as the owner wants. The terminal never ends on an error; it ends when the session inside
+    the sandbox ends. (`tmux new -A` in the sandbox finds the same session again: nothing is lost on a reconnect.)
+    Only the first try, and a try the owner asked for with Enter, may start a stopped machine: a sandbox paused by a
+    cap (idle, budget) or by the owner is never started again behind their back."""
+    failed, may_start = 0, True
+    while True:
+        try:
+            rc = connect(may_start)
+            if rc != SSH_LOST:
+                return rc
+            why = "the connection to the sandbox was lost"
+        except Paused:
+            why, failed = "the sandbox is paused", rounds  # no point in trying again by itself: it would stay paused
+        except Exception as e:  # a missing tool, a timeout, a refusal from Fly: said in plain words, never a traceback
+            why = "the sandbox could not be reached: " + (str(e).strip().splitlines() or [type(e).__name__])[-1][:200]
+        failed += 1
+        if failed < rounds:
+            tell("%s. Trying again in %d seconds (%d of %d)…" % (why, pause, failed + 1, rounds))
+            time.sleep(pause)
+            may_start = False
+            continue
+        tell(why + ". The sandbox itself is still there (☁ Sandboxes shows it). Press Enter to "
+             + ("start it and connect again." if why.endswith("paused") else "try again."))
+        try:
+            ask()
+        except (EOFError, KeyboardInterrupt):
+            return 1
+        failed, may_start = 0, True
+
+
+def connect(sbid: str, home: str, engine_port: int, may_start: bool = True) -> int:
+    """One connection, from the machine's start to the end of the terminal in the sandbox: ssh's exit code."""
     keys = Keys(home)
     store = Store(os.path.join(home, "data", "sessions.sqlite3"))
     sbs = Sandboxes(store.path, home, keys)
     sb = sbs.get(sbid)
     rec = store.get(sb["session_id"]) or {}
     fly = Fly(lambda: keys.get("fly"))
-    machines = {m["id"]: m for m in sbs.machines()}
-    if machines.get(sb["machine"], {}).get("state") != "started":
-        say("starting the sandbox…")
-        fly.run("machine", "start", sb["machine"], "--app", sb["app"], timeout=300)
+    machines = sbs.machines()
+    if not sb["machine"]:  # the machine was not in Fly's list yet when the sandbox was made: find it by its name
+        found = next((m["id"] for m in machines if m.get("name") == "sandbox-" + sbid), "")
+        if not found:
+            raise RuntimeError("its machine is not in Fly's list (yet)")
+        sbs._set(sbid, machine=found)
+        sb = sbs.get(sbid)
+    state = {m["id"]: m for m in machines}.get(sb["machine"], {}).get("state")
+    if state != "started":
+        if not may_start and state in ("stopped", "suspended"):
+            raise Paused()
+        if may_start:
+            say("starting the sandbox…")
+            fly.run("machine", "start", sb["machine"], "--app", sb["app"], timeout=300)
     port = free_port()
-    proxy = subprocess.Popen([FLYCTL, "proxy", f"{port}:2222", f"{sb['machine']}.vm.{sb['app']}.internal", "--app", sb["app"]],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=fly.env())
-    with open(os.path.join(home, "runtime", f"sandbox-{sbid}.port"), "w") as f:
-        f.write(str(port))
+
+    def open_tunnel():
+        return subprocess.Popen([FLYCTL, "proxy", f"{port}:2222", f"{sb['machine']}.vm.{sb['app']}.internal", "--app", sb["app"]],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=fly.env())
+
     base = ssh_base(sbs.key_path(sbid), port)
-    for _ in range(90):
-        if subprocess.run(base + ["root@127.0.0.1", "true"], capture_output=True, timeout=20).returncode == 0:
-            break
-        time.sleep(1)
-    else:
-        say("the sandbox does not answer (yet): Agent Manager will retry")
+
+    def answers() -> bool:
+        try:
+            return subprocess.run(base + ["root@127.0.0.1", "true"], capture_output=True, timeout=20).returncode == 0
+        except subprocess.TimeoutExpired:
+            return False
+
+    proxy = open_tunnel()
+    try:
+        with open(os.path.join(home, "runtime", f"sandbox-{sbid}.port"), "w") as f:
+            f.write(str(port))
+        say("connecting to the sandbox…")
+        ok, proxy = wait_until_reachable(answers, proxy, open_tunnel)
+        if not ok:
+            raise RuntimeError("it did not answer")
+        # tmux in the sandbox passes a program's « copy to clipboard » (OSC 52) on to Agent Manager's terminal
+        subprocess.run(base + ["root@127.0.0.1", "printf '%s\\n' " + " ".join(f"'{line}'" for line in TMUX_CLIPBOARD)
+                               + " > /root/.tmux.conf; tmux source-file /root/.tmux.conf 2>/dev/null; true"], capture_output=True, timeout=60)
+        if subprocess.run(base + ["root@127.0.0.1", "test -e /root/.agmgd/ready"], capture_output=True, timeout=60).returncode != 0:
+            say("first start: setting up the sandbox…")
+            setup(sbs, sb, rec, keys, base, store)
+            sb = sbs.get(sbid)  # the setup chose its working folder
+        tunnel = ["-R", f"8765:127.0.0.1:{engine_port}"]
+        return subprocess.call(base + tunnel + ["-t", "root@127.0.0.1", "cd " + sb["workdir"] + " 2>/dev/null; tmux new -A -s am"])
+    finally:
         proxy.kill()
-        return 1
-    # tmux in the sandbox passes a program's « copy to clipboard » (OSC 52) on to Agent Manager's terminal
-    subprocess.run(base + ["root@127.0.0.1", "printf '%s\\n' " + " ".join(f"'{line}'" for line in TMUX_CLIPBOARD)
-                           + " > /root/.tmux.conf; tmux source-file /root/.tmux.conf 2>/dev/null; true"], capture_output=True, timeout=60)
-    if subprocess.run(base + ["root@127.0.0.1", "test -e /root/.agmgd/ready"], capture_output=True).returncode != 0:
-        say("first start: setting up the sandbox…")
-        setup(sbs, sb, rec, keys, base, store)
-    tunnel = ["-R", f"8765:127.0.0.1:{engine_port}"]
-    cmd = base + tunnel + ["-t", "root@127.0.0.1", "cd " + sb["workdir"] + " 2>/dev/null; tmux new -A -s am"]
-    rc = subprocess.call(cmd)
-    proxy.kill()
-    _forget_port(home, sb["id"])
-    return rc
+        _forget_port(home, sbid)
+
+
+def main() -> int:
+    sbid = sys.argv[1]
+    home = os.environ["AGMGD_HOME"]
+    engine_port = int(os.environ.get("AGMGD_PORT", "8790"))
+    return keep_connected(lambda may_start: connect(sbid, home, engine_port, may_start))
 
 
 def setup(sbs, sb, rec, keys, base, store) -> None:
