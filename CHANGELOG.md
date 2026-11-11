@@ -19,6 +19,8 @@ Newest first.
 - The session list shows one session per line: state dot, tool, name, short marks and the state in a word. Twenty
   sessions fit where eight tiles did; the rest is in the line's tooltip. ◐ › One session per line (or the palette)
   switches back to the tiles; your choice is remembered.
+- « They wait for you » follows: one request per line, the agent's name (it opens the session), Approve and Refuse
+  or Reply… beside it, what it asks in the tooltip. Up to eight requests show, where four tiles did.
 
 ### Website
 - The home page shows the orchestrator and the permissions, and its list of loops goes up to Loop 31.

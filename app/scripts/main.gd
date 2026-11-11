@@ -1598,7 +1598,7 @@ func _session(id: String) -> Dictionary:
 ## change (a session added, removed, moved, a group folded).
 func _render_list() -> void:
 	var asking := func(x): return str(x.get("activity", "")) in ["approval", "waiting"]
-	var qs := JSON.stringify(sessions.filter(asking)) + JSON.stringify(dismissed) + AmTheme.current
+	var qs := JSON.stringify(sessions.filter(asking)) + JSON.stringify(dismissed) + AmTheme.current + density
 	if qs != queue_sig:
 		queue_sig = qs
 		_render_queue()
@@ -1735,10 +1735,54 @@ func _render_queue() -> void:
 	title.add_theme_font_size_override("font_size", 12)
 	title.add_theme_font_override("font", AmTheme.ui_font(700))
 	queue_box.add_child(title)
-	for x in waiting.slice(0, 4):
+	var line := density == "line"  # one request per line, like the list below it
+	var shown := 8 if line else 4
+	queue_box.add_theme_constant_override("separation", 3 if line else 6)
+	for x in waiting.slice(0, shown):
 		var id := str(x["id"])
 		var act := activity_of(x)
 		var card := PanelContainer.new()
+		var since := str(x.get("since", ""))
+		var msg := str(x.get("message", ""))
+		var close := Button.new()
+		close.text = "✕"
+		close.flat = true
+		close.tooltip_text = "Hide it here: the request stays on the agent's card and comes back if it asks again"
+		close.add_theme_font_size_override("font_size", 12)
+		close.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+		close.pressed.connect(func() -> void:
+			dismissed[id] = since
+			_render_queue())
+		if line:
+			var sb := AmTheme.box(Color(act[0], 0.10), 6, Color(act[0], 0.7), 1, 0)
+			sb.content_margin_left = 4
+			sb.content_margin_right = 2
+			sb.content_margin_top = 2
+			sb.content_margin_bottom = 2
+			card.add_theme_stylebox_override("panel", sb)
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 4)
+			card.add_child(row)
+			var who := Button.new()  # its name opens it; what it asks is in the tooltip
+			who.text = str(x["name"])
+			who.flat = true
+			who.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			who.clip_text = true
+			who.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			who.size_flags_horizontal = SIZE_EXPAND_FILL
+			who.add_theme_font_size_override("font_size", 13)
+			who.add_theme_font_override("font", AmTheme.ui_font(600))
+			who.tooltip_text = "%s · %s%s\nClick to open it" % [x["name"], act[1], ("\n" + msg.left(300)) if msg != "" else ""]
+			who.pressed.connect(func() -> void: select(id))
+			row.add_child(who)
+			if str(x["activity"]) == "approval":
+				row.add_child(_small("Approve", func() -> void: _answer(id, ["Enter"], card, "✓  Approved · %s carries on" % x["name"]), (msg + "\n" if msg != "" else "") + "Enter: the agent's highlighted choice (Yes) · Ctrl+Shift+A"))
+				row.add_child(_small("Refuse", func() -> void: _answer(id, ["Escape"], card, "✕  Refused · %s stops this step" % x["name"]), "Escape"))
+			else:
+				row.add_child(_small("Reply…", func() -> void: _quick_reply(id), (msg.left(300) + "\n" if msg != "" else "") + "Write to the agent without opening its terminal"))
+			row.add_child(close)
+			queue_box.add_child(card)
+			continue
 		card.add_theme_stylebox_override("panel", AmTheme.box(Color(act[0], 0.10), 10, Color(act[0], 0.7), 1, 9))
 		var v := VBoxContainer.new()
 		card.add_child(v)
@@ -1751,18 +1795,7 @@ func _render_queue() -> void:
 		l.size_flags_horizontal = SIZE_EXPAND_FILL
 		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		top.add_child(l)
-		var since := str(x.get("since", ""))
-		var close := Button.new()
-		close.text = "✕"
-		close.flat = true
-		close.tooltip_text = "Hide it here: the request stays on the agent's card and comes back if it asks again"
-		close.add_theme_font_size_override("font_size", 12)
-		close.add_theme_color_override("font_color", AmTheme.col("MUTED"))
-		close.pressed.connect(func() -> void:
-			dismissed[id] = since
-			_render_queue())
 		top.add_child(close)
-		var msg := str(x.get("message", ""))
 		if msg != "":
 			var m := Label.new()
 			m.text = msg.left(110)
@@ -1780,9 +1813,9 @@ func _render_queue() -> void:
 			h.add_child(_small("Reply…", func() -> void: _quick_reply(id), "Write to the agent without opening its terminal"))
 		h.add_child(_small("Open", func() -> void: select(id)))
 		queue_box.add_child(card)
-	if waiting.size() > 4:
+	if waiting.size() > shown:
 		var more := Label.new()
-		more.text = "+ %d more in the list below" % (waiting.size() - 4)
+		more.text = "+ %d more in the list below" % (waiting.size() - shown)
 		more.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 		more.add_theme_font_size_override("font_size", 12)
 		queue_box.add_child(more)
