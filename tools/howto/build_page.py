@@ -1,12 +1,14 @@
 """Builds public/howto.html from tools/howto/guides.py and the screenshots in public/assets/howto/<guide>/NN.webp
 (captured by tools/showcase.sh howto-<guide>). A guide without all its screenshots is listed as « coming », not shown.
   python3 tools/howto/build_page.py
+  python3 tools/howto/build_page.py --check    changes nothing: is the page what the guides and screenshots say?
 """
 from __future__ import annotations
 
 import html
 import importlib.util
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -150,11 +152,22 @@ def page(done: list[dict], coming: list[tuple[str, str]]) -> str:
 '''
 
 
-if __name__ == "__main__":
+def render() -> tuple[str, int, int]:
+    """The page as it should be now, how many guides it shows and how many are « coming »."""
     order = list(dict.fromkeys(g["group"] for g in guides.GUIDES))  # groups in order of first appearance
     done = sorted((g for g in guides.GUIDES if ready(g)), key=lambda g: order.index(g["group"]))
     missing = [g for g in guides.GUIDES if not ready(g)]
     titles = {g["title"] for g in guides.GUIDES}
     coming = [(g["title"], g["group"]) for g in missing] + [p for p in PLANNED if p[0] not in titles]
-    PAGE.write_text(page(done, coming), encoding="utf-8")
-    print(f"howto.html: {len(done)} guides, {len(coming)} coming")
+    return page(done, coming), len(done), len(coming)
+
+
+if __name__ == "__main__":
+    text, n_done, n_coming = render()
+    if "--check" in sys.argv:
+        same = PAGE.exists() and PAGE.read_text(encoding="utf-8") == text
+        print("howto.html: up to date" if same else
+              "howto.html: differs from tools/howto/guides.py (run python3 tools/howto/build_page.py)")
+        sys.exit(0 if same else 1)
+    PAGE.write_text(text, encoding="utf-8")
+    print(f"howto.html: {n_done} guides, {n_coming} coming")

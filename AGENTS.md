@@ -14,4 +14,10 @@ How to build, test and contribute: CONTRIBUTING.md. What the app protects: SECUR
 - Agent CLIs are launched as the user's own installed tools (their login, their config). The app never reads,
   copies or relays subscription login tokens.
 - Never change the repository's visibility; no automatic publishing.
+- main is pushed only through the push-main workflow (`.claude/skills/push-main/SKILL.md`, `tools/push_main.sh`):
+  the website, its index with every loop, the Docs and the devlog follow the changes first, and each push needs the
+  owner's OK (owner, 2026-11-11).
+- Two things are called sandbox; never mix them up. « Sandboxes » are ours: Fly.io machines reached through an SSH
+  tunnel. Claude Code's own sandbox (bubblewrap, socat) stays Claude Code's native feature: name it as such, never
+  as ours, and never install its tools yourself (owner, 2026-11-11).
 - Tests stay green; do not claim a test or a check that was not run.
