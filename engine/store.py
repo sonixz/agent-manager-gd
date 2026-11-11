@@ -147,6 +147,17 @@ class Store:
                        "VALUES (?, ?, ?, ?, ?)", (sid, tool, conversation, now, now))
             return True
 
+    def last_conversations(self, sids: list[str]) -> dict[str, str]:
+        """Each of these sessions' most recent conversation, in one query (the list asks for all of them at once)."""
+        if not sids:
+            return {}
+        out: dict[str, str] = {}
+        with closing(self._db()) as db:
+            for r in db.execute("SELECT session_id, conversation FROM conversations WHERE session_id IN (%s) "
+                                "ORDER BY last_seen DESC" % ",".join("?" * len(sids)), sids):
+                out.setdefault(r["session_id"], r["conversation"])
+        return out
+
     def conversations(self, sid: str) -> list[dict]:
         with closing(self._db()) as db:
             return [dict(r) for r in db.execute("SELECT * FROM conversations WHERE session_id = ? ORDER BY last_seen DESC",

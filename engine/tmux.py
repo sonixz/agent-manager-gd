@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -82,6 +83,30 @@ class Tmux:
 
     def capture(self, name: str, lines: int = 40) -> str:
         return self.run("capture-pane", "-p", "-J", "-t", name, "-S", f"-{lines}")
+
+    def screens(self, names: list[str]) -> dict[str, str]:
+        """The visible screen of several sessions in one tmux call (one call each takes about 4 ms). tmux stops at the
+        first command that fails, so a session that could not be read, and those after it, are absent from the answer."""
+        if not names:
+            return {}
+        mark = "agmgd-screen-" + secrets.token_hex(8) + " "  # a line no screen can hold
+        args: list[str] = []
+        for n in names:
+            args += ["display-message", "-p", mark + n, ";", "capture-pane", "-p", "-J", "-t", n, ";"]
+        try:
+            out = self.run(*args[:-1], check=False)
+        except Exception:
+            return {}
+        found: dict[str, str] = {}
+        name, lines = "", []
+        for line in out.splitlines() + [mark]:
+            if line.startswith(mark):
+                if name and lines:  # a screen always has its rows, even empty ones; none means the read failed
+                    found[name] = "\n".join(lines) + "\n"
+                name, lines = line[len(mark):], []
+            else:
+                lines.append(line)
+        return found
 
     def send_text(self, name: str, text: str, enter: bool = True) -> None:
         self.run("send-keys", "-t", name, "-l", text)

@@ -85,6 +85,9 @@ func _health() -> bool:
 func call_api(method: String, path: String, body: Variant = null, auth := true, timeout := 10.0) -> Dictionary:
 	var http := HTTPRequest.new()
 	http.timeout = timeout  # a cloud sandbox takes ~20 s to start: its creation passes a longer timeout
+	# In its own thread: without it the request moves one step per drawn frame (connect, send, read…), which made
+	# every call to the engine last five frames or more, whatever the engine's own speed (measured in Loop 33).
+	http.use_threads = true
 	add_child(http)
 	var headers := PackedStringArray(["Content-Type: application/json"])
 	if auth:

@@ -166,6 +166,65 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(names, ["c", "loose"])
         self.assertEqual(len(self.sessions.list()), 4)
 
+    def test_several_screens_are_read_in_one_tmux_call(self):
+        a = self.sessions.create("a", "shell", self.tmp)
+        b = self.sessions.create("b", "shell", self.tmp)
+        self.sessions.send(a["id"], "echo screen-of-a")
+        self.sessions.send(b["id"], "echo screen-of-b")
+        self.assertTrue(self.wait_for(a["id"], "screen-of-a") and self.wait_for(b["id"], "screen-of-b"))
+        calls, run = [], self.tmux.run
+        self.tmux.run = lambda *args, **kw: (calls.append(args), run(*args, **kw))[1]
+        try:
+            got = self.tmux.screens([a["tmux"], b["tmux"]])
+        finally:
+            self.tmux.run = run
+        self.assertEqual(len(calls), 1)
+        self.assertIn("screen-of-a", got[a["tmux"]])
+        self.assertNotIn("screen-of-b", got[a["tmux"]])
+        self.assertIn("screen-of-b", got[b["tmux"]])
+        # a session that is gone is absent from the answer, and so are those after it: the caller reads those itself
+        self.assertEqual(list(self.tmux.screens([a["tmux"], "am_gone", b["tmux"]])), [a["tmux"]])
+        self.assertEqual(self.tmux.screens([]), {})
+
+    def test_the_list_looks_everybody_up_together(self):
+        lead = self.sessions.create("lead", "shell", self.tmp)
+        kid = self.sessions.create("kid", "shell", self.tmp, parent=lead["id"])
+        self.sessions.store.touch_conversation(kid["id"], "claude", "conv-old")
+        self.sessions.store.touch_conversation(kid["id"], "claude", "conv-new")
+        one_by_one = {sid: self.sessions.get(sid) for sid in (lead["id"], kid["id"])}
+        gets, get = [], self.sessions.store.get
+        self.sessions.store.get = lambda sid: (gets.append(sid), get(sid))[1]
+        try:
+            listed = {s["id"]: s for s in self.sessions.list()}
+        finally:
+            self.sessions.store.get = get
+        self.assertEqual(gets, [])  # no record is fetched one by one: the list already holds them all
+        self.assertEqual(listed[kid["id"]]["last_conversation"], "conv-new")
+        self.assertEqual(listed[lead["id"]]["last_conversation"], "")
+        for sid, alone in one_by_one.items():  # and it says what each session says when asked alone
+            for key in ("name", "parent", "git_rights", "last_conversation", "level", "access", "state"):
+                self.assertEqual(listed[sid][key], alone[key], key)
+
+    def test_a_conversation_is_marked_seen_once_a_minute_not_at_every_refresh(self):
+        s = self.sessions.create("c", "shell", self.tmp)
+        rec = {**self.sessions.store.get(s["id"]), "tool": "claude"}
+        self.run_hook(s["id"], "claude", {"hook_event_name": "SessionStart", "session_id": "conv-1"})
+        writes, touch = [], self.sessions.store.touch_conversation
+        self.sessions.store.touch_conversation = lambda *a: (writes.append(a[2]), touch(*a))[1]
+        try:
+            for _ in range(3):  # three refreshes
+                self.sessions.describe(rec, self.tmux.sessions())
+            self.assertEqual(writes, ["conv-1"])  # written at once, then not again within the minute
+            self.run_hook(s["id"], "claude", {"hook_event_name": "SessionStart", "session_id": "conv-2"})
+            self.sessions.describe(rec, self.tmux.sessions())
+            self.assertEqual(writes, ["conv-1", "conv-2"])  # a new conversation is written at once
+            self.sessions._conv_seen[(s["id"], "conv-2")] -= 61  # a minute later
+            self.sessions.describe(rec, self.tmux.sessions())
+            self.assertEqual(writes, ["conv-1", "conv-2", "conv-2"])
+        finally:
+            self.sessions.store.touch_conversation = touch
+        self.assertEqual(self.sessions.last_conversation(s["id"]), "conv-2")
+
     def run_hook(self, sid, tool, payload):
         import subprocess, sys
         from engine.sessions import HOOK

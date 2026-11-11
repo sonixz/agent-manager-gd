@@ -252,6 +252,17 @@ func _run() -> void:
 			await wait(0.8)
 			await shot("list-tile")
 			main.set_list("line")
+		"speed":  # Loop 33: how long the common gestures take with 6, 12 and 20 sessions (numbers in the report, no picture)
+			var ids: Array = made.values()
+			await _speed(ids)
+			for i in 14:
+				var r: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Task %02d" % (i + 1), "tool": "shell" if i % 4 == 3 else "claude",
+					"cwd": code.path_join(["acme-store", "orbit-api", "pixel-forge"][i % 3]), "group": ["Acme Store", "Orbit API", "Pixel Forge"][i % 3], "brain": false})
+				ids.append(str(r.get("id", "")))
+				if ids.size() in [12, 20]:
+					await wait(2.5)
+					await main.refresh()
+					await _speed(ids)
 		"permissions":  # Loop 24: the level at creation, its confirmation, the badge on the card
 			await main.engine.call_api("POST", "/sessions", {"name": "Night refactor", "tool": "claude", "cwd": code.path_join("pixel-forge"), "group": "Pixel Forge", "brain": true, "level": "full"})
 			await main.engine.call_api("POST", "/sessions", {"name": "Careful fix", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true, "level": "ask"})
@@ -727,6 +738,105 @@ func _run() -> void:
 	f.close()
 	print("\n".join(report))
 	quit()
+
+
+func _ms(t0: int) -> float:
+	return (Time.get_ticks_usec() - t0) / 1000.0
+
+
+func _med(a: Array) -> float:
+	var b := a.duplicate()
+	b.sort()
+	return b[b.size() / 2] if not b.is_empty() else 0.0
+
+
+## Times, in milliseconds, of what the owner does all day: the engine's answer to « the whole tree », redrawing the
+## list, a refresh that found a change, opening a session for the first time and again, changing view. On the virtual
+## display a frame is drawn by the processor, so « frame » is given too: gestures cannot be faster than one frame.
+func _speed(ids: Array) -> void:
+	var n: int = main.sessions.size()
+	var frame := []
+	for i in 10:
+		var t0 := Time.get_ticks_usec()
+		await process_frame
+		frame.append(_ms(t0))
+	var api := []
+	for i in 8:
+		var t0 := Time.get_ticks_usec()
+		await main.engine.call_api("GET", "/tree")
+		api.append(_ms(t0))
+	var list := []
+	for i in 8:
+		var t0 := Time.get_ticks_usec()
+		main._render_list()
+		list.append(_ms(t0))
+		await process_frame
+	var changed := []
+	for i in 6:
+		main.tree_sig = ""  # as when a state changed
+		var t0 := Time.get_ticks_usec()
+		await main.refresh()
+		changed.append(_ms(t0))
+	var same := []
+	for i in 6:
+		var t0 := Time.get_ticks_usec()
+		await main.refresh()
+		same.append(_ms(t0))
+	main.set_view("focus")
+	await wait(0.5)
+	var cold := []
+	for id in ids:
+		if not main.terms.has(id) and cold.size() < 4:
+			var t0 := Time.get_ticks_usec()
+			await main.select(id)
+			cold.append(_ms(t0))
+			await wait(0.4)
+	var warm := []
+	for i in 12:
+		var id: String = ids[(i * 5) % ids.size()]
+		if not main.terms.has(id):
+			await main.select(id)
+			await wait(0.4)
+		var t0 := Time.get_ticks_usec()
+		await main.select(id)
+		warm.append(_ms(t0))
+		await process_frame
+	var views := {}
+	for v in ["grid", "focus", "board", "focus"]:
+		var t0 := Time.get_ticks_usec()
+		await main.set_view(v)
+		views[v + ("2" if views.has(v) else "")] = _ms(t0)
+		await wait(0.5)
+	report.append("speed %2d sessions, %2d terminals | frame %.0f | tree from the engine %.0f (max %.0f) | list redrawn %.1f | refresh, changed %.0f, unchanged %.0f | open first time %.0f | open again %.1f (max %.1f) | to grid %.0f, to focus %.0f, to board %.0f" % [
+		n, main.terms.size(), _med(frame), _med(api), api.max(), _med(list), _med(changed), _med(same), _med(cold), _med(warm), warm.max(), views.get("grid", 0.0), views.get("focus", 0.0), views.get("board", 0.0)])
+	# where the list's time goes: a font, the queue, a group's header, one session
+	var parts := {}
+	var t1 := Time.get_ticks_usec()
+	for i in 20:
+		AmTheme.ui_font(600)
+	parts["font"] = _ms(t1) / 20.0
+	t1 = Time.get_ticks_usec()
+	for i in 5:
+		main._render_queue()
+	parts["queue"] = _ms(t1) / 5.0
+	t1 = Time.get_ticks_usec()
+	for i in 10:
+		main._group_header(main.tree[1]).free()
+	parts["header"] = _ms(t1) / 10.0
+	t1 = Time.get_ticks_usec()
+	for s in main.sessions:
+		main._card(s, "", 0).free()
+	parts["session"] = _ms(t1) / maxf(1.0, n)
+	main.tree_sig = ""
+	await main.refresh()
+	t1 = Time.get_ticks_usec()
+	main._render_header()
+	parts["top"] = _ms(t1)
+	t1 = Time.get_ticks_usec()
+	main._layout_view()
+	parts["layout"] = _ms(t1)
+	report.append("      where it goes | a font %.2f | the queue %.1f | a group's header %.2f | one session %.2f | the header %.1f | laying out the view %.1f" % [
+		parts["font"], parts["queue"], parts["header"], parts["session"], parts["top"], parts["layout"]])
 
 
 func _find_button(root: Node, text: String) -> Button:

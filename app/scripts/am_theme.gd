@@ -94,13 +94,23 @@ static func box(bg: Color, radius := 10, border := Color(0, 0, 0, 0), bw := 0, p
 	return s
 
 
+static var _fonts := {}  # "weight|family" -> the font, made once
+
+
+## The interface's font at a weight. Making a SystemFont costs 3 to 5 ms (measured, Loop 33) and the list alone
+## asked for a dozen at every click: each one is made once and shared. Never change a font this returns.
 static func ui_font(weight := 400) -> Font:
+	var mono: bool = style("mono_ui", false)
+	var key := "%d|%s" % [weight, "mono" if mono else "ui"]
+	if _fonts.has(key):
+		return _fonts[key]
 	var f := SystemFont.new()
-	if style("mono_ui", false):
+	if mono:
 		f.font_names = PackedStringArray(["Cascadia Mono", "Consolas", "JetBrains Mono", "DejaVu Sans Mono"])
 	else:
 		f.font_names = PackedStringArray(["Segoe UI Variable Text", "Segoe UI", "Inter", "Ubuntu", "DejaVu Sans"])
 	f.font_weight = weight
+	_fonts[key] = f
 	return f
 
 

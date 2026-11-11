@@ -5,6 +5,16 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Faster · Loop 33
+- Picking a session, changing view and the 2-second refresh no longer stutter. Measured with twenty sessions on the
+  test display: opening a session again 80 ms → 8 ms, for the first time 216 ms → 51 ms, the Board 140 ms → 61 ms, a
+  refresh that found a change 290 ms → 75 ms.
+- Why: each bold text made a new font (3 to 5 ms each, a dozen per click); every click redrew every row of the list;
+  the engine wrote to its database once per agent at every refresh and read each working agent's screen with its own
+  tmux call; each call to the engine advanced one step per drawn frame. Fonts are now made once, only the rows that
+  changed are redrawn, the engine looks everybody up together, and calls to it run in their own thread.
+- A view no longer fades in from nothing (0.18 s): it is there at once.
+
 ### One session per line · Loop 32
 - The session list shows one session per line: state dot, tool, name, short marks and the state in a word. Twenty
   sessions fit where eight tiles did; the rest is in the line's tooltip. ◐ › One session per line (or the palette)

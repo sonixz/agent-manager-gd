@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import uuid
 import subprocess
@@ -156,6 +157,8 @@ class Sessions:
         self._wrapping: dict = {}  # per engine (the class-level dict was shared by every instance in one process)
         self._pending_level: dict[str, bool] = {}  # session id -> a new level waits for the end of its turn (Loop 27)
         self._questions: dict[str, dict] = {}  # session id -> its pending question for the owner (ask_owner, finish_session)
+        self._conv_seen: dict[tuple, float] = {}  # (session id, conversation) -> when « seen now » was last written
+        self._once = threading.local()  # what list() looks up once for everybody, in the thread that runs it
         self._answered: dict[str, tuple] = {}  # session id -> (wall time, monotonic time) of your answer from the app  # session id -> when you answered it (Approve, Refuse, a reply) from the app
         self.store = store
         self.tmux = tmux
@@ -385,7 +388,7 @@ class Sessions:
         seen = set()
         while sid and sid not in seen:
             seen.add(sid)
-            parent = (self.store.get(sid) or {}).get("parent", "")
+            parent = (self._rec(sid) or {}).get("parent", "")
             if not parent:
                 return sid
             sid = parent
@@ -410,7 +413,7 @@ class Sessions:
         return out
 
     def under_orchestrator(self, sid: str) -> bool:
-        return (self.store.get(self.root_of(sid)) or {}).get("role") == "orchestrator" if sid else False
+        return (self._rec(self.root_of(sid)) or {}).get("role") == "orchestrator" if sid else False
 
     def check_caps(self, parent: str) -> None:
         """A session started by an agent: not deeper than MAX_DEPTH, not more than MAX_RUNNING_CHILDREN running at once
@@ -785,7 +788,12 @@ class Sessions:
         sb_info = self.sandboxes.by_session(rec["id"]) if rec.get("cwd") == "/work" else None
         hs = self.hook_state(rec["id"])
         if hs.get("conversation"):
-            self.store.touch_conversation(rec["id"], rec["tool"], hs["conversation"])
+            # « seen now » is written at once for a new conversation, then at most once a minute: written at every
+            # refresh it was a database commit per agent every 2 seconds (about 12 ms each, measured in Loop 33)
+            key, now = (rec["id"], hs["conversation"]), time.monotonic()
+            if now - self._conv_seen.get(key, -1e9) > 60:
+                self._conv_seen[key] = now
+                self.store.touch_conversation(rec["id"], rec["tool"], hs["conversation"])
         activity, message = self.activity(rec, t, hs) if state == "running" else (state, "")
         if rec.get("archived"):
             state, activity = "archived", "archived"
@@ -832,9 +840,18 @@ class Sessions:
         return True
 
     def _screen(self, rec: dict) -> str:
-        """The whole visible screen (no history): where Claude Code shows « esc to interrupt »."""
+        """The whole visible screen (no history): where Claude Code shows « esc to interrupt ». During list(), the
+        first session that needs its screen has every agent's screen read in one tmux call, kept for that refresh."""
+        name, snap = self.tmux_name(rec["id"]), self._snap()
+        if snap is not None:
+            if snap["screens"] is None:
+                recs, live = snap["recs"], snap["live"]
+                snap["screens"] = self.tmux.screens([n for n, t in live.items() if not t.pane_dead
+                                                     and (recs.get(n[len(PREFIX):]) or {}).get("tool") in ("claude", "codex")])
+            if name in snap["screens"]:
+                return snap["screens"][name]
         try:
-            return self.tmux.run("capture-pane", "-p", "-J", "-t", self.tmux_name(rec["id"]))
+            return self.tmux.run("capture-pane", "-p", "-J", "-t", name)
         except Exception:
             return ""
 
@@ -973,10 +990,30 @@ class Sessions:
             pass
 
     def list(self) -> list[dict]:
+        """Every session, described. The app asks every 2 seconds, so everybody is looked up together (Loop 33): the
+        records and each session's last conversation in two database calls, the screens that must be read in one
+        tmux call. Before, it was two database calls and up to one tmux call per session."""
         self.check_wrapups()
         self.enforce_caps()
         live = self.tmux.sessions()
-        return [self.describe(r, live) for r in self.store.all()]
+        recs = self.store.all()
+        self._once.snap = {"recs": {r["id"]: r for r in recs},
+                           "convs": self.store.last_conversations([r["id"] for r in recs]),
+                           "live": live, "screens": None}
+        try:
+            return [self.describe(r, live) for r in recs]
+        finally:
+            self._once.snap = None
+
+    def _snap(self) -> dict | None:
+        """What list() looked up for everybody, while it runs (in its own thread only)."""
+        return getattr(self._once, "snap", None)
+
+    def _rec(self, sid: str) -> dict | None:
+        snap = self._snap()
+        if snap and sid in snap["recs"]:
+            return snap["recs"][sid]
+        return self.store.get(sid)
 
     def get(self, sid: str) -> dict:
         rec = self.store.get(sid)
@@ -1080,6 +1117,9 @@ class Sessions:
                 for r in self.store.history() if r.get("repo_id") == rid]
 
     def last_conversation(self, sid: str) -> str:
+        snap = self._snap()
+        if snap and sid in snap["recs"]:
+            return snap["convs"].get(sid, "")
         convs = self.store.conversations(sid)
         return convs[0]["conversation"] if convs else ""
 

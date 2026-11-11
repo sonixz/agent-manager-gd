@@ -25,6 +25,8 @@ var chime: AudioStreamPlayer
 var blip_done: AudioStreamPlayer
 var sound_btn: Button
 var cards := {}               # id -> SessionCard
+var rows: Array = []          # the list as drawn: [kind, key, signature, node], to draw again only what changed
+var queue_sig := ""           # « They wait for you » as drawn
 
 var side_box: VBoxContainer
 var queue_box: VBoxContainer
@@ -1591,29 +1593,74 @@ func _session(id: String) -> Dictionary:
 
 
 # ------------------------------------------------------------------ sidebar
+## The list on the left. Only what changed is drawn again (Loop 33): picking a session redraws two rows, not all of
+## them, and a refresh redraws the rows whose session changed. Everything is rebuilt only when the rows themselves
+## change (a session added, removed, moved, a group folded).
 func _render_list() -> void:
-	_render_queue()
-	for c in list_box.get_children():
-		c.queue_free()
-	cards.clear()
-	list_box.add_theme_constant_override("separation", 2 if density == "line" else 6)
+	var asking := func(x): return str(x.get("activity", "")) in ["approval", "waiting"]
+	var qs := JSON.stringify(sessions.filter(asking)) + JSON.stringify(dismissed) + AmTheme.current
+	if qs != queue_sig:
+		queue_sig = qs
+		_render_queue()
+	# what the list must show: [kind, key, a signature of all that row draws, then what builds it]
+	var look := density + AmTheme.current
+	var want: Array = []
 	for g in tree:
 		var gname := str(g["name"])
+		var in_group: Array = g["sessions"]
 		if gname != "":
-			list_box.add_child(_group_header(g))
+			want.append(["group", gname, "%s|%s|%d|%d|%s" % [gname, g["folded"], in_group.size(), in_group.filter(asking).size(), look], g])
 		if bool(g["folded"]):
 			continue
 		var i := 0
-		for s in g["sessions"]:
-			list_box.add_child(_card(s, gname, i))
+		for s in in_group:
+			var id := str(s["id"])
+			want.append(["session", id, "%s|%s|%s|%d|%s|%s" % [JSON.stringify(s), id == selected, gname, i, look, SessionCard._ago(float(s.get("since", 0)))], s, i, gname])
 			i += 1
-		if gname != "" and (g["sessions"] as Array).is_empty():
-			var hint := Label.new()
-			hint.text = "    drop a session here"
-			hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
-			hint.add_theme_font_size_override("font_size", 12)
-			list_box.add_child(hint)
+		if gname != "" and in_group.is_empty():
+			want.append(["hint", gname, look])
+	list_box.add_theme_constant_override("separation", 2 if density == "line" else 6)
+	var same := want.size() == rows.size()
+	if same:
+		for k in want.size():
+			var node = rows[k][3]
+			if want[k][0] != rows[k][0] or want[k][1] != rows[k][1] or not is_instance_valid(node) or node.get_parent() != list_box:
+				same = false
+				break
+	if same:
+		for k in want.size():
+			if want[k][2] != rows[k][2]:
+				var old: Control = rows[k][3]
+				var node := _row(want[k])
+				list_box.add_child(node)
+				list_box.move_child(node, old.get_index())
+				old.visible = false  # gone from the layout at once; freed after this frame (it may be the row being clicked)
+				old.queue_free()
+				rows[k] = [want[k][0], want[k][1], want[k][2], node]
+	else:
+		for c in list_box.get_children():
+			c.visible = false
+			c.queue_free()
+		cards.clear()
+		rows.clear()
+		for w in want:
+			var node := _row(w)
+			list_box.add_child(node)
+			rows.append([w[0], w[1], w[2], node])
 	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]
+
+
+func _row(w: Array) -> Control:
+	match w[0]:
+		"group":
+			return _group_header(w[3])
+		"session":
+			return _card(w[3], w[5], w[4])
+	var hint := Label.new()
+	hint.text = "    drop a session here"
+	hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+	hint.add_theme_font_size_override("font_size", 12)
+	return hint
 
 
 func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
@@ -1820,10 +1867,10 @@ func set_view(v: String) -> void:
 				grid_ids.append(str(x["id"]))
 		for id in grid_ids:
 			await _ensure_terminal(id)
-	content.modulate.a = 0.0
+	content.modulate.a = 0.6  # the new view is there at once, a little soft, then sharp: it was 0.18 s from nothing, read as a delay
 	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]
 	_layout_view()
-	create_tween().tween_property(content, "modulate:a", 1.0, 0.18)
+	create_tween().tween_property(content, "modulate:a", 1.0, 0.08)
 	_render_header()
 	if v == "board":
 		_refresh_previews()
