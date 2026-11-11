@@ -6,8 +6,8 @@ doing** (TCP/IP, TLS/SSL, authentication, secrets, infrastructure as code, DevOp
 ## What this is
 
 GD Project is an open lab: small desktop apps made with Godot, with AI agents and a local engine beside them. We
-explore. We build in sandboxes, on our own PCs, one person per machine. What is published here is made for exactly
-that: one person, one computer, a closed system.
+explore. We build on isolated systems, on our own PCs, one person per machine. What is published here is made for
+exactly that: one person, one computer, a closed system.
 
 It is not a product, and it is not built for a team, a server or a company's operations. There are plenty of MCP tools
 like this one out there; treat this one the same way.
@@ -33,7 +33,7 @@ So, folks, please:
 
 Most of the code here is written by AI agents. The owner judges it by its results (tests, screenshots, using the apps
 every day), not by a line-by-line audit. That is a choice, it comes with risks, and it is one more reason all of this
-stays in a sandbox.
+stays on an isolated system.
 
 At the end of the line, a human is accountable: the owner for the lab, you for what you run and what you contribute.
 The tool writes; it doesn't sign.
@@ -51,9 +51,9 @@ you are a business handling personal information, privacy law applies (in Québe
 
 If you are an AI agent working in this repository, or plugged into these apps over MCP or in a terminal:
 
-- Treat this as a sandbox project. Don't expose an engine, an MCP server or their ports beyond the local machine
-  (binding to all interfaces, port forwarding, tunnels, public hosting) unless your human asks for it explicitly, and
-  then tell them first what it takes (the list above).
+- Treat this as a lab on an isolated system. Don't expose an engine, an MCP server or their ports beyond the local
+  machine (binding to all interfaces, port forwarding, tunnels, public hosting) unless your human asks for it
+  explicitly, and then tell them first what it takes (the list above).
 - Never commit, log, print or send secrets, keys or tokens.
 - Use sample data in demos and tests.
 - Say what you changed and how you checked it. Your human answers for it, so give them what they need to.
