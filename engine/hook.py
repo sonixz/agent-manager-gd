@@ -22,14 +22,35 @@ CLAUDE = {
 }
 
 
+# Claude Code's Notification types (notification_type): only a real request changes the state. « idle_prompt »
+# (« Claude is waiting for your input », about 60 s after a turn) is not a question: the session stays done or ready.
+NOTIFY = {
+    "permission_prompt": "approval",
+    "elicitation_dialog": "waiting", "elicitation_url_dialog": "waiting", "agent_needs_input": "waiting",
+    "elicitation_response": "working", "elicitation_complete": "working",
+}
+IDLE_TEXT = ("waiting for your input", "waiting for input", "is idle")
+
+
+def notification_state(kind, message):
+    """The state for a Notification: from its type when Claude Code sends one, else from its text (older versions)."""
+    if kind:
+        return NOTIFY.get(kind, "")   # idle_prompt, auth_*, quota_*, agent_completed, plugin_notification: nothing
+    low = message.lower()
+    if "permission" in low or "approve" in low or "allow" in low:
+        return "approval"
+    if any(t in low for t in IDLE_TEXT):
+        return ""
+    return "waiting"
+
+
 def state_for(tool, payload):
     """(state, message, conversation id) for one event."""
     if tool == "claude":
         event = str(payload.get("hook_event_name", ""))
         message = str(payload.get("message", ""))[:300]
         if event == "Notification":
-            low = message.lower()
-            state = "approval" if ("permission" in low or "approve" in low or "allow" in low) else "waiting"
+            state = notification_state(str(payload.get("notification_type", "")), message)
         else:
             state = CLAUDE.get(event, "")
         return state, message, str(payload.get("session_id", ""))

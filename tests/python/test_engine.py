@@ -184,7 +184,16 @@ class EngineTest(unittest.TestCase):
                  ({"hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"}, "approval"),
                  ({"hook_event_name": "PreToolUse", "tool_name": "Bash"}, "working"),
                  ({"hook_event_name": "Stop"}, "done"),
-                 ({"hook_event_name": "Notification", "message": "Claude is waiting for your input"}, "waiting")]
+                 # the idle reminder about 60 s after a turn is not a question: still done (before: « waiting »)
+                 ({"hook_event_name": "Notification", "message": "Claude is waiting for your input"}, "done"),
+                 ({"hook_event_name": "Notification", "message": "Claude is waiting for your input",
+                   "notification_type": "idle_prompt"}, "done"),
+                 ({"hook_event_name": "Notification", "message": "Claude needs your permission to use Bash",
+                   "notification_type": "permission_prompt"}, "approval"),
+                 ({"hook_event_name": "Notification", "message": "MCP server requests input",
+                   "notification_type": "elicitation_dialog"}, "waiting"),
+                 ({"hook_event_name": "Notification", "message": "Signed in", "notification_type": "auth_success"}, "waiting"),
+                 ({"hook_event_name": "Notification", "message": "", "notification_type": "elicitation_response"}, "working")]
         for payload, want in steps:
             self.run_hook(s["id"], "claude", payload)
             live = self.tmux.sessions()
