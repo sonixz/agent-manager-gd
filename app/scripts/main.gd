@@ -61,6 +61,9 @@ var level_menu: PopupMenu
 var perm_dialog: ConfirmationDialog   # Loop 27: an open agent's permission level, applied on the same conversation
 var perm_level: OptionButton
 var perm_info: Label
+var perm_push: CheckBox    # Loop 28: lifts the git push deny rules for this session
+var perm_merge: CheckBox   # and git merge / rebase
+var perm_git := {}         # its git rights when the dialog opened (only a change is sent)
 const LEVELS := {  # Loop 24: [menu label, card badge, what it means]
 	"ask": ["Ask before acting", "asks first", "Asks before editing files or running commands"],
 	"edits": ["Auto edits (asks for commands)", "auto edits", "Edits files without asking; asks before other commands"],
@@ -2229,6 +2232,12 @@ func _open_permissions(id: String) -> void:
 			perm_level.set_item_disabled(i, true)
 		if k == str(s.get("level", "auto")):
 			perm_level.select(i)
+	perm_git = s.get("git_rights", {"push": true, "merge": true, "default": true})
+	var claude := str(s.get("tool", "")) == "claude"
+	perm_push.button_pressed = bool(perm_git.get("push", true))
+	perm_merge.button_pressed = bool(perm_git.get("merge", true))
+	perm_push.disabled = not claude
+	perm_merge.disabled = not claude
 	var busy := str(s.get("activity", "")) in ["working", "approval", "wrapping"]
 	var running := str(s.get("state", "")) == "running"
 	var lines := ["A level is set when the agent starts: it starts again", "on its own conversation, nothing is lost."]
@@ -2240,6 +2249,8 @@ func _open_permissions(id: String) -> void:
 	elif not running:
 		lines.append("It is not running: the change applies at its next start.")
 	lines.append("Its sessions above the new level come down to it.")
+	if claude:
+		lines.append("Git: by default the orchestrator's sessions may not push nor merge; yours may.")
 	lines.append("Your keys, ~/.ssh and .env stay refused at every level.")
 	perm_info.text = "\n".join(lines)
 	perm_dialog.title = "Permissions · " + str(s.get("name", ""))
@@ -2251,11 +2262,18 @@ func _open_permissions(id: String) -> void:
 func _apply_permissions(when: String) -> void:
 	var id := menu_target
 	var lv := str(perm_level.get_selected_metadata())
-	var r := await engine.call_api("POST", "/sessions/%s/level" % id, {"level": lv, "when": when})
+	var body := {"level": lv, "when": when}
+	if not perm_push.disabled and perm_push.button_pressed != bool(perm_git.get("push", true)):
+		body["git_push"] = perm_push.button_pressed
+	if not perm_merge.disabled and perm_merge.button_pressed != bool(perm_git.get("merge", true)):
+		body["git_merge"] = perm_merge.button_pressed
+	var r := await engine.call_api("POST", "/sessions/%s/permissions" % id, body)
 	if r.has("error"):
 		status_label.text = str(r["error"])
 		return
 	var more := ("  ·  %d of its sessions came down to it" % (r["lowered"] as Array).size()) if (r["lowered"] as Array).size() > 0 else ""
+	if body.has("git_push") or body.has("git_merge"):
+		more += "  ·  git push %s, merge %s" % ["on" if perm_push.button_pressed else "off", "on" if perm_merge.button_pressed else "off"]
 	_toast("%s: %s, %s%s" % [str(_session(id).get("name", "")), str(LEVELS.get(lv, [lv])[0]).get_slice(" (", 0), str(r["applied"]), more])
 	await refresh()
 
@@ -3775,6 +3793,14 @@ func _build_menus() -> void:
 	pv.custom_minimum_size = Vector2(460, 0)
 	perm_level = OptionButton.new()
 	pv.add_child(perm_level)
+	perm_push = CheckBox.new()
+	perm_push.text = "Enable git push"
+	perm_push.tooltip_text = "Lifts Claude Code's deny rules on git push for this session. By default the orchestrator's sessions may not push; yours may."
+	pv.add_child(perm_push)
+	perm_merge = CheckBox.new()
+	perm_merge.text = "Enable git merge and rebase"
+	perm_merge.tooltip_text = "Lifts the deny rules on git merge and git rebase for this session."
+	pv.add_child(perm_merge)
 	perm_info = Label.new()
 	perm_info.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 	perm_info.add_theme_font_size_override("font_size", 12)

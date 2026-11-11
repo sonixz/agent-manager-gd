@@ -50,7 +50,9 @@ STALE_WORKING_SECONDS = 15
 # how deep the tree goes (the orchestrator, its sessions, their helpers). Pushing and merging stay the owner's.
 MAX_RUNNING_CHILDREN = 4
 MAX_DEPTH = 2
-OWNER_ONLY_GIT = ["Bash(git push)", "Bash(git push *)", "Bash(git merge *)", "Bash(git rebase *)"]
+GIT_PUSH_RULES = ["Bash(git push)", "Bash(git push *)"]
+GIT_MERGE_RULES = ["Bash(git merge *)", "Bash(git rebase *)"]
+OWNER_ONLY_GIT = GIT_PUSH_RULES + GIT_MERGE_RULES
 ORCH_NOTE = (
     "You are the orchestrator of Agent Manager GD: you plan, delegate, follow up and check; you rarely code yourself. "
     "Your agent-manager MCP tools: list_repos, list_sessions, start_session (repo, worktree, level, model, document), "
@@ -213,6 +215,28 @@ class Sessions:
         cap = (self.store.get(parent) or {}).get("level") or "auto"
         return cap if cap in LEVELS else "auto"
 
+    def set_permissions(self, sid: str, level: str = "", git_push: bool | None = None, git_merge: bool | None = None,
+                        when: str = "turn") -> dict:
+        """Loop 27-28: the owner's permissions for one agent (from the app; no agent tool does this): its level, and
+        its git rights (« Enable git push », « Enable git merge and rebase », Claude Code only: they lift the deny rules).
+        Applied like a level, on the same conversation."""
+        rec = self.store.get(sid)
+        if not rec:
+            raise ValueError("no such session")
+        if git_push is None and git_merge is None:
+            return self.set_level(sid, level or rec.get("level") or "auto", when)
+        if rec["tool"] != "claude":
+            raise ValueError("git rights are Claude Code deny rules; Codex and shells have none")
+        before = self.git_rights(rec)
+        self.store.update(sid, **{f"git_{k}": ("on" if v else "off") for k, v in (("push", git_push), ("merge", git_merge))
+                                  if v is not None})
+        after = self.git_rights(self.store.get(sid))
+        self._log(sid, {"git": [{k: before[k] for k in ("push", "merge")}, {k: after[k] for k in ("push", "merge")}]})
+        if level and level != (rec.get("level") or "auto"):
+            return self.set_level(sid, level, when)   # restarts once, with both changes
+        return {"id": sid, "level": rec.get("level") or "auto", "was": rec.get("level") or "auto", "git": after,
+                "applied": self._apply_level(sid, when), "lowered": [], "children": {}}
+
     def set_level(self, sid: str, level: str, when: str = "turn") -> dict:
         """Loop 27: the owner changes an agent's permission level (from the app; no agent tool does this). A level is
         set at launch, so it applies when the session starts again on its own conversation (resume): now, at the end
@@ -239,7 +263,7 @@ class Sessions:
             if level_rank(d.get("level") or "auto") > level_rank(level) or d.get("level") == "config":
                 self.store.update(d["id"], level=self._cap(d["parent"]))
                 lowered.append(d["id"])
-        self._log_level(sid, old, level, lowered)
+        self._log(sid, {"level": [old, level], "children_lowered": lowered})
         applied = {sid: self._apply_level(sid, when)}
         for c in lowered:
             applied[c] = self._apply_level(c, "turn" if when == "now" else when)
@@ -258,12 +282,12 @@ class Sessions:
         self.resume(sid)
         return "restarted"
 
-    def _log_level(self, sid: str, old: str, new: str, lowered: list) -> None:
+    def _log(self, sid: str, change: dict) -> None:
         """Each change is kept in the session's folder (permissions.log, one JSON line each)."""
         folder = os.path.join(self.home, "sessions", sid)
         os.makedirs(folder, exist_ok=True)
         with open(os.path.join(folder, "permissions.log"), "a", encoding="utf-8") as f:
-            f.write(json.dumps({"at": time.time(), "by": "owner", "level": [old, new], "children_lowered": lowered}) + "\n")
+            f.write(json.dumps({"at": time.time(), "by": "owner", **change}) + "\n")
 
     def level_log(self, sid: str) -> list[dict]:
         try:
@@ -402,9 +426,17 @@ class Sessions:
             for sub in ("runtime", "mcp"):
                 paths.append("/" + os.path.join(os.path.abspath(self.brain.home), sub) + "/**")
         out = [f"Read({p})" for p in paths] + [f"Edit({p})" for p in paths]
-        if rec and rec.get("id") and self.under_orchestrator(rec["id"]):
-            out += OWNER_ONLY_GIT   # the orchestrator and its sessions: pushing and merging are the owner's
+        if rec and rec.get("id"):
+            rights = self.git_rights(rec)
+            out += ([] if rights["push"] else GIT_PUSH_RULES) + ([] if rights["merge"] else GIT_MERGE_RULES)
         return out
+
+    def git_rights(self, rec: dict) -> dict:
+        """Loop 28: may it push, merge and rebase? By default the orchestrator and its sessions may not (pushing and
+        merging are the owner's), a session the owner started may; the owner's checkbox (on / off) wins either way."""
+        default = not self.under_orchestrator(rec["id"])
+        return {k: {"on": True, "off": False}.get(rec.get("git_" + k) or "", default) for k in ("push", "merge")} | \
+            {"default": default}
 
     def command_for(self, rec: dict, mode: str = "new", conversation: str = "") -> list[str]:
         """The tool's command with this session's hooks: options of this launch only, never the user's settings.
@@ -611,6 +643,7 @@ class Sessions:
                 "brain_document": bool(rec.get("brain_client") and rec.get("brain_document")),
                 "level": rec.get("level") or "auto",
                 "level_pending": rec["id"] in self._pending_level,
+                "git_rights": self.git_rights(rec),
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",

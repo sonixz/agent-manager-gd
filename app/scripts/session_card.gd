@@ -87,6 +87,12 @@ func setup(s: Dictionary, selected: bool, activity: Array) -> void:
 		lm.mouse_filter = MOUSE_FILTER_PASS
 		lm.tooltip_text = b[1]
 		top.add_child(lm)
+	var gr: Dictionary = s.get("git_rights", {})
+	if str(s.get("tool", "")) == "claude" and not gr.is_empty() and bool(gr.get("push", false)) and not bool(gr.get("default", true)):
+		var gp := _label("⇡ may push", AmTheme.col("WARM"), 11)   # Loop 28: the owner enabled git push for it
+		gp.mouse_filter = MOUSE_FILTER_PASS
+		gp.tooltip_text = "You enabled git push for this session (the orchestrator's sessions may not by default)"
+		top.add_child(gp)
 	if s.get("level_pending", false):  # Loop 27: a new level waits for the end of its turn
 		var pm := _label("↻ new level after this turn", AmTheme.col("MUTED"), 11)
 		pm.mouse_filter = MOUSE_FILTER_PASS

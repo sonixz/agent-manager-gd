@@ -261,6 +261,11 @@ def make_handler(sessions: Sessions, token: str):
                     if method == "POST" and action == "level":   # Loop 27: the owner, from the app
                         b = self._body()
                         return self._reply(200, sessions.set_level(sid, str(b.get("level", "")), str(b.get("when", "turn"))))
+                    if method == "POST" and action == "permissions":   # Loop 28: level and git rights at once
+                        b = self._body()
+                        opt = lambda k: bool(b[k]) if k in b else None  # noqa: E731
+                        return self._reply(200, sessions.set_permissions(sid, str(b.get("level", "")), opt("git_push"),
+                                                                         opt("git_merge"), str(b.get("when", "turn"))))
                     if method == "GET" and action == "level":
                         return self._reply(200, {"log": sessions.level_log(sid)})
                     if method == "POST" and action == "resume":

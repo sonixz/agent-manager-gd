@@ -292,6 +292,41 @@ class EngineTest(unittest.TestCase):
             self.sessions.set_level(sh["id"], "ask")
         self.assertIn("Read(/" + os.path.join(os.path.abspath(self.tmp), "runtime") + "/**)", self.sessions.deny_rules())
 
+    def test_the_owner_enables_git_push_for_one_session(self):
+        relaunched = []
+        self.sessions.tmux.respawn = lambda name, cwd, cmd: relaunched.append(cmd)
+        orch = self.sessions.create("Orchestrator", "shell", self.tmp, role="orchestrator")
+        worker = self.sessions.create("Worker", "shell", self.tmp, parent=orch["id"])
+        mine = self.sessions.create("Mine", "shell", self.tmp)
+        for x in (orch, worker, mine):
+            self.as_claude(x["id"])
+            self.run_hook(x["id"], "claude", {"hook_event_name": "SessionStart"})
+        deny = lambda sid: self.sessions.deny_rules(self.sessions.store.get(sid))  # noqa: E731
+        # by default: the orchestrator's sessions may not push nor merge, a session the owner started may
+        self.assertIn("Bash(git push *)", deny(worker["id"]))
+        self.assertIn("Bash(git merge *)", deny(worker["id"]))
+        self.assertNotIn("Bash(git push *)", deny(mine["id"]))
+        self.assertEqual(self.sessions.get(worker["id"])["git_rights"], {"push": False, "merge": False, "default": False})
+        # « Enable git push »: the push rules go, merge and rebase stay refused; it restarts on its conversation
+        r = self.sessions.set_permissions(worker["id"], git_push=True)
+        self.assertEqual((r["git"]["push"], r["git"]["merge"], r["applied"]), (True, False, "restarted"))
+        self.assertNotIn("Bash(git push *)", deny(worker["id"]))
+        self.assertNotIn("Bash(git push)", deny(worker["id"]))
+        self.assertIn("Bash(git rebase *)", deny(worker["id"]))
+        with open(relaunched[-1][2], encoding="utf-8") as f:                  # the native JSON it starts with
+            self.assertNotIn("Bash(git push *)", json.load(f)["permissions"]["deny"])
+        self.assertIn("Bash(git push *)", deny(orch["id"]))                    # its parent keeps its own rights
+        # the owner can also refuse it to a session of their own; level and git change in one restart
+        n = len(relaunched)
+        r = self.sessions.set_permissions(mine["id"], level="ask", git_push=False, git_merge=False)
+        self.assertEqual(len(relaunched), n + 1)
+        self.assertIn("Bash(git push *)", deny(mine["id"]))
+        self.assertEqual(self.sessions.store.get(mine["id"])["level"], "ask")
+        self.assertEqual([list(e) for e in self.sessions.level_log(mine["id"])][0][2], "git")
+        sh = self.sessions.create("sh", "shell", self.tmp)
+        with self.assertRaises(ValueError):
+            self.sessions.set_permissions(sh["id"], git_push=True)
+
     def test_permission_levels_flags_denied_paths_group_default_and_child_cap(self):
         from engine.sessions import LEVEL_FLAGS
         cmd = self.sessions.command_for({"id": "lv000001", "tool": "claude", "level": "full"})

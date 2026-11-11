@@ -76,6 +76,9 @@ class Store:
                     db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
             if "level" not in cols:  # Loop 24: its permission level (ask, edits, auto, full)
                 db.execute("ALTER TABLE sessions ADD COLUMN level TEXT NOT NULL DEFAULT 'auto'")
+            for col in ("git_push", "git_merge"):  # Loop 28: the owner's git rights for it: '' (by origin), on, off
+                if col not in cols:
+                    db.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
             if "level" not in {r[1] for r in db.execute("PRAGMA table_info(groups)")}:  # a group's default level
                 db.execute("ALTER TABLE groups ADD COLUMN level TEXT NOT NULL DEFAULT ''")
 
@@ -113,7 +116,8 @@ class Store:
 
     def update(self, sid: str, **fields) -> None:
         allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived", "archived_at", "cwd", "worktree",
-                                                            "brain_client", "remote_control", "brain_document", "level", "role", "model")}
+                                                            "brain_client", "remote_control", "brain_document", "level", "role", "model",
+                                                            "git_push", "git_merge")}
         if not allowed:
             return
         sets = ", ".join(f"{k} = :{k}" for k in allowed)

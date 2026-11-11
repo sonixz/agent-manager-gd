@@ -5,6 +5,10 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Git rights per session · Loop 28
+- In Permissions…: « Enable git push » and « Enable git merge and rebase », per session. The orchestrator's sessions
+  start without them, yours with them; a box lifts or adds Claude Code's deny rules, applied on the same conversation.
+
 ### Permissions on an open agent · Loop 27
 - Right click a session › Permissions…: change its level and apply it on the same conversation, at once when it is
   idle, at the end of its turn when it works, or at its next start. Its sessions above the new level come down to it.

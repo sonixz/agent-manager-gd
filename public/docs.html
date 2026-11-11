@@ -246,6 +246,11 @@
           the new level come down to it. Only you change a level, from the app; no agent tool does it, and the engine's
           token is out of reach of the agents' file tools. Each change is kept in the session's
           <code>permissions.log</code>.</p>
+        <p><b>Git rights</b> (Claude Code), in the same dialog: <i>Enable git push</i> and <i>Enable git merge and
+          rebase</i>. By default the orchestrator and its sessions may not push, merge nor rebase (pushing and merging
+          are yours); a session you start may. A box lifts or adds the matching deny rules for that session only, applied
+          like a level; the card shows <i>⇡ may push</i> when you enabled it for an orchestrator's session. Like every deny
+          rule, it covers the commands Claude writes, not a script that runs git itself.</p>
         <p>At every level, <i>No permission</i> included, Claude Code refuses to read or change <code>~/.ssh</code>,
           <code>~/.aws</code>, <code>~/.gnupg</code>, the GitHub CLI's login, <code>.env</code> files, Agent Manager's
           keys and the Second Brain's tokens (deny rules apply in every mode). This covers its file tools and the file
