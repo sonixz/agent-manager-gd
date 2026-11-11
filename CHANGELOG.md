@@ -5,9 +5,12 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Website
+- The home page shows the orchestrator and the permissions, and its list of loops goes up to Loop 31.
+
 ### Agent permissions · Loop 31
-- ◐ › Agent permissions…: every agent with its level, file access, shell sandbox and git rights, and Edit… for each;
-  a default file access per group (right click the group), beside its default level.
+- ◐ › Agent permissions…: every agent with its level, file access, Claude Code's sandbox and git rights, and Edit…
+  for each; a default file access per group (right click the group), beside its default level.
 
 ### Shell commands contained · Loop 30 (ready, waiting for bubblewrap)
 - In Permissions…: « Contain shell commands too », Claude Code's own sandbox, filled from the file access (its home

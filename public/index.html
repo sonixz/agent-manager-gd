@@ -244,6 +244,60 @@
       </div>
     </section>
 
+    <!-- ORCHESTRATOR -->
+    <section id="orchestrator" class="section">
+      <div class="container">
+        <div class="feature flip reveal">
+          <div>
+            <p class="overline">Orchestrator · beta</p>
+            <h2>One agent plans, you decide</h2>
+            <p class="muted">One orchestrator for all your connected repositories, in a floating window (◆ Orchestrator,
+              or Ctrl+O). It reads your Second Brain, proposes a plan and waits for your OK, then starts each task in
+              its own worktree and hands you every result to review.</p>
+            <ul class="muted">
+              <li><b>Its plan, live</b>: each task with its tool, its model, why, and its session's state.</li>
+              <li><b>Routing rules you edit</b>: which tool and model for which kind of task.</li>
+              <li><b>A daily token budget</b>, read from the agents' own logs.</li>
+              <li><b>Guard rails</b>: by default it and its sessions are refused git push, merge and rebase; at most 4
+                sessions at once, 2 levels deep; <i>Stop all</i> ends them, nothing is deleted.</li>
+            </ul>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/orchestrator-panel.webp" width="1920" height="1200" loading="lazy" alt="The orchestrator's floating window: connected to the Second Brain, its question to the owner with the plan, its live terminal, and its sessions.">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- PERMISSIONS -->
+    <section id="permissions" class="section section-alt">
+      <div class="container">
+        <div class="feature reveal">
+          <div>
+            <p class="overline">Permissions</p>
+            <h2>You decide what each agent may do</h2>
+            <p class="muted">A level, a file access and git rights for each session, with a default level and file
+              access per group. Agent Manager fills Claude Code's and Codex's own settings; it adds no permission
+              system of its own.</p>
+            <ul class="muted">
+              <li><b>Five levels</b>: Ask before acting, Auto edits, Auto, No permission, or Per my config, where your
+                own Claude Code or Codex settings decide.</li>
+              <li><b>File access</b>: Open, Contained (its folder only) or Read only, plus the extra folders you list.</li>
+              <li><b>Git rights</b> (Claude Code): <i>Enable git push</i>, <i>Enable git merge and rebase</i>, session by session.</li>
+              <li><b>Changed on an open agent</b>: it starts again on its own conversation, at once or at the end of its turn.</li>
+              <li><b>One view</b>: ◐ › Agent permissions… shows every agent, with Edit… for each.</li>
+            </ul>
+            <p class="small muted" style="margin-top: 14px">At every level, agents' file tools are refused
+              <code>~/.ssh</code>, <code>.env</code> files and your keys. These rules are a guard rail on the agent's
+              own tools, not a wall: a script it writes and runs is not stopped by them.</p>
+          </div>
+          <figure class="screen">
+            <img src="assets/showcase/permissions-overview.webp" width="1920" height="1200" loading="lazy" alt="The Agent permissions view: seven agents in one table, each with its level, file access, git push and merge rights and an Edit… button; below, each group's default level and file access.">
+          </figure>
+        </div>
+      </div>
+    </section>
+
     <!-- GIT & SSH -->
     <section id="git" class="section">
       <div class="container">
@@ -376,6 +430,12 @@
           <li><span class="when">Loops 12–16</span><b>Cloud sandboxes</b><span>Fly.io machines per agent, tunnels, budgets that only pause.</span></li>
           <li class="brain"><span class="when">Loop 16e</span><b>✦ Sessions that document themselves</b><span>The agent orients in the Brain, then proposes your words, decisions and its journal.</span></li>
           <li><span class="when">Loops 17–18</span><b>This website</b><span>Every screenshot from the real app, on a fictional workspace, in one command.</span></li>
+          <li><span class="when">Loops 19–21</span><b>How-to and Docs</b><span>Twelve guides with a real screenshot per step, the Docs, one command that checks it all.</span></li>
+          <li class="brain"><span class="when">Loop 22</span><b>✦ The Brain, visible</b><span>A live badge, a ✦ light per session, a pulse when an agent uses the Brain.</span></li>
+          <li><span class="when">Loop 23</span><b>Approvals that unstick</b><span>Approve and Refuse answer at once; one notification per request.</span></li>
+          <li><span class="when">Loop 24</span><b>Permission levels</b><span>From Ask before acting to No permission; paths no agent may touch at any level.</span></li>
+          <li><span class="when">Loops 25–26</span><b>The orchestrator</b><span>One agent plans across your repositories, delegates in worktrees and hands you each result.</span></li>
+          <li><span class="when">Loops 27–31</span><b>What each agent may do</b><span>Level, file access and git rights per session, changed on an open agent; one view for all of them.</span></li>
         </ol>
       </div>
     </section>

@@ -64,7 +64,10 @@ If you are an AI agent working in this repository, or plugged into these apps ov
   private tmux server under your user account. They run commands and change files with your permissions.
 - **Choose each session's level knowingly.** Ask before acting (`ask`), Auto edits (`edits`), Auto (`auto`, the
   default) and No permission (`full`). `full` skips every confirmation: keep it for a folder and a machine you can
-  afford to lose. A group can set a default, and a child session never gets more than its parent.
+  afford to lose. Per my config (`config`) passes no level at all: your own Claude Code or Codex settings decide. A
+  group can set a default, and a child session never gets more than its parent.
+- **File access is a guard rail too.** *Contained* and *Read only* keep Claude Code's file tools in the session's
+  folder and the extra folders you list. Shell commands are not contained by them.
 - **The deny rules are a seatbelt, not a wall.** At every level, Claude Code's file tools are refused `~/.ssh`,
   `~/.aws`, `~/.gnupg`, `.env` files, Agent Manager's keys and the Second Brain's tokens. A script the agent writes and
   runs is not stopped by them, and Codex has its own sandbox instead.

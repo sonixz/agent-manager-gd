@@ -45,9 +45,10 @@ gets a key of its own: it reads the project's memory and proposes what it learne
 badge shows the Brain is there; a ✦ light on each session shows its key, whether it documents its work, and pulses
 when it uses the Brain.
 
-**Safe by default, fast when you want.** Four permission levels per session or per group, from *Ask before acting* to
-*No permission*. At every level, agents' file tools cannot touch `~/.ssh`, `.env` files or your keys. Each connected
-repository gets its own deploy key, so git just works without ever exposing your personal SSH key.
+**Safe by default, fast when you want.** A permission level, a file access and git rights for each session, from *Ask
+before acting* to *No permission*, changed on an open agent without losing its conversation, and one view that shows
+what every agent may do. At every level, agents' file tools cannot touch `~/.ssh`, `.env` files or your keys. Each
+connected repository gets its own deploy key, so git just works without ever exposing your personal SSH key.
 
 **And more.** Resume any conversation, fork it, give a session its own git branch. Review a diff and comment lines.
 Wrap a session up into a summary and brief the next one with it. Hold F8 to dictate, F9 for voice commands. Run an

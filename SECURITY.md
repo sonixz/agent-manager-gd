@@ -21,16 +21,19 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
 - **Paths no agent may touch**: at every permission level, *No permission* included, Claude Code sessions get deny
   rules for `~/.ssh`, `~/.aws`, `~/.gnupg`, the GitHub CLI's login, `.env` files, Agent Manager's keys and the Second
   Brain's tokens.
-- **Agents that start agents**: a session started by an agent never gets more permissions than its parent; the
-  orchestrator and its sessions are refused `git push`, `git merge` and `git rebase`; at most 4 run at once under one
-  root session, 2 levels deep. An agent can only write to sessions it started, and never presses keys (approvals) for
+- **File access per session**: *Contained* and *Read only* keep Claude Code's file tools inside the session's folder
+  and the extra folders you list; a session started by an agent is never less restricted than its parent.
+- **Agents that start agents**: a session started by an agent never gets more permissions than its parent; by default
+  the orchestrator and its sessions are refused `git push`, `git merge` and `git rebase`; at most 4 run at once under
+  one root session, 2 levels deep. An agent can only write to sessions it started, and never presses keys (approvals) for
   another session.
 
 ## What it does not protect
 
 - **Scripts an agent writes and runs.** Deny rules cover Claude Code's file tools and the file commands it recognises
   in a shell, not a program that opens files itself. Only an operating-system sandbox stops that (Claude Code's
-  sandbox needs bubblewrap on Linux and WSL). Use *No permission* only on projects you trust, ideally in a worktree.
+  own sandbox; on Linux and WSL it needs bubblewrap and socat, which you install yourself). Use *No permission* only
+  on projects you trust, ideally in a worktree.
 - **Codex** has no deny rules: its own sandbox limits where it writes, not what it reads.
 - **What agents send to their providers.** Your prompts and the files agents read go to their providers under your
   account, as with the CLIs alone.
