@@ -219,6 +219,39 @@ func _run() -> void:
 			await wait(0.6)
 			await shot("routing-rules")
 			main.rules_dialog.hide()
+		"list":  # Loop 32: twenty sessions, one per line; then the same list as tiles
+			var more := [
+				["Cart totals", "claude", "acme-store", "Acme Store", WORKING, {}], ["Coupon codes", "claude", "acme-store", "Acme Store", DONE, {}],
+				["Search index", "codex", "acme-store", "Acme Store", CODEX_DONE, {}], ["Image pipeline", "claude", "acme-store", "Acme Store", WORKING, {"level": "edits"}],
+				["Auth tokens", "claude", "orbit-api", "Orbit API", NEEDS_ANSWER, {}], ["Pagination", "claude", "orbit-api", "Orbit API", DONE, {"access": "contained"}],
+				["Webhooks", "codex", "orbit-api", "Orbit API", CODEX_DONE, {}], ["Load test", "shell", "orbit-api", "Orbit API", {}, {}],
+				["Particles", "claude", "pixel-forge", "Pixel Forge", WORKING, {}], ["Shader cache", "claude", "pixel-forge", "Pixel Forge", NEEDS_OK, {"level": "ask"}],
+				["Level editor", "claude", "pixel-forge", "Pixel Forge", DONE, {}], ["Save files", "codex", "pixel-forge", "Pixel Forge", CODEX_DONE, {}],
+				["Gamepad input", "claude", "pixel-forge", "Pixel Forge", WORKING, {"level": "full", "access": "readonly"}], ["Build script", "shell", "pixel-forge", "Pixel Forge", {}, {}],
+			]
+			var ids := {}
+			for p in more:
+				var body := {"name": p[0], "tool": p[1], "cwd": code.path_join(p[2]), "group": p[3], "brain": p[1] != "shell"}
+				body.merge(p[5])
+				var r: Dictionary = await main.engine.call_api("POST", "/sessions", body)
+				ids[p[0]] = str(r.get("id", ""))
+			await wait(2.5)
+			for p in more:
+				if p[4]:
+					_state(ids[p[0]], p[1], p[4])
+			await main.refresh()
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			await wait(3.0)
+			await main.refresh()
+			main.set_list("line")
+			await wait(0.8)
+			report.append("list: %d sessions" % main.sessions.size())
+			await shot("list-line")
+			main.set_list("tile")
+			await wait(0.8)
+			await shot("list-tile")
+			main.set_list("line")
 		"permissions":  # Loop 24: the level at creation, its confirmation, the badge on the card
 			await main.engine.call_api("POST", "/sessions", {"name": "Night refactor", "tool": "claude", "cwd": code.path_join("pixel-forge"), "group": "Pixel Forge", "brain": true, "level": "full"})
 			await main.engine.call_api("POST", "/sessions", {"name": "Careful fix", "tool": "claude", "cwd": code.path_join("orbit-api"), "group": "Orbit API", "brain": true, "level": "ask"})

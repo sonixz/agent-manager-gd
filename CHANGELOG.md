@@ -5,6 +5,11 @@ Newest first.
 
 ## Unreleased: alpha
 
+### One session per line · Loop 32
+- The session list shows one session per line: state dot, tool, name, short marks and the state in a word. Twenty
+  sessions fit where eight tiles did; the rest is in the line's tooltip. ◐ › One session per line (or the palette)
+  switches back to the tiles; your choice is remembered.
+
 ### Website
 - The home page shows the orchestrator and the permissions, and its list of loops goes up to Loop 31.
 

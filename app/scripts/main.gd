@@ -14,6 +14,8 @@ var tree_sig := ""
 var terms := {}               # session id -> VtTerminal (kept alive while hidden)
 var selected := ""
 var view := "focus"
+var density := "line"         # the session list: "line" (one session per line) or "tile" (tiles that say more)
+var list_item := -1           # its check mark in the ◐ menu
 var grid_ids: Array = []      # sessions shown in the grid, selected first
 var last_activity := {}
 var dismissed := {}         # session id -> the request (its « since ») you closed with ✕: off the queue, still on its card
@@ -180,6 +182,9 @@ func _ready() -> void:
 	view = str(cfg.get_value("ui", "view", "focus"))
 	if view in ["setup", "shortcuts", "connect"]:  # settings pages are not reopened at startup
 		view = "focus"
+	density = str(cfg.get_value("ui", "list", OS.get_environment("AGMGD_LIST") if OS.get_environment("AGMGD_LIST") != "" else "line"))
+	if density not in ["line", "tile"]:
+		density = "line"
 	spoken = bool(cfg.get_value("ui", "spoken", false))
 	sound_on = bool(cfg.get_value("ui", "sound", true))
 	_load_keymap()
@@ -575,6 +580,16 @@ func set_theme_name(name: String) -> void:
 	tree_sig = ""
 	await refresh()
 	_layout_view()
+
+
+## The session list: one session per line ("line"), or tiles that say more ("tile"). Remembered.
+func set_list(d: String) -> void:
+	density = d
+	_save("list", d)
+	if list_item >= 0:
+		theme_menu.set_item_checked(list_item, d == "line")
+	tree_sig = ""
+	_render_list()
 
 
 func _save(key: String, value: Variant) -> void:
@@ -1581,6 +1596,7 @@ func _render_list() -> void:
 	for c in list_box.get_children():
 		c.queue_free()
 	cards.clear()
+	list_box.add_theme_constant_override("separation", 2 if density == "line" else 6)
 	for g in tree:
 		var gname := str(g["name"])
 		if gname != "":
@@ -1603,7 +1619,7 @@ func _render_list() -> void:
 func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
 	var id := str(s["id"])
 	var card := SessionCard.new()
-	card.setup(s, id == selected, activity_of(s))
+	card.setup(s, id == selected, activity_of(s), density == "line")
 	card.set_brain(brain_info(id), false)
 	card.picked.connect(select)
 	card.rename.connect(_rename_session)
@@ -3674,6 +3690,7 @@ func open_palette() -> void:
 		await refresh())})
 	for v in [["focus", "Focus view", "Ctrl+Shift+F"], ["grid", "Grid view", "Ctrl+Shift+G"], ["board", "Board view", "Ctrl+Shift+B"]]:
 		items.append({"label": v[1], "hint": v[2], "run": set_view.bind(v[0])})
+	items.append({"label": "List: tiles" if density == "line" else "List: one session per line", "hint": "the session list on the left", "run": set_list.bind("tile" if density == "line" else "line")})
 	for t in AmTheme.THEMES:
 		items.append({"label": "Theme: " + AmTheme.LABELS[t], "hint": "", "run": set_theme_name.bind(t)})
 	if selected != "":
@@ -3930,6 +3947,11 @@ func _build_menus() -> void:
 		theme_menu.add_item(AmTheme.LABELS[t])
 		theme_menu.set_item_metadata(theme_menu.item_count - 1, t)
 	theme_menu.add_separator()
+	theme_menu.add_check_item("One session per line")
+	list_item = theme_menu.item_count - 1
+	theme_menu.set_item_metadata(list_item, "__list")
+	theme_menu.set_item_checked(list_item, density == "line")
+	theme_menu.add_separator()
 	theme_menu.add_item("Usage…")
 	theme_menu.set_item_metadata(theme_menu.item_count - 1, "__usage")
 	theme_menu.add_item("Agent permissions…")
@@ -3952,6 +3974,8 @@ func _build_menus() -> void:
 			set_view("usage")
 		elif m == "__permissions":
 			set_view("permissions")
+		elif m == "__list":
+			set_list("tile" if density == "line" else "line")
 		else:
 			set_theme_name(m))
 	add_child(theme_menu)
