@@ -177,10 +177,12 @@ class Sessions:
         project = self._repo_name(rec.get("repo_id", "")) or os.path.basename((rec.get("base_repo") or rec.get("cwd") or "").rstrip("/"))
         return BRAIN_DOCUMENT_NOTE.format(project=project or rec["name"], name=rec["name"])
 
-    @staticmethod
-    def remote_name(rec: dict) -> str:
-        """The name Remote Control shows in claude.ai/code: « Group · Session », or the session's name alone."""
-        return (f"{rec['grp']} · {rec['name']}" if rec.get("grp") else rec["name"])[:80]
+    def remote_name(self, rec: dict) -> str:
+        """The name Remote Control shows in claude.ai/code: « Group · Session »; without a group, a child is named after
+        its parent (« Orchestrator · Task 1 »); otherwise the session's name alone."""
+        parent = (self.store.get(rec["parent"]) or {}) if rec.get("parent") else {}
+        prefix = rec.get("grp") or parent.get("name", "")
+        return (f"{prefix} · {rec['name']}" if prefix else rec["name"])[:80]
 
     def level_for(self, level: str, grp: str = "", parent: str = "") -> str:
         """The level asked for, or the group's default, or « auto » (Claude Code's own default in its terminal);
@@ -272,9 +274,12 @@ class Sessions:
         if cur and cur["state"] == "running":
             return cur
         if cur:
+            if not cur.get("remote_control"):  # an orchestrator started before it had Remote Control gets it now
+                self.store.update(cur["id"], remote_control=1)
             return self.resume(cur["id"]) if hasattr(self, "resume") else cur
+        # Remote Control like the app's default: the owner follows and answers it from claude.ai/code or the Claude app
         return self.create("Orchestrator", "claude", cwd, "", brain=True, document=True, level=level or "auto",
-                           model=model, role="orchestrator")
+                           model=model, role="orchestrator", remote=True)
 
     def stop_orchestrator(self) -> list[str]:
         """Stops the orchestrator and every session under it (they stay in the list, ended; nothing is deleted)."""
@@ -445,7 +450,7 @@ class Sessions:
 
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
-               repo: str = "", host: str = "local", remote: bool = False, document: bool = False,
+               repo: str = "", host: str = "local", remote: bool | None = None, document: bool = False,
                level: str = "", model: str = "", role: str = "") -> dict:
         if host == "sandbox":
             return self.create_sandbox_session(name, tool, grp, repo, brain)
@@ -476,6 +481,8 @@ class Sessions:
                              repo_id=repo)
         self.store.update(rec["id"], level=level, model=model, role=role)
         rec = self.store.get(rec["id"])
+        if remote is None:  # not said: a child follows its parent (the orchestrator's children too), else no
+            remote = bool(parent and (self.store.get(parent) or {}).get("remote_control"))
         if remote and tool == "claude":
             self.store.update(rec["id"], remote_control=1)
             rec = self.store.get(rec["id"])

@@ -233,7 +233,7 @@ def make_handler(sessions: Sessions, token: str):
                                                             bool(b.get("worktree", False)), bool(b.get("brain", True)),
                                                             str(b.get("parent", "")), bool(b.get("brief", False)),
                                                             str(b.get("repo", "")), str(b.get("host", "local")),
-                                                            bool(b.get("remote", False)), bool(b.get("document", False)),
+                                                            (bool(b["remote"]) if "remote" in b else None), bool(b.get("document", False)),
                                                             str(b.get("level", "")), str(b.get("model", ""))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]

@@ -67,6 +67,32 @@ class AgentsMcpTest(unittest.TestCase):
         self.assertIn("error", sent_other)
         self.assertIn("error", sent_own)
 
+    def test_the_orchestrator_and_its_children_have_remote_control(self):
+        launched = []                       # no real Claude Code: the command each launch would run
+        self.s.tmux.new_session = lambda name, cwd, cmd, **kw: launched.append(cmd)
+        orch = self.s.start_orchestrator(self.tmp)
+        me = orch["id"]
+        self.assertTrue(self.s.store.get(me)["remote_control"])               # like the app's default
+        self.assertEqual(launched[-1][launched[-1].index("--remote-control") + 1], "Orchestrator")
+        inherited, forced_off, shell = self.mcp([("start_session", {"name": "Task 1", "tool": "claude"}),
+                                                 ("start_session", {"name": "Quiet", "tool": "claude", "remote": False}),
+                                                 ("start_session", {"name": "Sh", "tool": "shell"})], me=me)
+        self.assertTrue(self.s.store.get(inherited["id"])["remote_control"])  # a child follows its parent
+        self.assertEqual(launched[1][launched[1].index("--remote-control") + 1], "Orchestrator · Task 1")
+        self.assertFalse(self.s.store.get(forced_off["id"])["remote_control"])
+        self.assertNotIn("--remote-control", launched[2])
+        self.assertFalse(self.s.store.get(shell["id"])["remote_control"])     # only Claude Code has it
+        # a session the owner starts without it: its children do not get it either
+        lead = self.s.create("Lead2", "claude", self.tmp, grp="GD Project")
+        (kid,) = self.mcp([("start_session", {"name": "Kid", "tool": "claude"})], me=lead["id"])
+        self.assertFalse(self.s.store.get(kid["id"])["remote_control"])
+        # an orchestrator from before (no Remote Control) gets it when it is resumed, and keeps it
+        self.s.store.update(me, remote_control=0)
+        self.s.start_orchestrator(self.tmp)
+        self.assertTrue(self.s.store.get(me)["remote_control"])
+        self.assertIn("--remote-control", launched[-1])
+        self.assertIn("--resume", launched[-1])
+
     def test_the_orchestrator_asks_the_owner_finishes_children_and_is_capped(self):
         orch = self.s.create("Orchestrator", "shell", self.tmp, role="orchestrator")
         me = orch["id"]

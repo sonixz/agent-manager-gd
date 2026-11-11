@@ -23,14 +23,15 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
     {"name": "read_screen", "description": "The last lines of a session's terminal (plain text).",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "lines": {"type": "integer", "minimum": 5, "maximum": 200}}, "required": ["id"]}},
-    {"name": "start_session", "description": "Starts a new session as your child (Claude Code, Codex or a shell); you may then write to it. It never gets more permissions than you, and at most a few run at once under the same root session.",
+    {"name": "start_session", "description": "Starts a new session as your child (Claude Code, Codex or a shell); you may then write to it. It has Remote Control when you do (unless `remote` says otherwise). It never gets more permissions than you, and at most a few run at once under the same root session.",
      "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "tool": {"type": "string", "enum": ["claude", "codex", "shell"]},
                      "cwd": {"type": "string", "description": "folder; yours by default"}, "group": {"type": "string"},
                      "repo": {"type": "string", "description": "a connected repository's id (list_repos): the session works in its folder, git uses its own key"},
                      "worktree": {"type": "boolean", "description": "its own git branch in a worktree beside the repository"},
                      "level": {"type": "string", "enum": ["ask", "edits", "auto", "full"], "description": "permissions; capped at yours"},
                      "model": {"type": "string", "description": "the model to run, e.g. opus, sonnet, haiku (Claude Code) or a Codex model"},
-                     "document": {"type": "boolean", "description": "Claude Code: documents itself in the Second Brain"}}, "required": ["name", "tool"]}},
+                     "document": {"type": "boolean", "description": "Claude Code: documents itself in the Second Brain"},
+                     "remote": {"type": "boolean", "description": "Claude Code: Remote Control, so the owner can follow it from claude.ai/code or the Claude app; yours by default"}}, "required": ["name", "tool"]}},
     {"name": "send_to_session", "description": "Types a message into one of YOUR child sessions and presses Enter.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]}},
     {"name": "wait_for_session", "description": "Waits until a session stops working (done, waiting for an answer or an OK, ended), then returns its state and screen.",
@@ -110,6 +111,8 @@ def run_tool(eng, name, a):
                 "cwd": str(a.get("cwd") or mine.get("cwd") or "~"), "group": str(a.get("group", mine.get("grp", ""))),
                 "repo": str(a.get("repo", "")), "worktree": bool(a.get("worktree", False)), "level": str(a.get("level", "")),
                 "model": str(a.get("model", "")), "document": bool(a.get("document", False))}
+        if "remote" in a:  # otherwise the engine gives the child its parent's Remote Control
+            body["remote"] = bool(a["remote"])
         r = eng.call("POST", "/sessions", body)
         return r if "error" in r else eng.brief(r)
     if name == "send_to_session":
