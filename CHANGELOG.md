@@ -56,6 +56,8 @@ Newest first.
   cannot be written down is kept (Ctrl+K › Send my last recording again); the panel shows how long it has been
   listening and stops by itself after 5 minutes; nothing heard, or a terminal closed meanwhile, is said.
 - The same 10 seconds applied to every action (a merge, a clone, a restart on a slow disk): actions now get 60.
+- The voice panel (F8, F9) kept the theme the app had started with; it now follows a theme change at once, like
+  three dialog texts that kept the old text colour.
 - A cloud sandbox whose terminal could not connect ended on « Pane is dead », sometimes with a Python error, and the
   session looked ended although the machine was there. Its terminal now says what it does (« connecting… », « still
   waiting… »), reopens its tunnel when it fell, tries three times, then waits for Enter: the session stays alive. A

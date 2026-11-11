@@ -71,6 +71,7 @@ var level_menu: PopupMenu
 var perm_dialog: ConfirmationDialog   # Loop 27: an open agent's permission level, applied on the same conversation
 var perm_level: OptionButton
 var perm_info: Label
+var finish_warn: Label     # the note in the Finish dialog (a member so a theme change can colour it again)
 var perm_push: CheckBox    # Loop 28: lifts the git push deny rules for this session
 var perm_merge: CheckBox   # and git merge / rebase
 var perm_git := {}
@@ -562,6 +563,16 @@ func _restyle() -> void:
 	header_name.add_theme_font_override("font", AmTheme.ui_font(650))
 	empty_label.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 	toast.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL_2"), 10, approval_color(), 1, 12))
+	# Coloured once when the window was built, these kept the theme the app had started with: the voice panel (F8, F9)
+	# stayed neon on the green theme, and three dialog texts kept the old text colour.
+	if voice_overlay:
+		voice_overlay.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL_2"), 14, AmTheme.col("MINT"), 1, 14))
+	if read_text:
+		read_text.add_theme_color_override("default_color", AmTheme.col("TEXT"))
+	if perm_info:
+		perm_info.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	if finish_warn:
+		finish_warn.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 	for t in terms.values():
 		_style_terminal(t)
 	if orch_panel:
@@ -4158,11 +4169,11 @@ func _build_menus() -> void:
 	finish_delete.text = "Delete the branch afterwards (only if merged)"
 	finish_delete.button_pressed = true
 	fv.add_child(finish_delete)
-	var warn := Label.new()
-	warn.text = "The worktree folder is removed; the session goes to History. Uncommitted changes block this."
-	warn.add_theme_color_override("font_color", AmTheme.col("MUTED"))
-	warn.add_theme_font_size_override("font_size", 12)
-	fv.add_child(warn)
+	finish_warn = Label.new()
+	finish_warn.text = "The worktree folder is removed; the session goes to History. Uncommitted changes block this."
+	finish_warn.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	finish_warn.add_theme_font_size_override("font_size", 12)
+	fv.add_child(finish_warn)
 	finish_dialog.add_child(fv)
 	finish_dialog.confirmed.connect(func() -> void:
 		var id := menu_target

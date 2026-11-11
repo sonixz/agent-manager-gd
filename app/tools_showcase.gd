@@ -252,6 +252,23 @@ func _run() -> void:
 			await wait(0.8)
 			await shot("list-tile")
 			main.set_list("line")
+		"voice-theme":  # a check: the voice panel (F8, F9) follows a theme change: neon first, then the green one
+			main.select(made["Checkout flow"])
+			await wait(2.5)
+			await main.set_theme_name("neon")
+			await wait(0.4)
+			await main.set_theme_name("forest")
+			await wait(0.6)
+			main.voice_label.text = "🎙  A command…  (« approve Themes », « go to Docs », « who is waiting? »)  release F9"
+			main.voice_meter.value = 0.62
+			main.voice_overlay.visible = true
+			main.voice_overlay.reset_size()
+			await wait(0.6)
+			var box: StyleBoxFlat = main.voice_overlay.get_theme_stylebox("panel")
+			report.append("voice-theme: theme %s | the panel's border is the theme's own: %s | its background too: %s" % [
+				AmTheme.current, box.border_color.is_equal_approx(AmTheme.col("MINT")), box.bg_color.is_equal_approx(AmTheme.col("PANEL_2"))])
+			await shot("voice-theme")
+			main.voice_overlay.visible = false
 		"voice-long":  # a check: a long dictation, slow to write down, must reach the terminal (run with AGMGD_VOICE_FAKE=<text> AGMGD_VOICE_FAKE_DELAY=<s>)
 			main.select(made["Test runner"])
 			await wait(2.5)
