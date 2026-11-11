@@ -371,6 +371,47 @@ class EngineTest(unittest.TestCase):
                 self.sessions.set_permissions(lead["id"], extra_dirs=bad)
         self.assertEqual([e.get("access") for e in self.sessions.level_log(lead["id"])], [["open", "contained"], ["contained", "readonly"]])
 
+    def test_claude_codes_own_sandbox_is_offered_only_when_it_can_run(self):
+        from unittest import mock
+        import engine.sessions as es
+        self.sessions.tmux.respawn = lambda name, cwd, cmd: None
+        lead = self.sessions.create("Lead", "shell", self.tmp)
+        self.as_claude(lead["id"])
+        self.run_hook(lead["id"], "claude", {"hook_event_name": "SessionStart"})
+
+        def settings(sid):
+            with open(self.sessions.command_for({**self.sessions.store.get(sid), "tool": "claude"})[2], encoding="utf-8") as f:
+                return json.load(f)
+        # without bubblewrap and socat: refused, with how to install them; nothing is written
+        with mock.patch.object(es.shutil, "which", return_value=None):
+            info = self.sessions.native_sandbox()
+            self.assertEqual((info["available"], info["missing"]), (False, ["bwrap", "socat"]))
+            self.assertEqual(info["install"], "sudo apt-get install bubblewrap socat")
+            with self.assertRaises(ValueError):
+                self.sessions.set_permissions(lead["id"], os_sandbox=True)
+        self.assertNotIn("sandbox", settings(lead["id"]))
+        # with them: contained by the system, never a silent fallback, its home closed except its folder
+        with mock.patch.object(es.shutil, "which", return_value="/usr/bin/x"), mock.patch.object(es.sys, "platform", "linux"):
+            self.assertTrue(self.sessions.native_sandbox()["available"])
+            self.sessions.set_permissions(lead["id"], access="contained")
+            r = self.sessions.set_permissions(lead["id"], os_sandbox=True)
+            self.assertTrue(r["os_sandbox"])
+            sb = settings(lead["id"])["sandbox"]
+            self.assertEqual((sb["enabled"], sb["failIfUnavailable"], sb["allowUnsandboxedCommands"]), (True, True, False))
+            self.assertIn("~/", sb["filesystem"]["denyRead"])
+            self.assertIn("~/.ssh", sb["filesystem"]["denyRead"])
+            self.assertEqual(sb["filesystem"]["allowRead"], [os.path.abspath(self.tmp)])
+            self.assertNotIn("denyWrite", sb["filesystem"])
+            self.sessions.set_permissions(lead["id"], access="readonly")
+            self.assertEqual(settings(lead["id"])["sandbox"]["filesystem"]["denyWrite"], [os.path.abspath(self.tmp)])
+            # its child is contained too, and cannot be taken out
+            kid = self.sessions.create("Kid", "shell", self.tmp, parent=lead["id"])
+            self.assertTrue(self.sessions.store.get(kid["id"])["os_sandbox"])
+            self.as_claude(kid["id"])
+            with self.assertRaises(ValueError):
+                self.sessions.set_permissions(kid["id"], os_sandbox=False)
+            self.assertTrue(self.sessions.get(lead["id"])["os_sandbox"])
+
     def test_permission_levels_flags_denied_paths_group_default_and_child_cap(self):
         from engine.sessions import LEVEL_FLAGS
         cmd = self.sessions.command_for({"id": "lv000001", "tool": "claude", "level": "full"})

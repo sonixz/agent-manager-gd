@@ -164,6 +164,8 @@ def make_handler(sessions: Sessions, token: str):
                 if parts == ["history"] and method == "GET":
                     q = parse_qs(url.query).get("q", [""])[0]
                     return self._reply(200, {"sessions": sessions.history(q)})
+                if parts == ["sandbox"] and method == "GET":   # Loop 30: can Claude Code's own sandbox run here?
+                    return self._reply(200, sessions.native_sandbox())
                 if parts == ["orchestrator"] and method == "GET":
                     from .sessions import MAX_RUNNING_CHILDREN, MAX_DEPTH
                     o = sessions.orchestrator()
@@ -235,7 +237,8 @@ def make_handler(sessions: Sessions, token: str):
                                                             str(b.get("repo", "")), str(b.get("host", "local")),
                                                             (bool(b["remote"]) if "remote" in b else None), bool(b.get("document", False)),
                                                             str(b.get("level", "")), str(b.get("model", "")), "",
-                                                            str(b.get("access", "")), b.get("extra_dirs") or []))
+                                                            str(b.get("access", "")), b.get("extra_dirs") or [],
+                                                            bool(b.get("os_sandbox", False))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
@@ -268,7 +271,8 @@ def make_handler(sessions: Sessions, token: str):
                         return self._reply(200, sessions.set_permissions(sid, str(b.get("level", "")), opt("git_push"),
                                                                          opt("git_merge"), str(b.get("when", "turn")),
                                                                          str(b.get("access", "")),
-                                                                         b["extra_dirs"] if isinstance(b.get("extra_dirs"), list) else None))
+                                                                         b["extra_dirs"] if isinstance(b.get("extra_dirs"), list) else None,
+                                                                         opt("os_sandbox")))
                     if method == "GET" and action == "level":
                         return self._reply(200, {"log": sessions.level_log(sid)})
                     if method == "POST" and action == "resume":

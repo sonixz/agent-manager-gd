@@ -5,6 +5,11 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Shell commands contained · Loop 30 (ready, waiting for bubblewrap)
+- In Permissions…: « Contain shell commands too », Claude Code's own sandbox, filled from the file access (its home
+  closed except its folder, keys never readable, read-only folders not writable), never a silent fallback. Offered only
+  when bubblewrap and socat are installed (by you: they need administrator rights); otherwise greyed out with the command.
+
 ### File access · Loop 29
 - In New session and Permissions…: Open, Contained (its file tools stay in its folder) or Read only, plus extra folders
   (read and write, or read only). Filled with Claude Code's own settings; Codex read only is its read-only sandbox.

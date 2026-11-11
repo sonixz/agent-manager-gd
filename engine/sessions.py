@@ -225,19 +225,35 @@ class Sessions:
                 access = floor
         return access
 
+    def os_sandbox_for(self, wanted: bool, parent: str = "") -> bool:
+        """Its own sandbox when asked, or when its parent has one (a child is never less contained)."""
+        on = bool(wanted) or bool(parent and (self.store.get(parent) or {}).get("os_sandbox"))
+        if on and not self.native_sandbox()["available"]:
+            if wanted:
+                raise ValueError("Claude Code's sandbox needs " + " and ".join(self.native_sandbox()["missing"]) +
+                                 " (install: " + self.native_sandbox()["install"] + ")")
+        return on
+
     def _cap(self, parent: str) -> str:
         """The most a child of `parent` may get: its level (« config » counts as « auto »)."""
         cap = (self.store.get(parent) or {}).get("level") or "auto"
         return cap if cap in LEVELS else "auto"
 
     def set_permissions(self, sid: str, level: str = "", git_push: bool | None = None, git_merge: bool | None = None,
-                        when: str = "turn", access: str = "", extra_dirs: list | None = None) -> dict:
+                        when: str = "turn", access: str = "", extra_dirs: list | None = None,
+                        os_sandbox: bool | None = None) -> dict:
         """Loop 27-28: the owner's permissions for one agent (from the app; no agent tool does this): its level, and
         its git rights (« Enable git push », « Enable git merge and rebase », Claude Code only: they lift the deny rules).
         Applied like a level, on the same conversation."""
         rec = self.store.get(sid)
         if not rec:
             raise ValueError("no such session")
+        if os_sandbox is not None:
+            self._set_os_sandbox(rec, os_sandbox)
+            if not access and extra_dirs is None and git_push is None and git_merge is None and \
+                    (not level or level == (rec.get("level") or "auto")):
+                return {"id": sid, "level": rec.get("level") or "auto", "was": rec.get("level") or "auto",
+                        "os_sandbox": os_sandbox, "applied": self._apply_level(sid, when), "lowered": [], "children": {}}
         if access or extra_dirs is not None:
             self._set_access(rec, access, extra_dirs)
             if git_push is None and git_merge is None and (not level or level == (rec.get("level") or "auto")):
@@ -257,6 +273,20 @@ class Sessions:
             return self.set_level(sid, level, when)   # restarts once, with both changes
         return {"id": sid, "level": rec.get("level") or "auto", "was": rec.get("level") or "auto", "git": after,
                 "applied": self._apply_level(sid, when), "lowered": [], "children": {}}
+
+    def _set_os_sandbox(self, rec: dict, on: bool) -> None:
+        if rec["tool"] != "claude":
+            raise ValueError("this sandbox is Claude Code's (Codex has its own)")
+        if not on and rec.get("parent") and (self.store.get(rec["parent"]) or {}).get("os_sandbox"):
+            raise ValueError("its parent is contained by the system: it stays contained too")
+        self.os_sandbox_for(on)          # refuses when bubblewrap or socat is missing
+        self.store.update(rec["id"], os_sandbox=int(on))
+        if on:
+            for d in self.descendants(rec["id"]):
+                if not d.get("os_sandbox") and d["tool"] == "claude":
+                    self.store.update(d["id"], os_sandbox=1)
+                    self._apply_level(d["id"], "turn")
+        self._log(rec["id"], {"os_sandbox": [bool(rec.get("os_sandbox")), on]})
 
     def _set_access(self, rec: dict, access: str, extra_dirs: list | None) -> None:
         """Loop 29: its file access and extra folders. Never less restricted than its parent; its children follow."""
@@ -480,6 +510,34 @@ class Sessions:
     def access_of(self, rec: dict) -> str:
         return rec.get("access") if rec.get("access") in ACCESS else "open"
 
+    @staticmethod
+    def native_sandbox() -> dict:
+        """Loop 30: can Claude Code's own sandbox run here? Linux and WSL2 need bubblewrap and socat (installed by the
+        owner: they need administrator rights; Agent Manager never installs them)."""
+        missing = [b for b in ("bwrap", "socat") if not shutil.which(b)]
+        ok = sys.platform.startswith("linux") and not missing
+        return {"available": ok, "missing": missing,
+                "install": "" if ok else "sudo apt-get install " + " ".join({"bwrap": "bubblewrap"}.get(m, m) for m in missing)}
+
+    def sandbox_settings(self, rec: dict) -> dict:
+        """Claude Code's « sandbox » block for its shell commands: the operating system (bubblewrap) refuses what its
+        file access says, scripts included. Never a silent fallback: if the sandbox cannot start, Claude Code stops
+        (failIfUnavailable) and no command runs outside it (allowUnsandboxedCommands false)."""
+        access, cwd = self.access_of(rec), os.path.abspath(os.path.expanduser(rec["cwd"]))
+        dirs = self.extra_dirs(rec)
+        fs: dict = {"denyRead": ["~/.ssh", "~/.aws", "~/.gnupg", "~/.config/gh", os.path.join(os.path.abspath(self.home), "keys"),
+                                 os.path.join(os.path.abspath(self.home), "runtime")]}
+        if access in ("contained", "readonly"):
+            fs["denyRead"].append("~/")   # its home is closed; its folder and extra folders are opened again below
+            fs["allowRead"] = [cwd] + [d["path"] for d in dirs]
+        if access == "readonly":
+            fs["denyWrite"] = [cwd] + [d["path"] for d in dirs]
+        else:
+            ro = [d["path"] for d in dirs if not d["write"]]
+            if ro:
+                fs["denyWrite"] = ro
+        return {"enabled": True, "failIfUnavailable": True, "allowUnsandboxedCommands": False, "filesystem": fs}
+
     def access_settings(self, rec: dict) -> dict:
         """The native permissions keys for its file access (merged into its per-launch settings)."""
         access, out, deny = self.access_of(rec), {}, []
@@ -531,6 +589,8 @@ class Sessions:
             acc = self.access_settings(rec)
             settings["permissions"].update(acc["keys"])
             settings["permissions"]["deny"] += acc["deny"]
+            if rec.get("os_sandbox"):
+                settings["sandbox"] = self.sandbox_settings(rec)
             folder = os.path.join(self.home, "sessions", rec["id"])
             os.makedirs(folder, exist_ok=True)
             path = os.path.join(folder, "claude-settings.json")
@@ -647,7 +707,8 @@ class Sessions:
     def create(self, name: str, tool: str, cwd: str, grp: str = "", width: int = 160, height: int = 48,
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
                repo: str = "", host: str = "local", remote: bool | None = None, document: bool = False,
-               level: str = "", model: str = "", role: str = "", access: str = "", extra_dirs: list | None = None) -> dict:
+               level: str = "", model: str = "", role: str = "", access: str = "", extra_dirs: list | None = None,
+               os_sandbox: bool = False) -> dict:
         if host == "sandbox":
             return self.create_sandbox_session(name, tool, grp, repo, brain)
         if tool not in TOOLS:
@@ -676,7 +737,8 @@ class Sessions:
         rec = self.store.add(name.strip(), tool, cwd, grp, worktree=wt, base_repo=base, parent=parent, start_commit=head(cwd),
                              repo_id=repo)
         self.store.update(rec["id"], level=level, model=model, role=role, access=self.access_for(access, parent),
-                          extra_dirs=json.dumps(self._clean_dirs(extra_dirs or [])))
+                          extra_dirs=json.dumps(self._clean_dirs(extra_dirs or [])),
+                          os_sandbox=int(self.os_sandbox_for(os_sandbox, parent)))
         rec = self.store.get(rec["id"])
         if remote is None:  # not said: a child follows its parent (the orchestrator's children too), else no
             remote = bool(parent and (self.store.get(parent) or {}).get("remote_control"))
@@ -733,6 +795,7 @@ class Sessions:
                 "level_pending": rec["id"] in self._pending_level,
                 "git_rights": self.git_rights(rec),
                 "access": self.access_of(rec), "extra_dirs": self.extra_dirs(rec),
+                "os_sandbox": bool(rec.get("os_sandbox")),
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",

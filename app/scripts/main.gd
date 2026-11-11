@@ -73,7 +73,8 @@ var perm_git := {}
 var perm_access: OptionButton
 var perm_rw: LineEdit      # extra folders, read and write (« ; » between)
 var perm_ro: LineEdit      # extra folders, read only
-var perm_was := {}         # access and folders when the dialog opened         # its git rights when the dialog opened (only a change is sent)
+var perm_was := {}
+var perm_os: CheckBox      # Loop 30: Claude Code's own sandbox for its shell commands (bubblewrap)         # access and folders when the dialog opened         # its git rights when the dialog opened (only a change is sent)
 const LEVELS := {  # Loop 24: [menu label, card badge, what it means]
 	"ask": ["Ask before acting", "asks first", "Asks before editing files or running commands"],
 	"edits": ["Auto edits (asks for commands)", "auto edits", "Edits files without asking; asks before other commands"],
@@ -2267,7 +2268,21 @@ func _open_permissions(id: String) -> void:
 		(rw if bool(d.get("write", true)) else ro).append(str(d["path"]))
 	perm_rw.text = "; ".join(rw)
 	perm_ro.text = "; ".join(ro)
-	perm_was = {"access": acc, "rw": perm_rw.text, "ro": perm_ro.text}
+	perm_was = {"access": acc, "rw": perm_rw.text, "ro": perm_ro.text, "os": bool(s.get("os_sandbox", false))}
+	perm_os.button_pressed = bool(s.get("os_sandbox", false))
+	perm_os.disabled = true
+	perm_os.tooltip_text = "Claude Code only."
+	var os_note := ""
+	if str(s.get("tool", "")) == "claude":
+		var nat := await engine.call_api("GET", "/sandbox")
+		var locked := has_parent and bool(_session(str(s.get("parent", ""))).get("os_sandbox", false))
+		if bool(nat.get("available", false)):
+			perm_os.disabled = locked
+			perm_os.tooltip_text = "The operating system (bubblewrap) refuses what its file access says, scripts included. If the sandbox cannot start, Claude Code stops: never a silent fallback." + ("\nIts parent is contained: it stays contained." if locked else "")
+		else:
+			perm_os.disabled = not perm_os.button_pressed
+			os_note = "Shell sandbox: needs %s (%s), installed by you." % [" and ".join(nat.get("missing", [])), str(nat.get("install", ""))]
+			perm_os.tooltip_text = "Needs %s, which take administrator rights to install:\n%s\nAgent Manager never installs them for you." % [" and ".join(nat.get("missing", [])), str(nat.get("install", ""))]
 	var claude := str(s.get("tool", "")) == "claude"
 	perm_push.button_pressed = bool(perm_git.get("push", true))
 	perm_merge.button_pressed = bool(perm_git.get("merge", true))
@@ -2287,6 +2302,8 @@ func _open_permissions(id: String) -> void:
 	if claude:
 		lines.append("Git: by default the orchestrator's sessions may not push nor merge; yours may.")
 	lines.append("Your keys, ~/.ssh and .env stay refused at every level.")
+	if os_note != "":
+		lines.append(os_note)
 	perm_info.text = "\n".join(lines)
 	perm_dialog.title = "Permissions · " + str(s.get("name", ""))
 	perm_dialog.ok_button_text = ("Apply at the end of its turn" if busy else "Apply and restart") if running else "Save"
@@ -2302,6 +2319,8 @@ func _apply_permissions(when: String) -> void:
 		body["git_push"] = perm_push.button_pressed
 	if not perm_merge.disabled and perm_merge.button_pressed != bool(perm_git.get("merge", true)):
 		body["git_merge"] = perm_merge.button_pressed
+	if perm_os.button_pressed != bool(perm_was.get("os", false)):
+		body["os_sandbox"] = perm_os.button_pressed
 	if str(perm_access.get_selected_metadata()) != str(perm_was.get("access", "open")):
 		body["access"] = str(perm_access.get_selected_metadata())
 	if perm_rw.text != str(perm_was.get("rw", "")) or perm_ro.text != str(perm_was.get("ro", "")):
@@ -2316,6 +2335,8 @@ func _apply_permissions(when: String) -> void:
 		status_label.text = str(r["error"])
 		return
 	var more := ("  ·  %d of its sessions came down to it" % (r["lowered"] as Array).size()) if (r["lowered"] as Array).size() > 0 else ""
+	if body.has("os_sandbox"):
+		more += "  ·  shell commands " + ("contained by the system" if body["os_sandbox"] else "not contained")
 	if body.has("access"):
 		more += "  ·  files: " + str(ACCESS[body["access"]][0]).get_slice(" (", 0).to_lower()
 	if body.has("git_push") or body.has("git_merge"):
@@ -3851,6 +3872,9 @@ func _build_menus() -> void:
 	perm_ro = LineEdit.new()
 	perm_ro.placeholder_text = "Extra folders, read only (separate with ;)"
 	pv.add_child(perm_ro)
+	perm_os = CheckBox.new()
+	perm_os.text = "Contain shell commands too (Claude Code's sandbox)"
+	pv.add_child(perm_os)
 	perm_push = CheckBox.new()
 	perm_push.text = "Enable git push"
 	perm_push.tooltip_text = "Lifts Claude Code's deny rules on git push for this session. By default the orchestrator's sessions may not push; yours may."
