@@ -291,12 +291,13 @@ class Sessions:
         return stopped
 
     def ask_owner(self, sid: str, question: str, options: list | None = None) -> dict:
-        """A question for the owner: the session shows « waits for an answer » with it until the owner replies."""
+        """A question for the owner: the session shows « asks you something » with it until the owner replies, from the
+        app (send) or in its terminal (its next prompt, seen by the UserPromptSubmit hook)."""
         q = " ".join(str(question).split())[:400]
         if not q:
             raise ValueError("an empty question")
         opts = [str(o)[:80] for o in (options or [])][:6]
-        self._questions[sid] = {"question": q, "options": opts, "at": time.time()}
+        self._questions[sid] = {"question": q, "options": opts, "at": time.time(), "mono": time.monotonic()}
         return {"asked": True, "note": "the owner's answer will arrive as a message in your terminal; stop until then"}
 
     def ready_for_review(self, child: str, by: str, note: str = "") -> dict:
@@ -509,7 +510,7 @@ class Sessions:
             state, activity = "archived", "archived"
         elif rec["id"] in self._wrapping and state == "running":
             activity, message = "wrapping", "writing its summary"
-        elif rec["id"] in self._questions and state == "running":
+        elif rec["id"] in self._questions and state == "running" and not self._answered_in_terminal(rec["id"], hs):
             q = self._questions[rec["id"]]
             activity, message = "waiting", q["question"] + ("  [" + " / ".join(q["options"]) + "]" if q["options"] else "")
         return {**rec, "tool_label": TOOLS.get(rec["tool"], {}).get("label", rec["tool"]), "state": state,
@@ -526,6 +527,18 @@ class Sessions:
                 "branch": self.branch(rec["cwd"]),
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
+
+    def _answered_in_terminal(self, sid: str, hs: dict) -> bool:
+        """The owner answered an ask_owner question by typing in the session's terminal: a prompt reached the agent
+        after the question (before: only a reply from the app cleared it, and « waits for an answer » stayed)."""
+        q = self._questions.get(sid)
+        if not q or q.get("review") or "prompt_mono" not in hs:
+            return False
+        prompt = {"time": hs.get("prompt_time", 0), "mono": hs["prompt_mono"]}
+        if not _after((q["at"], q.get("mono", 0.0)), prompt, hook_first=True):
+            return False
+        self._questions.pop(sid, None)
+        return True
 
     def _screen(self, rec: dict) -> str:
         """The whole visible screen (no history): where Claude Code shows « esc to interrupt »."""

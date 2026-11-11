@@ -140,7 +140,7 @@ func activity_of(s: Dictionary) -> Array:
 	match a:
 		"working": return [AmTheme.col("INFO"), "working"]
 		"approval": return [approval_color(), "waits for your OK"]
-		"waiting": return [AmTheme.col("WARN"), "waits for an answer"]
+		"waiting": return [AmTheme.col("WARN"), "asks you something"]
 		"done": return [AmTheme.col("MINT") if not AmTheme.is_light() else AmTheme.col("FOREST_LIGHT"), "done"]
 		"idle": return [AmTheme.col("FAINT"), "ready"]
 		"exited": return [AmTheme.col("WARM").darkened(0.2), "ended"]
@@ -1733,7 +1733,8 @@ func _render_header() -> void:
 		header_brain.add_theme_color_override("font_hover_color", look[1].lightened(0.2))
 	var act := activity_of(s) if s else [AmTheme.col("MUTED"), ""]
 	var msg := str(s.get("message", ""))
-	header_state.text = ("● " + str(act[1]) if s else "") + (("  ·  " + msg.left(60)) if msg != "" and str(s.get("activity", "")) in ["approval", "waiting"] else "")
+	var asks := str(s.get("activity", "")) == "waiting" and msg != ""
+	header_state.text = ("● asks you: " + msg.left(70)) if asks else (("● " + str(act[1]) if s else "") + (("  ·  " + msg.left(60)) if msg != "" and str(s.get("activity", "")) == "approval" else ""))
 	header_state.add_theme_color_override("font_color", act[0])
 	for k in view_buttons:
 		view_buttons[k].button_pressed = k == view

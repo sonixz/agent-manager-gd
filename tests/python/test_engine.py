@@ -205,6 +205,30 @@ class EngineTest(unittest.TestCase):
         self.run_hook(s["id"], "claude", {"hook_event_name": "Notification", "message": "Claude needs your permission to use Write"})
         self.assertEqual(self.sessions.describe(rec)["activity"], "approval")   # a new request comes back at once
 
+    def test_a_question_clears_when_the_owner_answers_in_the_terminal(self):
+        # the owner typed the answer straight into the orchestrator's terminal: no reply from the app, yet the
+        # question must clear (before: « waits for an answer » stayed while it worked again)
+        s = self.sessions.create("orch", "shell", self.tmp)
+        rec = {**self.sessions.store.get(s["id"]), "tool": "claude"}
+        self.run_hook(s["id"], "claude", {"hook_event_name": "UserPromptSubmit", "session_id": "c1"})  # an older prompt
+        time.sleep(0.05)
+        self.sessions.ask_owner(s["id"], "Plan: 2 tasks. OK?", ["Yes", "No"])
+        self.run_hook(s["id"], "claude", {"hook_event_name": "PostToolUse"})   # ask_owner's own tool call ends
+        self.run_hook(s["id"], "claude", {"hook_event_name": "Stop"})          # it stops and waits
+        d = self.sessions.describe(rec)
+        self.assertEqual((d["activity"], d["message"]), ("waiting", "Plan: 2 tasks. OK?  [Yes / No]"))
+        self.run_hook(s["id"], "claude", {"hook_event_name": "UserPromptSubmit"})  # « Yes », typed in its terminal
+        self.run_hook(s["id"], "claude", {"hook_event_name": "PreToolUse"})        # then it works (start_session…)
+        d = self.sessions.describe(rec)
+        self.assertEqual(d["activity"], "working")
+        self.assertNotIn(s["id"], self.sessions._questions)
+        # a review request (finish_session) is not an ask_owner question: only Finish or a reply clears it
+        child = self.sessions.create("task", "shell", self.tmp, parent=s["id"])
+        self.sessions.ready_for_review(child["id"], s["id"], "done")
+        self.run_hook(child["id"], "claude", {"hook_event_name": "UserPromptSubmit"})
+        crec = {**self.sessions.store.get(child["id"]), "tool": "claude"}
+        self.assertEqual(self.sessions.describe(crec)["activity"], "waiting")
+
     def test_permission_levels_flags_denied_paths_group_default_and_child_cap(self):
         from engine.sessions import LEVEL_FLAGS
         cmd = self.sessions.command_for({"id": "lv000001", "tool": "claude", "level": "full"})

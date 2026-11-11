@@ -151,7 +151,7 @@
           <tr><th>State</th><th>Means</th><th>From</th></tr>
           <tr><td><span class="light working"></span> working</td><td>the agent is on a turn</td><td>its hooks (a prompt sent, a tool used)</td></tr>
           <tr><td><span class="light ok"></span> waits for your OK</td><td>it asks permission (a command, a file)</td><td>its permission notification</td></tr>
-          <tr><td><span class="light asks"></span> waits for an answer</td><td>it asks you something</td><td>its notification</td></tr>
+          <tr><td><span class="light asks"></span> asks you something</td><td>a question for you (ask_owner, or its notification); it clears as soon as you answer, from the app or in its terminal</td><td>its notification</td></tr>
           <tr><td><span class="light done"></span> done</td><td>the turn is over</td><td>its Stop hook (Codex: turn complete)</td></tr>
           <tr><td>ready</td><td>started, nothing asked yet, or stopped</td><td>its session start, or a turn ended without Stop</td></tr>
         </table>

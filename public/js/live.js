@@ -11,7 +11,7 @@
 
   const TOOLS = { claude: ["✻", "Claude Code"], codex: ["◎", "Codex"], shell: ["❯", "Shell"] };
   const STATE = {
-    working: ["working", "working"], ok: ["ok", "waits for your OK"], asks: ["asks", "waits for an answer"],
+    working: ["working", "working"], ok: ["ok", "waits for your OK"], asks: ["asks", "asks you something"],
     done: ["done", "done"], ready: ["idle", "ready"],
   };
   const GROUPS = [["acme", "Acme Store"], ["orbit", "Orbit API"], ["pixel", "Pixel Forge"]];

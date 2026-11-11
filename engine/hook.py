@@ -66,6 +66,12 @@ def main(argv):
         # wall clock can jump under WSL); the engine compares event order with it
         rec = {"state": state, "message": message, "time": time.time(), "mono": time.monotonic(), "tool": tool,
                "conversation": conv or old.get("conversation", "")}
+        # the last prompt the agent received, whoever typed it (the app, or the owner in its terminal): it answers a
+        # pending ask_owner question; kept across the events that follow
+        if tool == "claude" and payload.get("hook_event_name") == "UserPromptSubmit":
+            rec["prompt_time"], rec["prompt_mono"] = rec["time"], rec["mono"]
+        elif "prompt_mono" in old:
+            rec["prompt_time"], rec["prompt_mono"] = old.get("prompt_time", 0), old["prompt_mono"]
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(rec, f, ensure_ascii=False)

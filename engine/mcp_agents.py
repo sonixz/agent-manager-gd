@@ -42,7 +42,7 @@ TOOLS = [
 ORCH_TOOLS = [
     {"name": "list_repos", "description": "The connected repositories: id, name, address, local folder, status, and the sessions working in each.",
      "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "ask_owner", "description": "Asks the owner something (your plan, a choice). Your session shows « waits for an answer » with it; the answer arrives as a message in your terminal. Stop working until it comes.",
+    {"name": "ask_owner", "description": "Asks the owner something (your plan, a choice). Your session shows « asks you something » with it; the answer arrives as a message in your terminal. Stop working until it comes.",
      "inputSchema": {"type": "object", "properties": {"question": {"type": "string"}, "options": {"type": "array", "items": {"type": "string"}}}, "required": ["question"]}},
     {"name": "routing_rules", "description": "The owner's routing rules (which tool and model for which kind of task) and today's token budget. Read them before choosing.",
      "inputSchema": {"type": "object", "properties": {}}},
