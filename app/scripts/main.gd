@@ -2279,14 +2279,14 @@ func _open_permissions(id: String) -> void:
 	perm_os.tooltip_text = "Claude Code only."
 	var os_note := ""
 	if str(s.get("tool", "")) == "claude":
-		var nat := await engine.call_api("GET", "/sandbox")
+		var nat := await engine.call_api("GET", "/claude-sandbox")
 		var locked := has_parent and bool(_session(str(s.get("parent", ""))).get("os_sandbox", false))
 		if bool(nat.get("available", false)):
 			perm_os.disabled = locked
 			perm_os.tooltip_text = "The operating system (bubblewrap) refuses what its file access says, scripts included. If the sandbox cannot start, Claude Code stops: never a silent fallback." + ("\nIts parent is contained: it stays contained." if locked else "")
 		else:
 			perm_os.disabled = not perm_os.button_pressed
-			os_note = "Shell sandbox: needs %s (%s), installed by you." % [" and ".join(nat.get("missing", [])), str(nat.get("install", ""))]
+			os_note = "Claude Code's sandbox: needs %s (%s), installed by you." % [" and ".join(nat.get("missing", [])), str(nat.get("install", ""))]
 			perm_os.tooltip_text = "Needs %s, which take administrator rights to install:\n%s\nAgent Manager never installs them for you." % [" and ".join(nat.get("missing", [])), str(nat.get("install", ""))]
 	var claude := str(s.get("tool", "")) == "claude"
 	perm_push.button_pressed = bool(perm_git.get("push", true))
@@ -2918,7 +2918,7 @@ func _load_permissions() -> void:
 	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_font_override("font", AmTheme.ui_font(650))
 	perms_box.add_child(title)
-	var sb: Dictionary = r.get("sandbox", {})
+	var sb: Dictionary = r.get("claude_sandbox", {})
 	perms_box.add_child(_muted("What each agent may do. Edit… changes it; it applies on the same conversation. ▣ a guard rail on Claude's file tools · ■ shell commands contained by the system" +
 		("" if bool(sb.get("available", false)) else "  (needs %s: %s)" % [" and ".join(sb.get("missing", [])), str(sb.get("install", ""))])))
 	var agents: Array = r.get("agents", [])
@@ -3660,7 +3660,7 @@ func open_palette() -> void:
 	items.append({"label": "Repositories", "hint": "connected repositories and deploy keys", "run": set_view.bind("repos")})
 	items.append({"label": "Orchestrator", "hint": "show or hide its panel · " + key_text("orchestrator"), "run": toggle_orchestrator})
 	items.append({"label": "Keys", "hint": "your API keys: OpenAI (voice), Fly.io, Anthropic", "run": set_view.bind("keys")})
-	items.append({"label": "Agent permissions", "hint": "every agent: level, file access, shell sandbox, git rights", "run": set_view.bind("permissions")})
+	items.append({"label": "Agent permissions", "hint": "every agent: level, file access, Claude Code's sandbox, git rights", "run": set_view.bind("permissions")})
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
 	items.append({"label": "Sandboxes", "hint": "cloud sandboxes: manager, connections, costs", "run": set_view.bind("sandboxes")})
 	items.append({"label": "Dictate (hold %s)" % key_text("dictate"), "hint": "speak into the active session; you press Enter", "run": func() -> void: _toast("Hold %s and speak, release to write it into the prompt" % key_text("dictate"))})

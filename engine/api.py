@@ -166,7 +166,7 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, {"sessions": sessions.history(q)})
                 if parts == ["permissions"] and method == "GET":   # Loop 31: the Agent Permissions view
                     return self._reply(200, sessions.permissions_overview())
-                if parts == ["sandbox"] and method == "GET":   # Loop 30: can Claude Code's own sandbox run here?
+                if parts == ["claude-sandbox"] and method == "GET":   # Loop 30: can Claude Code's own sandbox run here?
                     return self._reply(200, sessions.native_sandbox())
                 if parts == ["orchestrator"] and method == "GET":
                     from .sessions import MAX_RUNNING_CHILDREN, MAX_DEPTH

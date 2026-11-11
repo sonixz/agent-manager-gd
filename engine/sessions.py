@@ -227,7 +227,7 @@ class Sessions:
                                               "level_pending", "access", "extra_dirs", "os_sandbox", "git_rights", "role")})
         groups = [{"name": g["name"], "level": g.get("level", ""), "access": g.get("access", "")}
                   for g in self.store.groups() if g["name"]]
-        return {"agents": rows, "groups": groups, "sandbox": self.native_sandbox()}
+        return {"agents": rows, "groups": groups, "claude_sandbox": self.native_sandbox()}
 
     def access_for(self, access: str, parent: str = "") -> str:
         """The file access asked for (« open » by default); a child is never less restricted than its parent."""

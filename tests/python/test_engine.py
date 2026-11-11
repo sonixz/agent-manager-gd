@@ -431,7 +431,7 @@ class EngineTest(unittest.TestCase):
         self.assertFalse(rows["Worker"]["git_rights"]["push"])
         self.assertTrue(rows["In careful"]["git_rights"]["push"])
         self.assertEqual(ov["groups"], [{"name": "Careful", "level": "", "access": "contained"}])
-        self.assertIn("available", ov["sandbox"])
+        self.assertIn("available", ov["claude_sandbox"])
 
     def test_permission_levels_flags_denied_paths_group_default_and_child_cap(self):
         from engine.sessions import LEVEL_FLAGS
