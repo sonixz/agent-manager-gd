@@ -278,14 +278,31 @@ func _run() -> void:
 			main.view_btn.pressed.emit()
 			await wait(0.3)
 			var listed := []
-			for i in main.view_menu.item_count:
-				listed.append(("✓ " if main.view_menu.is_item_checked(i) else "") + main.view_menu.get_item_text(i).replace("      ", " · "))
-			report.append("topbar: « View » opens: %s | the button still says the view: %s" % [" | ".join(listed), main.view_btn.button_pressed])
+			for x in main.SESSION_VIEWS:
+				var row: Array = main.view_rows[x[0]]
+				listed.append(("✓ " if (row[0] as Button).button_pressed else "") + (row[0] as Button).text + " · " + (row[1] as Label).text)
+			var themes := []
+			for t in AmTheme.THEMES:
+				themes.append(("✓ " if (main.theme_chips[t] as Button).button_pressed else "") + (main.theme_chips[t] as Button).text)
+			report.append("topbar: « View » opens: %s | themes: %s | the button still says the view: %s" % [" | ".join(listed), ", ".join(themes), main.view_btn.button_pressed])
 			await shot("topbar-menu")
-			main.view_menu.hide()
-			main.view_menu.id_pressed.emit(1)
+			# a theme: the window changes at once and the panel stays open for the next try
+			var theme_was: String = AmTheme.current
+			(main.theme_chips["paper"] as Button).pressed.emit()
+			await wait(1.2)
+			report.append("topbar: « Paper » clicked: theme « %s » | the panel is still open: %s | its mark moved: %s" % [AmTheme.current, main.view_panel.visible, (main.theme_chips["paper"] as Button).button_pressed and not (main.theme_chips[theme_was] as Button).button_pressed])
+			await shot("topbar-menu-paper")
+			(main.theme_chips["neon"] as Button).pressed.emit()
+			await wait(1.2)
+			var tried: String = AmTheme.current
+			(main.theme_chips[theme_was] as Button).pressed.emit()
+			await wait(1.2)
+			report.append("topbar: then « Neon », then back: « %s », « %s » | the panel is still open: %s | the settings menu no longer lists themes: %s" % [tried, AmTheme.current, main.view_panel.visible,
+				range(main.theme_menu.item_count).all(func(i: int) -> bool: return not AmTheme.LABELS.values().has(main.theme_menu.get_item_text(i)))])
+			# a way to show the sessions: the panel closes and the sessions are shown that way
+			(main.view_rows["grid"][0] as Button).pressed.emit()
 			await wait(1.5)
-			report.append("topbar: « Grid » chosen: view « %s » | %s" % [main.view, _bar()])
+			report.append("topbar: « Grid » chosen: view « %s » | the panel closed: %s | %s" % [main.view, not main.view_panel.visible, _bar()])
 			main.view_buttons["sandboxes"].pressed.emit()
 			await wait(0.8)
 			report.append("topbar: « Sandboxes »: view « %s » | %s" % [main.view, _bar()])

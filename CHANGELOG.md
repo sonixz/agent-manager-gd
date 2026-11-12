@@ -6,6 +6,9 @@ Newest first.
 ## Unreleased: alpha
 
 ### The setup check reads from the ground up, and its engine room · Loop 36 (first steps)
+- The themes moved from the ◐ menu into the **View ▾** panel: seven chips, each drawn in its own colours. Click one
+  and the window changes at once; the panel stays open, so you can try them one after the other. ◐ keeps the
+  settings (the list, usage, agent permissions, keys, shortcuts, connections, setup check).
 - The top bar is arranged for more to come. **View ▾** replaces the five buttons Focus, Grid, Board, History and
   Review: it names the way the sessions are shown and opens the list of the five, each with its shortcut (the
   shortcuts have not changed). Beside it stand the managers, one button each: **WSL** (on Linux: **Computer**),

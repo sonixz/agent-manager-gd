@@ -42,7 +42,9 @@ var header_meta: Label
 var header_state: Label
 var view_buttons := {}      # the managers' buttons, by the view each opens
 var view_btn: Button        # « Focus ▾ »: the way the sessions are shown, and the door to the others
-var view_menu: PopupMenu
+var view_panel: PopupPanel  # what « Focus ▾ » opens: the ways to show the sessions, then the themes
+var view_rows := {}         # a way to show the sessions -> [its button in that panel, the label of its shortcut]
+var theme_chips := {}       # a theme -> its chip in that panel, drawn in the theme's own colours
 var session_view := "focus" # the last way the sessions were shown: where a manager's second click comes back to
 var header_box: HBoxContainer
 var header_fitting := false
@@ -534,12 +536,10 @@ func _build() -> void:
 	view_btn = Button.new()
 	view_btn.name = "ViewBtn"
 	view_btn.toggle_mode = true
-	view_btn.tooltip_text = "How the sessions are shown: Focus, Grid, Board, History, Review"
-	view_btn.pressed.connect(_open_view_menu)
+	view_btn.tooltip_text = "How the sessions are shown (Focus, Grid, Board, History, Review), and the theme"
+	view_btn.pressed.connect(_open_view_panel)
 	hb.add_child(view_btn)
-	view_menu = PopupMenu.new()
-	view_menu.id_pressed.connect(func(i: int) -> void: set_view(str(SESSION_VIEWS[i][0])))
-	add_child(view_menu)
+	_build_view_panel()
 	var resume_btn := Button.new()
 	resume_btn.name = "ResumeBtn"
 	resume_btn.text = "↻ Resume"
@@ -575,7 +575,7 @@ func _build() -> void:
 	hb.add_child(sound_btn)
 	var theme_btn := Button.new()
 	theme_btn.text = "◐"
-	theme_btn.tooltip_text = "Theme and keys"
+	theme_btn.tooltip_text = "Settings: the list, usage, agent permissions, keys, shortcuts, connections, setup check"
 	theme_btn.pressed.connect(func() -> void: theme_menu.popup(Rect2i(Vector2i(theme_btn.get_screen_position() + Vector2(0, theme_btn.size.y)), Vector2i.ZERO)))
 	hb.add_child(theme_btn)
 	var more := Button.new()
@@ -2024,14 +2024,108 @@ func _sync_view_buttons() -> void:
 	view_btn.set_pressed_no_signal(_is_session_view(view))
 
 
-func _open_view_menu() -> void:
+## What the « View » button opens (Loop 36): the five ways to show the sessions, each with its shortcut, then the
+## seven themes, each chip drawn in its own colours. A way closes the panel and shows the sessions that way. A theme
+## changes the window at once and leaves the panel open, so several can be tried one after the other (owner,
+## 2026-11-12: « on le laisse très interactif »).
+func _build_view_panel() -> void:
+	view_panel = PopupPanel.new()
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	view_panel.add_child(box)
+	box.add_child(_panel_heading("Show the sessions as"))
+	for x in SESSION_VIEWS:
+		var id := str(x[0])
+		var b := Button.new()
+		b.name = "View_" + id
+		b.text = str(x[1])
+		b.toggle_mode = true
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.custom_minimum_size = Vector2(264, 0)
+		b.pressed.connect(func() -> void:
+			view_panel.hide()
+			set_view(id))
+		var keys := Label.new()  # the shortcut, at the right of the line; a click there is a click on the line
+		keys.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		keys.add_theme_font_size_override("font_size", 12)
+		keys.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		keys.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		keys.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		keys.offset_right = -12
+		b.add_child(keys)
+		box.add_child(b)
+		view_rows[id] = [b, keys]
+	var gap := Control.new()
+	gap.custom_minimum_size.y = 6
+	box.add_child(gap)
+	box.add_child(_panel_heading("Theme"))
+	var chips := GridContainer.new()
+	chips.columns = 2
+	chips.add_theme_constant_override("h_separation", 6)
+	chips.add_theme_constant_override("v_separation", 6)
+	box.add_child(chips)
+	for t in AmTheme.THEMES:
+		var pal: Dictionary = AmTheme.PALETTES[t]
+		var c := Button.new()
+		c.name = "Theme_" + str(t)
+		c.text = str(AmTheme.LABELS[t])
+		c.toggle_mode = true
+		c.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		c.size_flags_horizontal = SIZE_EXPAND_FILL
+		c.tooltip_text = "The « %s » theme: click to try it, the list stays open" % str(AmTheme.LABELS[t])
+		# the chip wears the theme it stands for, whatever the theme in use: its background, its ink, its accent
+		c.add_theme_stylebox_override("normal", AmTheme.box(Color(str(pal["BG"])), 8, Color(str(pal["BORDER"])), 1, 9))
+		c.add_theme_stylebox_override("hover", AmTheme.box(Color(str(pal["BG"])).lightened(0.05), 8, Color(str(pal["FOREST_LIGHT"])), 1, 9))
+		for st in ["pressed", "hover_pressed", "focus"]:
+			c.add_theme_stylebox_override(st, AmTheme.box(Color(str(pal["BG"])), 8, Color(str(pal["MINT"])), 2, 9))
+		for fc in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+			c.add_theme_color_override(fc, Color(str(pal["TEXT"])))
+		var dot := Label.new()
+		dot.text = "●"
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dot.add_theme_color_override("font_color", Color(str(pal["MINT"])))
+		dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		dot.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		dot.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		dot.offset_right = -10
+		c.add_child(dot)
+		c.pressed.connect(_pick_theme.bind(str(t)))
+		chips.add_child(c)
+		theme_chips[t] = c
+	add_child(view_panel)
+
+
+func _panel_heading(t: String) -> Label:
+	var l := Label.new()
+	l.text = t
+	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	return l
+
+
+## The panel says what is in use: the way the sessions are shown, the theme, and each way's shortcut as it is set now.
+func _sync_view_panel() -> void:
+	for id in view_rows:
+		(view_rows[id][0] as Button).set_pressed_no_signal(view == id)
+		(view_rows[id][1] as Label).text = key_text(str(id))
+		(view_rows[id][1] as Label).add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	for t in theme_chips:
+		(theme_chips[t] as Button).set_pressed_no_signal(AmTheme.current == t)
+	for l in view_panel.get_child(0).get_children():
+		if l is Label:
+			l.add_theme_color_override("font_color", AmTheme.col("MUTED"))  # the headings follow the theme in use
+
+
+func _open_view_panel() -> void:
 	_sync_view_buttons()  # the click flipped the button: it says the view, not the click
-	view_menu.clear()
-	for i in SESSION_VIEWS.size():
-		var keys := key_text(str(SESSION_VIEWS[i][0]))
-		view_menu.add_radio_check_item(str(SESSION_VIEWS[i][1]) + (("      " + keys) if keys != "" else ""), i)
-		view_menu.set_item_checked(i, view == SESSION_VIEWS[i][0])
-	view_menu.popup(Rect2i(Vector2i(view_btn.get_screen_position() + Vector2(0, view_btn.size.y)), Vector2i.ZERO))
+	_sync_view_panel()
+	view_panel.popup(Rect2i(Vector2i(view_btn.get_screen_position() + Vector2(0, view_btn.size.y + 4)), Vector2i.ZERO))
+
+
+## A theme chosen in the panel: the window changes at once, and the panel stays for the next try.
+func _pick_theme(t: String) -> void:
+	await set_theme_name(t)
+	_sync_view_panel()
 
 
 ## A manager's button: its page, or back to the sessions when its page is already there.
@@ -4737,11 +4831,7 @@ func _build_menus() -> void:
 		if view == "permissions":
 			_load_permissions())
 	add_child(access_menu)
-	theme_menu = PopupMenu.new()
-	for t in AmTheme.THEMES:
-		theme_menu.add_item(AmTheme.LABELS[t])
-		theme_menu.set_item_metadata(theme_menu.item_count - 1, t)
-	theme_menu.add_separator()
+	theme_menu = PopupMenu.new()  # the themes left it for the « View » panel (Loop 36): it keeps the settings
 	theme_menu.add_check_item("One session per line")
 	list_item = theme_menu.item_count - 1
 	theme_menu.set_item_metadata(list_item, "__list")
