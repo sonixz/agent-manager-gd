@@ -61,6 +61,8 @@ Newest first.
 - Each change is logged; the engine's API token is now refused to the agents' file tools too.
 
 ### Fixed
+- The first session started on a fresh tmux server (after a reboot) could fail with « server exited unexpectedly »:
+  the server and its first session are now started in one tmux call, and asked once more if the server was dying.
 - A long dictation was thrown away: the app waited 10 seconds for the text while the writing of a long recording
   takes longer, then said « engine unreachable ». It now waits as long as the writing may take. A recording that
   cannot be written down is kept (Ctrl+K › Send my last recording again); the panel shows how long it has been

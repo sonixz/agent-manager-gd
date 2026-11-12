@@ -166,6 +166,27 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(names, ["c", "loose"])
         self.assertEqual(len(self.sessions.list()), 4)
 
+    def test_the_first_session_of_a_fresh_tmux_server_comes_with_its_start_and_is_asked_again_if_it_was_dying(self):
+        calls, run = [], self.tmux.run
+
+        def dying_once(*args, **kw):
+            if "new-session" in args:
+                calls.append(args)
+                if len(calls) == 1:
+                    raise RuntimeError("tmux start-server: server exited unexpectedly")
+            return run(*args, **kw)
+        self.tmux.run = dying_once
+        try:
+            s = self.sessions.create("again", "shell", self.tmp)
+        finally:
+            self.tmux.run = run
+        self.assertEqual(s["state"], "running")
+        self.assertEqual(len(calls), 2)                 # asked again, once
+        self.assertEqual(calls[1][0], "start-server")   # the server's start and the session in one tmux call
+        with self.assertRaises(RuntimeError) as e:      # any other refusal is raised as it is
+            self.tmux.new_session(s["tmux"], self.tmp, [])
+        self.assertIn("duplicate session", str(e.exception))
+
     def test_several_screens_are_read_in_one_tmux_call(self):
         a = self.sessions.create("a", "shell", self.tmp)
         b = self.sessions.create("b", "shell", self.tmp)

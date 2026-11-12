@@ -5,6 +5,7 @@ import os
 import secrets
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 
 PREFIX = "am_"
@@ -48,14 +49,22 @@ class Tmux:
 
     def new_session(self, name: str, cwd: str, command: list[str], env: dict[str, str] | None = None,
                     width: int = 160, height: int = 48) -> None:
-        # history for the wheel (tmux keeps it, the terminal shows tmux's screen): set before the pane exists
-        self.run("start-server", ";", "set-option", "-g", "history-limit", "50000")
         args = ["new-session", "-d", "-s", name, "-c", cwd, "-x", str(width), "-y", str(height)]
         for k, v in (env or {}).items():
             args += ["-e", f"{k}={v}"]
         if command:
             args.append(" ".join(_shell_quote(c) for c in command))
-        self.run(*args)
+        # History for the wheel (tmux keeps it, the terminal shows tmux's screen): set before the pane exists. In the
+        # same tmux call as the session: a server without a session exits at once, and a session asked a moment
+        # later found it dying (« server exited unexpectedly », the first session of a fresh server, under load).
+        start = ["start-server", ";", "set-option", "-g", "history-limit", "50000", ";"]
+        try:
+            self.run(*start, *args)
+        except RuntimeError as e:
+            if "server" not in str(e):  # « server exited unexpectedly », « lost server », « no server running »
+                raise
+            time.sleep(0.2)
+            self.run(*start, *args)
         # a program's « copy to clipboard » (OSC 52) reaches Agent Manager's terminal through tmux
         self.run("set-option", "-s", "set-clipboard", "on")
         self.run("set-option", "-s", "terminal-features[90]", "*:clipboard")
