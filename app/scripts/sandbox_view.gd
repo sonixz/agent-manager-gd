@@ -157,10 +157,20 @@ static func amount(bytes: float) -> String:
 static func link_of(tunnel: Dictionary) -> Dictionary:
 	var st := str(tunnel.get("state", "closed"))
 	if st == "open":
-		var n: int = tunnel.get("ports", []).size()
-		return {"text": "connected · %s" % ("no port brought here yet" if n == 0 else "%d port%s on your localhost" % [n, "" if n == 1 else "s"]), "level": "ok"}
+		var n: int = tunnel.get("ports", []).filter(func(p: Dictionary) -> bool: return str(p.get("kind", "in")) == "in").size()
+		var extra := ""
+		if tunnel.get("ports", []).any(func(p: Dictionary) -> bool: return str(p.get("kind", "")) == "socks"):
+			extra += " · a SOCKS proxy"
+		var out: int = tunnel.get("ports", []).filter(func(p: Dictionary) -> bool: return str(p.get("kind", "")) == "out").size()
+		if out > 0:
+			extra += " · %d port%s of this computer it may reach" % [out, "" if out == 1 else "s"]
+		return {"text": "connected · %s%s" % ["no port brought here yet" if n == 0 else "%d port%s on your localhost" % [n, "" if n == 1 else "s"], extra], "level": "ok"}
 	if st == "lost":
-		return {"text": "the connection was lost: connect again", "level": "bad"}
+		var why := str(tunnel.get("why", "the connection fell"))
+		var wait := float(tunnel.get("retry_in", -1.0))
+		if wait < 0.0:
+			return {"text": "%s · it was tried ten times: connect again" % why, "level": "bad"}
+		return {"text": "%s · trying again %s (try %d of 10)" % [why, "now" if wait < 1.0 else "in %d s" % int(ceil(wait)), int(tunnel.get("tries", 0)) + 1], "level": "warn"}
 	return {"text": "not connected: its ports are not reachable from here", "level": "off"}
 
 
@@ -173,6 +183,8 @@ static func port_rows(tunnel: Dictionary) -> Array:
 		by[int(l["port"])] = {"port": int(l["port"]), "program": str(l.get("program", "")), "inside": bool(l.get("inside", false)), "listening": true,
 			"open": false, "state": "", "address": "", "local": 0, "sent": 0.0, "received": 0.0, "sent_rate": 0.0, "received_rate": 0.0, "open_now": 0, "label": ""}
 	for p in tunnel.get("ports", []):
+		if str(p.get("kind", "in")) != "in":
+			continue  # the proxy and the rules toward this computer have their own lines (extra_rows)
 		var n := int(p.get("remote_port", 0))
 		var row: Dictionary = by.get(n, {"port": n, "program": "", "inside": true, "listening": false})
 		row.merge({"open": true, "state": str(p.get("state", "")), "address": str(p.get("address", "")), "local": int(p.get("port", 0)),
@@ -209,5 +221,41 @@ static func health_words(h: Dictionary) -> Array:
 	if float(h.get("disk_total", 0)) > 0.0:
 		out.append(["Disk free", HostView.mem(float(h["disk_free"])), float(h["disk_free"]) / float(h["disk_total"]) < 0.1])
 	out.append(["Round trip", "%d ms" % int(h.get("round_trip_ms", 0)), int(h.get("round_trip_ms", 0)) > 800])
+	return out
+
+
+## The lines that are not a port of the sandbox: its SOCKS proxy, and the ports of this computer it may reach (the
+## rules the owner made). Each: {"kind", "words", "address", "port", "state"}.
+static func extra_rows(tunnel: Dictionary) -> Array:
+	var out := []
+	for p in tunnel.get("ports", []):
+		var kind := str(p.get("kind", "in"))
+		if kind == "socks":
+			out.append({"kind": kind, "port": 0, "address": str(p.get("address", "")), "state": str(p.get("state", "")),
+				"words": "A SOCKS proxy is on your localhost:%d: a program set on it reaches everything inside the sandbox, by one address" % int(p.get("port", 0))})
+		elif kind == "out":
+			out.append({"kind": kind, "port": int(p.get("local_port", 0)), "address": "", "state": str(p.get("state", "")),
+				"words": "A rule you made: the sandbox reaches this computer's port %d, on its own 127.0.0.1:%d" % [int(p.get("local_port", 0)), int(p.get("remote_port", 0))]})
+	return out
+
+
+## What the wires draw: one per channel, of any kind, with the words of each end.
+static func wire_rows(tunnel: Dictionary) -> Array:
+	var names := {}
+	for l in tunnel.get("listening", []):
+		names[int(l["port"])] = str(l.get("program", ""))
+	var out := []
+	for p in tunnel.get("ports", []):
+		var kind := str(p.get("kind", "in"))
+		var row := {"kind": kind, "state": str(p.get("state", "")), "sent": float(p.get("sent", 0)), "received": float(p.get("received", 0)),
+			"sent_rate": float(p.get("sent_rate", 0.0)), "received_rate": float(p.get("received_rate", 0.0)), "open_now": int(p.get("open_now", 0))}
+		if kind == "socks":
+			row.merge({"left": "localhost:%d  SOCKS" % int(p.get("port", 0)), "right": "everything inside"})
+		elif kind == "out":
+			row.merge({"left": "this computer's :%d" % int(p.get("local_port", 0)), "right": "its own :%d  (a rule)" % int(p.get("remote_port", 0))})
+		else:
+			var prog := str(names.get(int(p.get("remote_port", 0)), ""))
+			row.merge({"left": "localhost:%d" % int(p.get("port", 0)), "right": ("%s " % prog if prog != "" else "") + ":%d" % int(p.get("remote_port", 0))})
+		out.append(row)
 	return out
 

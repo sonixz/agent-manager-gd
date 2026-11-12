@@ -144,7 +144,7 @@ class Life extends Control:
 class Wire extends Control:
 	const ROW := 34.0
 	const PAD := 10.0
-	const SIDE := 190.0
+	const SIDE := 210.0
 	var rows: Array
 	var name_there: String
 	var font: Font
@@ -158,7 +158,7 @@ class Wire extends Control:
 		custom_minimum_size.y = PAD * 2.0 + 20.0 + rows.size() * ROW
 		size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		set_process(true)
+		set_process(true)   # the dots run
 
 	func _process(_delta: float) -> void:
 		queue_redraw()
@@ -183,9 +183,9 @@ class Wire extends Control:
 			var x0 := here.end.x
 			var x1 := there.position.x
 			var paused := str(row["state"]) == "paused"
-			draw_string(font, Vector2(here.position.x + 12.0, y + 5.0), "localhost:%d" % int(row["local"]), HORIZONTAL_ALIGNMENT_LEFT, SIDE - 20.0, 12, muted if paused else ink)
-			var what := (str(row["program"]) + " " if str(row["program"]) != "" else "") + ":%d" % int(row["port"])
-			draw_string(font, Vector2(there.position.x + 12.0, y + 5.0), what, HORIZONTAL_ALIGNMENT_LEFT, SIDE - 20.0, 12, muted if paused else ink)
+			var back := str(row.get("kind", "in")) == "out"   # a rule: the sandbox reaches a program of this computer
+			draw_string(font, Vector2(here.position.x + 12.0, y + 5.0), str(row.get("left", "")), HORIZONTAL_ALIGNMENT_LEFT, SIDE - 20.0, 12, muted if paused else ink)
+			draw_string(font, Vector2(there.position.x + 12.0, y + 5.0), str(row.get("right", "")), HORIZONTAL_ALIGNMENT_LEFT, SIDE - 20.0, 12, muted if paused else ink)
 			if paused:
 				draw_dashed_line(Vector2(x0, y), Vector2(x1, y), AmTheme.col("FAINT"), 2.0, 6.0)
 				draw_string(font, Vector2(x0, y - 7.0), "paused", HORIZONTAL_ALIGNMENT_CENTER, x1 - x0, 11, AmTheme.col("FAINT"))
@@ -193,12 +193,16 @@ class Wire extends Control:
 			draw_line(Vector2(x0, y), Vector2(x1, y), Color(AmTheme.col("BORDER"), 0.9), 2.0, true)
 			var so := speed(float(row["sent_rate"]))
 			var si := speed(float(row["received_rate"]))
-			for k in 5:  # what is sent runs toward the sandbox, a little above the wire; what is received runs back, a little under
+			# what is asked runs toward the program that answers, a little above the wire; what it answers runs back, a
+			# little under. For a port of the sandbox the program is there; for a rule, it is here.
+			var from := x1 if back else x0
+			var to := x0 if back else x1
+			for k in 5:
 				if so > 0.0:
-					draw_circle(Vector2(lerpf(x0, x1, fposmod(t * so + k / 5.0, 1.0)), y - 3.0), 2.5, AmTheme.col("INFO"))
+					draw_circle(Vector2(lerpf(from, to, fposmod(t * so + k / 5.0, 1.0)), y - 3.0), 2.5, AmTheme.col("INFO"))
 				if si > 0.0:
-					draw_circle(Vector2(lerpf(x1, x0, fposmod(t * si + k / 5.0, 1.0)), y + 3.0), 2.5, AmTheme.col("MINT"))
-			var figures := "sent %s (%s)   ·   received %s (%s)%s" % [SandboxView.rate(float(row["sent_rate"])), SandboxView.amount(float(row["sent"])),
+					draw_circle(Vector2(lerpf(to, from, fposmod(t * si + k / 5.0, 1.0)), y + 3.0), 2.5, AmTheme.col("MINT"))
+			var figures := ("asked %s (%s)   ·   answered %s (%s)%s" if back else "sent %s (%s)   ·   received %s (%s)%s") % [SandboxView.rate(float(row["sent_rate"])), SandboxView.amount(float(row["sent"])),
 				SandboxView.rate(float(row["received_rate"])), SandboxView.amount(float(row["received"])),
 				("   ·   %d open now" % int(row["open_now"])) if int(row["open_now"]) > 0 else ""]
 			draw_string(font, Vector2(x0, y - 9.0), figures, HORIZONTAL_ALIGNMENT_CENTER, x1 - x0, 11, muted)

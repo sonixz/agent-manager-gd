@@ -1159,10 +1159,38 @@ func _run() -> void:
 			OS.execute("python3", ["-c", "import urllib.request; print(urllib.request.urlopen('%s/', timeout=5).read()[:30].decode())" % str(brought["address"])], got)
 			report.append("ports: brought here: « %s » | the page through it starts with: « %s » | something passes: sent %s, received %s, rates above zero: %s | the wire is drawn: %s" % [SandboxView.port_words(now_row),
 				"".join(got).strip_edges(), int(now_row["sent"]) > 0, int(now_row["received"]) > 5000, float(now_row["received_rate"]) > 0.0, main.content.find_child("Wire_" + sbid, true, false) != null])
+			# a SOCKS proxy, and a rule: a program of this computer that the sandbox may reach
+			await main._sbx_tunnel_do(sbid, "socks/open")
+			var service := OS.create_process("python3", ["-m", "http.server", "18600", "--bind", "127.0.0.1", "--directory", site])
+			await wait(0.6)
+			await main.engine.call_api("POST", "/sandboxes/%s/back/18600/open" % sbid, {"there": 18601, "label": "my local service"})
+			var from_inside := []
+			OS.execute("python3", ["-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:18601/', timeout=5).read()[:30].decode())"], from_inside)
+			await main._sbx_tunnel_ask(sbid)
+			await wait(0.4)
+			report.append("ports: « %s » | %s | from inside the sandbox, this computer's program answers: « %s »" % [SandboxView.link_of(main.sbx_tunnels[sbid])["text"],
+				" ; ".join(SandboxView.extra_rows(main.sbx_tunnels[sbid]).map(func(e: Dictionary) -> String: return str(e["words"]).left(70))), "".join(from_inside).strip_edges()])
 			var scroller: ScrollContainer = main.sbx_box.get_parent()
 			scroller.scroll_vertical = int(maxf(0.0, (main.sbx_tunnel_boxes[sbid] as Control).global_position.y - main.sbx_box.global_position.y - 330.0))
 			await wait(0.4)
 			await shot("sandbox-ports")
+			# the connection falls (its process is killed): it is said, and it comes back by itself with what it carried
+			var master := int(FileAccess.get_file_as_string(OS.get_environment("AGMGD_HOME").path_join("runtime/carrier-%s.sock.pid" % sbid)))
+			OS.kill(master)
+			await wait(4.0)
+			await main._sbx_tunnel_ask(sbid)
+			var fell: String = SandboxView.link_of(main.sbx_tunnels[sbid])["text"]
+			for i in 40:
+				await wait(0.5)
+				await main._sbx_tunnel_ask(sbid)
+				if str(main.sbx_tunnels[sbid].get("state", "")) == "open":
+					break
+			await wait(1.5)  # what it carried is opened again just after the connection itself
+			await main._sbx_tunnel_ask(sbid)
+			var again := []
+			OS.execute("python3", ["-c", "import urllib.request; print(len(urllib.request.urlopen('%s/', timeout=5).read()) > 1000)" % str(brought["address"])], again)
+			report.append("ports: the connection fell: « %s » | back by itself: %s, with %d channels | the page comes again on the same address: %s" % [fell.left(80), str(main.sbx_tunnels[sbid].get("state", "")) == "open", main.sbx_tunnels[sbid].get("ports", []).size(), "".join(again).strip_edges()])
+			OS.kill(service)
 			await main._sbx_tunnel_do(sbid, "ports/%d/pause" % inside)
 			await wait(0.4)
 			var refused := []

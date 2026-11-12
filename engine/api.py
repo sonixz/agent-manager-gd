@@ -148,7 +148,7 @@ def make_handler(sessions: Sessions, token: str):
                         row["name"] = names.get(row["session_id"], "")
                     return self._reply(200, over)
                 # Loop 38: a sandbox's lasting connection and its ports brought here (sandbox_carrier.py)
-                if len(parts) >= 3 and parts[0] == "sandboxes" and parts[2] in ("tunnel", "ports"):
+                if len(parts) >= 3 and parts[0] == "sandboxes" and parts[2] in ("tunnel", "ports", "socks", "back"):
                     carrier = getattr(sessions, "carrier", None)
                     if carrier is None:
                         return self._reply(503, {"error": "this engine was started without the carrier"})
@@ -163,6 +163,17 @@ def make_handler(sessions: Sessions, token: str):
                         return self._reply(200, carrier.connect(sbid))
                     if parts[2:] == ["tunnel", "disconnect"] and method == "POST":
                         return self._reply(200, carrier.disconnect(sbid))
+                    if parts[2:] == ["socks", "open"] and method == "POST":   # a SOCKS proxy toward the sandbox, on this computer only
+                        return self._reply(200, carrier.open_socks(sbid, int(self._body().get("local", 0) or 0)))
+                    if parts[2:] == ["socks", "close"] and method == "POST":
+                        return self._reply(200, carrier.close_socks(sbid))
+                    if len(parts) == 5 and parts[2] == "back" and parts[3].isdigit() and method == "POST":
+                        # a rule the owner makes: this port of this computer becomes reachable from inside the sandbox
+                        if parts[4] == "open":
+                            b = self._body()
+                            return self._reply(200, carrier.open_back(sbid, int(parts[3]), int(b.get("there", 0) or 0), str(b.get("label", ""))))
+                        if parts[4] == "close":
+                            return self._reply(200, carrier.close_back(sbid, int(parts[3])))
                     if len(parts) == 5 and parts[2] == "ports" and parts[3].isdigit() and method == "POST":
                         port, act = int(parts[3]), parts[4]
                         if act == "open":

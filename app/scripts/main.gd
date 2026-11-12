@@ -3517,6 +3517,8 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 		said.add_theme_color_override("font_color", AmTheme.col("MINT"))
 	elif link["level"] == "bad":
 		said.add_theme_color_override("font_color", AmTheme.col("ERROR"))
+	elif link["level"] == "warn":  # it fell and comes back by itself: said with why and when
+		said.add_theme_color_override("font_color", AmTheme.col("WARN"))
 	head.add_child(said)
 	if str(t.get("state", "closed")) == "open":
 		head.add_child(_small("Disconnect", _sbx_tunnel_do.bind(sbid, "tunnel/disconnect", {}, "Disconnected: what was brought here is closed"), "Closes the connection and every port it brought here. The sandbox and its terminal are not touched."))
@@ -3536,8 +3538,9 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 				l.add_theme_color_override("font_color", AmTheme.col("WARN"))
 			row.add_child(l)
 	var rows: Array = SandboxView.port_rows(t)
-	if rows.any(func(x: Dictionary) -> bool: return x["open"]):
-		var wire = SandboxWidgets.Wire.new(rows.filter(func(x: Dictionary) -> bool: return x["open"]), str(sbx_tunnel_names.get(sbid, sbid)))
+	var wires: Array = SandboxView.wire_rows(t)
+	if not wires.is_empty():
+		var wire = SandboxWidgets.Wire.new(wires, str(sbx_tunnel_names.get(sbid, sbid)))
 		wire.name = "Wire_" + sbid
 		box.add_child(wire)
 	if rows.is_empty():
@@ -3566,13 +3569,43 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 		else:
 			line.add_child(_small("Pause", _sbx_tunnel_do.bind(sbid, "ports/%d/pause" % port, {}, ""), "It keeps its port but carries nothing until you resume it"))
 		line.add_child(_small("Close", _sbx_tunnel_do.bind(sbid, "ports/%d/close" % port, {}, "")))
+	# the proxy, and the rules that let the sandbox reach a port of this computer: each its line, each closed by hand
+	var extras: Array = SandboxView.extra_rows(t)
+	for e in extras:
+		var eline := HBoxContainer.new()
+		eline.add_theme_constant_override("separation", 6)
+		box.add_child(eline)
+		var ewords := _wrap(str(e["words"]))
+		ewords.add_theme_font_size_override("font_size", 12)
+		ewords.add_theme_color_override("font_color", AmTheme.col("TEXT"))
+		ewords.size_flags_horizontal = SIZE_EXPAND_FILL
+		eline.add_child(ewords)
+		if e["kind"] == "socks":
+			var proxy := str(e["address"])
+			eline.add_child(_small("Copy the address", func() -> void:
+				DisplayServer.clipboard_set(proxy)
+				_toast("Copied: " + proxy)))
+			eline.add_child(_small("Close", _sbx_tunnel_do.bind(sbid, "socks/close", {}, "")))
+		else:
+			eline.add_child(_small("Close", _sbx_tunnel_do.bind(sbid, "back/%d/close" % int(e["port"]), {}, "The sandbox no longer reaches that port")))
+	var more := HBoxContainer.new()
+	more.add_theme_constant_override("separation", 6)
+	box.add_child(more)
+	if not extras.any(func(e: Dictionary) -> bool: return e["kind"] == "socks"):
+		more.add_child(_small("Open a SOCKS proxy", _sbx_tunnel_do.bind(sbid, "socks/open", {}, ""), "One address on this computer (127.0.0.1) through which a program set on it reaches everything inside the sandbox. Nothing is made public."))
+	more.add_child(_small("Let the sandbox reach a port of this computer…", func() -> void:
+		_ask("A rule: which port of this computer may this sandbox reach? (it stays until you close it)", "", func(text: String) -> void:
+			if not text.strip_edges().is_valid_int():
+				_toast("A port is a number, like 5432")
+				return
+			_sbx_tunnel_do(sbid, "back/%d/open" % int(text.strip_edges()), {}, "")), "Without a rule, a sandbox reaches nothing of this computer but its way back to the Second Brain."))
 
 
 func _sbx_second() -> void:
 	sbx_seconds += 1
 	if view == "sandboxes" and sbx_seconds % 3 == 0:  # what passes and what listens, asked again while one looks
 		for sbid in sbx_tunnel_boxes.keys():
-			if is_instance_valid(sbx_tunnel_boxes[sbid]) and str(sbx_tunnels.get(sbid, {}).get("state", "closed")) == "open":
+			if is_instance_valid(sbx_tunnel_boxes[sbid]) and str(sbx_tunnels.get(sbid, {}).get("state", "closed")) in ["open", "lost"]:
 				_sbx_tunnel_ask(sbid)
 	if view != "sandboxes":
 		return

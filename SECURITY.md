@@ -22,7 +22,11 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
 - **A sandbox's ports on this computer**: a port of a sandbox is brought here only when asked, through one lasting
   SSH connection per sandbox. It listens on `127.0.0.1` and nowhere else; what passes is counted, never read; it can
   be paused or closed. No public address is ever made. The sandbox's host key is remembered at that connection's
-  first use, and a key that changed refuses. Opening a connection never starts a paused machine. You ask for it in
+  first use, and a key that changed refuses. Opening a connection never starts a paused machine. A SOCKS proxy toward
+  a sandbox, when you open one, is on `127.0.0.1` too. In the other direction, a sandbox reaches nothing of this
+  computer except its way back to the engine, which answers it on two addresses only (its health, and that sandbox's
+  own Second Brain route, guarded by its secret). Anything else needs a rule you make for one port of this computer
+  and one sandbox; it is listed, counted, and stays until you close it. You ask for it in
   ☁ Sandboxes, « Tunnel and ports ». Not tried against a real sandbox yet.
 - **Agents' logins**: agent CLIs run with their own login; Agent Manager never reads, copies or relays those tokens.
 - **Second Brain keys**: one per session, at the « propose » level (read, search, propose; the Brain's archivist files

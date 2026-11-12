@@ -55,6 +55,10 @@ class FakeSandboxes:
         self.destroyed = 0
         self.fly = SimpleNamespace(env=lambda: dict(os.environ))
 
+    def _db(self):
+        import sqlite3
+        return sqlite3.connect(os.path.join(self.home, "s.sqlite3"), timeout=5)
+
     def get(self, sbid):
         return {"id": sbid, "machine": "m-1", "app": "agmgd-test", "destroyed": self.destroyed}
 
@@ -177,6 +181,153 @@ class CarrierTest(unittest.TestCase):
         self.assertEqual(self.carrier.describe("sb1")["state"], "closed")
 
 
+class MoreTest(CarrierTest):
+    """What was added after reading how another tunnel manager does it: a fallen connection comes back by itself,
+    a failure says its family, what was open is remembered; then a SOCKS proxy, and a rule that lets the sandbox
+    reach a port of this computer."""
+
+    def fetch(self, address):
+        with urllib.request.urlopen(address + "/", timeout=10) as r:
+            return r.read()
+
+    def until(self, check, sec=8.0):
+        """Waits for a count to be written down: a byte is counted once it was handed on, a moment after the page
+        is here; a fixed wait is too short when the computer is busy."""
+        end = time.monotonic() + sec
+        while time.monotonic() < end:
+            if check():
+                return True
+            time.sleep(0.05)
+        return False
+
+    def test_a_failure_says_its_family(self):
+        from engine.sandbox_carrier import reason
+        self.assertIn("host key is not the one remembered", reason("@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@"))
+        self.assertIn("refused the key", reason("root@127.0.0.1: Permission denied (publickey)."))
+        self.assertIn("SSH server is not up", reason("ssh: connect to host 127.0.0.1 port 40123: Connection refused"))
+        self.assertIn("private network is not reached", reason("ssh: Could not resolve hostname x.vm.app.internal"))
+        self.assertIn("did not answer in time", reason("ssh: connect to host 127.0.0.1 port 1: Connection timed out"))
+        self.assertIn("already taken on the other side", reason("Error: remote port forwarding failed for listen port 5432"))
+        self.assertEqual(reason(""), "the sandbox did not answer")
+        os.environ["STANDIN_UNREACHABLE"] = "1"                       # the stand-in refuses as a sandbox still starting would
+        with self.assertRaises(ValueError) as e:
+            self.carrier.connect("sb1")
+        self.assertIn("SSH server is not up", str(e.exception))
+
+    def test_what_was_open_comes_back_with_the_connection_on_the_same_address(self):
+        self.carrier.connect("sb1")
+        first = self.carrier.open_port("sb1", self.inside, label="dashboard")
+        self.assertEqual(self.carrier.remembered("sb1"), [{"kind": "in", "port": self.inside, "local": first["port"], "label": "dashboard"}])
+        self.carrier.disconnect("sb1")
+        again = self.carrier.connect("sb1")                            # nothing asked: the port is there again
+        self.assertEqual([(p["remote_port"], p["port"], p["label"]) for p in again["ports"]], [(self.inside, first["port"], "dashboard")])
+        self.assertIn(b"Sales", self.fetch(first["address"]))          # the same address: a bookmark keeps working
+        self.carrier.close_port("sb1", self.inside)                    # closed by hand: not opened again by itself
+        self.carrier.disconnect("sb1")
+        self.assertEqual(self.carrier.connect("sb1")["ports"], [])
+
+    def test_a_connection_that_falls_comes_back_by_itself(self):
+        import signal
+        from engine import sandbox_carrier
+        self.carrier.connect("sb1")
+        opened = self.carrier.open_port("sb1", self.inside)
+        pid = int(open(os.path.join(self.tmp, "runtime", "carrier-sb1.sock.pid")).read())
+        os.kill(pid, signal.SIGKILL)                                   # the connection falls, as when the network drops
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and self.carrier.links["sb1"]["master"].poll() is None:
+            time.sleep(0.05)
+        old = sandbox_carrier.RETRY
+        sandbox_carrier.RETRY = (3600.0, 0.0, 0.0, 0.0)               # the first try comes later; the next ones at once
+        try:
+            self.assertEqual(self.carrier.watch_once(), [])            # seen as fallen: what it carried is closed, and it is said
+            lost = self.carrier.describe("sb1")
+            self.assertEqual((lost["state"], lost["why"], lost["tries"]), ("lost", "the connection fell", 0))
+            self.assertGreater(lost["retry_in"], 3000)
+            with self.assertRaises(OSError):
+                self.fetch(opened["address"])
+            self.carrier.lost["sb1"]["next"] = 0.0                     # its time has come
+            self.sbx.state = "stopped"                                 # paused meanwhile: tried, never started
+            self.assertEqual(self.carrier.watch_once(), [])
+            self.assertIn("never starts it", self.carrier.describe("sb1")["why"])
+            self.sbx.state = "started"
+            self.assertEqual(self.carrier.watch_once(), ["sb1"])       # back, with what it carried
+        finally:
+            sandbox_carrier.RETRY = old
+        self.assertEqual(self.carrier.describe("sb1")["state"], "open")
+        self.assertIn(b"Sales", self.fetch(opened["address"]))
+        self.carrier.disconnect("sb1")                                 # closed by the owner: nothing tries again
+        self.assertEqual((self.carrier.watch_once(), self.carrier.describe("sb1")["state"]), ([], "closed"))
+
+    def test_two_sandboxes_with_the_same_port_each_get_their_own_address_here(self):
+        self.carrier.connect("sb1")
+        self.carrier.connect("sb2")
+        from engine.sandbox_carrier import free_port
+        wished = free_port()
+        one = self.carrier.open_port("sb1", self.inside, wished, "dashboard")
+        two = self.carrier.open_port("sb2", self.inside, wished, "dashboard")
+        self.assertEqual(one["port"], wished)                          # the first keeps the number asked for
+        self.assertGreater(two["port"], wished)                        # the second takes the next free one
+        self.assertIn(b"Sales", self.fetch(one["address"]))
+        self.assertIn(b"Sales", self.fetch(two["address"]))
+        self.assertTrue(self.until(lambda: self.carrier.describe("sb1")["received"] > 30))   # each counted on its own
+        self.assertTrue(self.until(lambda: self.carrier.describe("sb2")["received"] > 30))
+        self.assertEqual(self.carrier.remembered("sb2")[0]["local"], two["port"])   # and each keeps its address next time
+        self.carrier.disconnect("sb1")
+        self.assertIn(b"Sales", self.fetch(two["address"]))            # closing one leaves the other
+
+    def test_a_socks_proxy_reaches_what_is_inside_through_one_address(self):
+        import socket
+        import struct
+        self.carrier.connect("sb1")
+        proxy = self.carrier.open_socks("sb1", local=0)
+        self.assertEqual((proxy["kind"], proxy["label"]), ("socks", "SOCKS proxy"))
+        self.assertTrue(proxy["address"].startswith("socks5://127.0.0.1:"))
+        with socket.create_connection(("127.0.0.1", proxy["port"]), timeout=10) as s:   # as a browser set on that proxy does
+            s.sendall(b"\x05\x01\x00")
+            self.assertEqual(s.recv(2), b"\x05\x00")
+            s.sendall(b"\x05\x01\x00\x01" + socket.inet_aton("127.0.0.1") + struct.pack(">H", self.inside))
+            self.assertEqual(s.recv(10)[:2], b"\x05\x00")
+            s.sendall(b"GET / HTTP/1.0\r\n\r\n")
+            page = b""
+            while True:
+                data = s.recv(65536)
+                if not data:
+                    break
+                page += data
+        self.assertIn(b"Sales, this week", page)
+        self.assertTrue(self.until(lambda: [p for p in self.carrier.describe("sb1")["ports"] if p["kind"] == "socks"][0]["received"] > 30))   # counted like any port
+        self.assertEqual(self.carrier.open_socks("sb1")["port"], proxy["port"])
+        self.assertEqual(self.carrier.close_socks("sb1")["state"], "closed")
+        self.assertEqual(self.carrier.remembered("sb1"), [])
+
+    def test_the_sandbox_reaches_a_port_of_this_computer_only_by_a_rule(self):
+        self.carrier.connect("sb1")
+        self.assertEqual([p for p in self.carrier.describe("sb1")["ports"] if p["kind"] == "out"], [])   # none without a rule
+        from engine.sandbox_carrier import free_port
+        there = free_port()                                            # the number it will have inside the sandbox
+        rule = self.carrier.open_back("sb1", self.inside, there, label="my database")
+        self.assertEqual((rule["kind"], rule["local_port"], rule["remote_port"], rule["label"]), ("out", self.inside, there, "my database"))
+        self.assertIn(b"Sales", self.fetch(f"http://127.0.0.1:{there}"))   # « from inside the sandbox »: this computer's program answers
+        self.assertTrue(self.until(lambda: self.carrier.describe("sb1")["ports"][0]["received"] > 30))
+        self.assertEqual(self.carrier.remembered("sb1"), [{"kind": "out", "port": self.inside, "local": there, "label": "my database"}])
+        with open(os.environ["STANDIN_SS"], "a") as f:                 # it listens in the sandbox now: not one of the sandbox's own ports
+            f.write('LISTEN 0 128 127.0.0.1:%d 0.0.0.0:* users:(("sshd",pid=41,fd=9))\n' % there)
+        self.assertNotIn(there, [r["port"] for r in self.carrier.listening("sb1")])
+        self.assertEqual(self.carrier.close_back("sb1", self.inside)["state"], "closed")
+        with self.assertRaises(OSError):
+            self.fetch(f"http://127.0.0.1:{there}")
+        os.environ["STANDIN_PORT_TAKEN"] = str(there)                  # the number is taken inside the sandbox
+        try:
+            with self.assertRaises(ValueError) as e:
+                self.carrier.open_back("sb1", self.inside, there)
+            self.assertIn("already taken on the other side", str(e.exception))
+        finally:
+            os.environ.pop("STANDIN_PORT_TAKEN", None)
+        self.assertEqual(self.carrier.describe("sb1")["ports"], [])    # and nothing was left half open here
+        with self.assertRaises(ValueError):
+            self.carrier.open_back("sb1", self.inside, 8765)           # never over the way back to the Second Brain
+
+
 class RoutesTest(unittest.TestCase):
     """The same, asked of the engine's local API as the app will."""
 
@@ -211,8 +362,12 @@ class RoutesTest(unittest.TestCase):
             opened = call("POST", f"/sandboxes/sb1/ports/{inside}/open", {"label": "dashboard"})
             with urllib.request.urlopen(opened["address"] + "/", timeout=10) as r:
                 self.assertIn(b"Sales", r.read())
-            time.sleep(0.3)
-            link = call("GET", "/sandboxes/sb1/tunnel")
+            link = {}
+            for _ in range(100):   # the count is written a moment after the page is here
+                link = call("GET", "/sandboxes/sb1/tunnel")
+                if link.get("received", 0) > 30:
+                    break
+                time.sleep(0.05)
             self.assertEqual((link["state"], link["ports"][0]["label"], link["ports"][0]["remote_port"]), ("open", "dashboard", inside))
             self.assertGreater(link["received"], 30)
             self.assertEqual(link["health"]["load"], 0.42)

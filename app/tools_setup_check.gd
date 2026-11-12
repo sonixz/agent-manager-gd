@@ -498,4 +498,15 @@ func _sandbox_cases() -> void:
 	check("ports: a line in words", Sbx.port_words(pr[0]) == "streamlit on 8501 is on your localhost:8501" and Sbx.port_words(pr[3]) == "python3 listens on 8000 (inside the sandbox only)")
 	var hw := Sbx.health_words({"memory_total": 1009636 * 1024.0, "memory_used": 405056 * 1024.0, "load": 0.42, "disk_total": 8350298112.0, "disk_free": 5771362304.0, "round_trip_ms": 48})
 	check("ports: how the sandbox is doing, in four figures", hw.map(func(x: Array) -> String: return "%s %s" % [x[0], x[1]]) == ["Memory 396 MB of 1.0 GB", "Load 0.42", "Disk free 5.4 GB", "Round trip 48 ms"] and not hw[0][2] and Sbx.health_words({}).is_empty())
+	# --- a fallen connection, the proxy, the rules toward this computer
+	check("ports: a fallen connection says why and when it is tried again", Sbx.link_of({"state": "lost", "why": "the connection fell", "tries": 1, "retry_in": 11.2}) == {"text": "the connection fell · trying again in 12 s (try 2 of 10)", "level": "warn"} and Sbx.link_of({"state": "lost", "why": "the sandbox did not answer in time", "tries": 10, "retry_in": -1.0})["text"].ends_with("it was tried ten times: connect again") and Sbx.link_of({"state": "lost", "retry_in": 0.2})["text"].contains("trying again now"))
+	var rich: Dictionary = tun.duplicate(true)
+	rich["ports"].append({"kind": "socks", "remote_port": 0, "port": 1080, "address": "socks5://127.0.0.1:1080", "state": "open", "sent": 10, "received": 20, "sent_rate": 0.0, "received_rate": 0.0, "open_now": 0})
+	rich["ports"].append({"kind": "out", "remote_port": 5432, "local_port": 5432, "port": 40001, "state": "open", "sent": 0, "received": 0, "sent_rate": 0.0, "received_rate": 0.0, "open_now": 0})
+	check("ports: the connection counts the ports brought here apart from the proxy and the rules", Sbx.link_of(rich)["text"] == "connected · 2 ports on your localhost · a SOCKS proxy · 1 port of this computer it may reach")
+	check("ports: the proxy and a rule are not ports of the sandbox", Sbx.port_rows(rich).map(func(r: Dictionary) -> int: return r["port"]) == [8501, 9000, 53, 8000])
+	var ex := Sbx.extra_rows(rich)
+	check("ports: the proxy and a rule each have their line", ex.size() == 2 and ex[0]["kind"] == "socks" and ex[0]["address"] == "socks5://127.0.0.1:1080" and str(ex[0]["words"]).begins_with("A SOCKS proxy is on your localhost:1080") and ex[1]["words"] == "A rule you made: the sandbox reaches this computer's port 5432, on its own 127.0.0.1:5432" and ex[1]["port"] == 5432)
+	var wr := Sbx.wire_rows(rich)
+	check("ports: a wire for each, with the words of each end", wr.map(func(r: Dictionary) -> String: return "%s | %s" % [r["left"], r["right"]]) == ["localhost:8501 | streamlit :8501", "localhost:9001 | :9000", "localhost:1080  SOCKS | everything inside", "this computer's :5432 | its own :5432  (a rule)"] and wr[1]["state"] == "paused")
 

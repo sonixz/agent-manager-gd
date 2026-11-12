@@ -22,6 +22,7 @@ import socket
 import subprocess
 import threading
 import time
+from contextlib import closing
 
 from .relay import LOOPBACK, Relay
 
@@ -83,6 +84,29 @@ def parse_health(text: str) -> dict:
     return out
 
 
+def reason(err: str) -> str:
+    """Why a connection or a forward failed, said by its family (read from what OpenSSH prints)."""
+    low = (err or "").lower()
+    if "host key" in low or "remote host identification" in low:
+        return "the sandbox's host key is not the one remembered at its first connection: nothing was opened"
+    if "permission denied" in low or "publickey" in low:
+        return "the sandbox refused the key: it is not the sandbox this key was made for, or its setup did not finish"
+    if "connection refused" in low:
+        return "the sandbox refused the connection: its SSH server is not up (yet)"
+    if "could not resolve" in low or "name or service not known" in low:
+        return "the sandbox's name was not found: Fly.io's private network is not reached"
+    if "timed out" in low or "did not answer" in low:
+        return "the sandbox did not answer in time"
+    if "address already in use" in low or "cannot listen" in low or "port forwarding failed" in low:
+        return "the port is already taken on the other side"
+    text = (err or "").strip()
+    return "the sandbox did not answer" + ((": " + text[-160:]) if text else "")
+
+
+RETRY = (5.0, 15.0, 30.0, 60.0)   # after a connection is lost: when to try again, then every minute, ten times in all
+SOCKS_PORT = 1080                 # the usual port of a SOCKS proxy; the next free one when it is taken
+
+
 def _end(proc: subprocess.Popen | None) -> None:
     """Stops a process and takes its exit: none is left half-dead behind the engine."""
     if proc is None:
@@ -105,7 +129,31 @@ class Carrier:
         self.ssh = ssh
         self.flyctl = flyctl
         self.links: dict[str, dict] = {}    # sandbox id -> its connection: the two processes, the ports opened
+        self.lost: dict[str, dict] = {}     # sandbox id -> a connection that fell: why, how many tries, when the next one
         self.lock = threading.Lock()
+        self._watching = False
+        with closing(self._db()) as db, db:
+            # what was opened for a sandbox is remembered, and opened again when its connection comes back:
+            # « in » a port of the sandbox brought here, « socks » its proxy, « out » a port of this computer the
+            # sandbox may reach (a rule the owner made)
+            db.execute("CREATE TABLE IF NOT EXISTS sandbox_ports (sandbox TEXT NOT NULL, kind TEXT NOT NULL, port INTEGER NOT NULL, "
+                       "local INTEGER NOT NULL DEFAULT 0, label TEXT NOT NULL DEFAULT '', PRIMARY KEY (sandbox, kind, port))")
+
+    def _db(self):
+        return self.sandboxes._db()
+
+    def _remember(self, sbid: str, kind: str, port: int, local: int, label: str) -> None:
+        with closing(self._db()) as db, db:
+            db.execute("INSERT OR REPLACE INTO sandbox_ports (sandbox, kind, port, local, label) VALUES (?, ?, ?, ?, ?)", (sbid, kind, port, local, label))
+
+    def _forget(self, sbid: str, kind: str, port: int) -> None:
+        with closing(self._db()) as db, db:
+            db.execute("DELETE FROM sandbox_ports WHERE sandbox = ? AND kind = ? AND port = ?", (sbid, kind, port))
+
+    def remembered(self, sbid: str) -> list[dict]:
+        with closing(self._db()) as db, db:
+            return [{"kind": r[0], "port": r[1], "local": r[2], "label": r[3]}
+                    for r in db.execute("SELECT kind, port, local, label FROM sandbox_ports WHERE sandbox = ? ORDER BY kind, port", (sbid,))]
 
     # ---------------------------------------------------------------- the connection
     def _base(self, sbid: str, port: int) -> list[str]:
@@ -173,16 +221,28 @@ class Carrier:
             up = False
         if not up:
             _end(proxy)
-            if "host key" in err.lower() or "REMOTE HOST IDENTIFICATION" in err:
-                raise ValueError("the sandbox's host key is not the one remembered at its first connection: nothing was opened")
-            raise ValueError("the sandbox did not answer" + ((": " + err.strip()[-200:]) if err.strip() else ""))
+            raise ValueError(reason(err))
         with self.lock:
             self.links[sbid] = link
+            self.lost.pop(sbid, None)
+        for r in self.remembered(sbid):   # what was open for this sandbox comes back with its connection
+            try:
+                if r["kind"] == "in":
+                    self.open_port(sbid, r["port"], r["local"], r["label"])
+                elif r["kind"] == "socks":
+                    self.open_socks(sbid, r["local"])
+                elif r["kind"] == "out":
+                    self.open_back(sbid, r["port"], r["local"])
+            except (ValueError, KeyError, OSError):
+                pass   # a port taken meanwhile, a program gone: the line says so, the others still open
+        self._watch()
         return self.describe(sbid)
 
-    def disconnect(self, sbid: str) -> dict:
+    def disconnect(self, sbid: str, forget_lost: bool = True) -> dict:
         with self.lock:
             link = self.links.pop(sbid, None)
+            if forget_lost:
+                self.lost.pop(sbid, None)   # asked for: nothing tries again
         if link:
             for row in list(link["ports"].values()):
                 try:
@@ -225,17 +285,66 @@ class Carrier:
         if rc != 0:
             raise ValueError("the port could not be brought here" + ((": " + err.strip()[-160:]) if err.strip() else ""))
         ch = self.relay.open(inner, port=int(local) or port, label=label or f"port {port}")
-        link["ports"][port] = {"port": port, "inner": inner, "spec": spec, "channel": ch["id"], "label": ch["label"]}
+        link["ports"][port] = {"kind": "in", "port": port, "inner": inner, "flag": "-L", "spec": spec, "channel": ch["id"], "label": ch["label"]}
+        self._remember(sbid, "in", port, ch["port"], ch["label"])   # the same address next time: a bookmark keeps working
         return self._port_row(link, port)
 
-    def close_port(self, sbid: str, port: int) -> dict:
+    def open_socks(self, sbid: str, local: int = 0) -> dict:
+        """A SOCKS proxy toward the sandbox, on this computer only: through it, a program here reaches whatever
+        the sandbox itself reaches (every port inside it, by one address)."""
         link = self._link(sbid)
-        row = link["ports"].pop(int(port), None)
+        if "socks" in link["ports"]:
+            return self._port_row(link, "socks")
+        inner = free_port()
+        spec = f"{LOOPBACK}:{inner}"
+        rc, _, err = self._run(link, "-O", "forward", "-D", spec, "root@127.0.0.1")
+        if rc != 0:
+            raise ValueError(reason(err or "port forwarding failed"))
+        ch = self.relay.open(inner, port=int(local) or SOCKS_PORT, label="SOCKS proxy")
+        link["ports"]["socks"] = {"kind": "socks", "port": 0, "inner": inner, "flag": "-D", "spec": spec, "channel": ch["id"], "label": "SOCKS proxy"}
+        self._remember(sbid, "socks", 0, ch["port"], "SOCKS proxy")
+        return self._port_row(link, "socks")
+
+    def open_back(self, sbid: str, port: int, there: int = 0, label: str = "") -> dict:
+        """A rule the owner makes: a port of this computer becomes reachable from inside the sandbox, on the same
+        number there (or `there`). Nothing of this computer is reachable from a sandbox without such a rule, except
+        the way back to the Second Brain that every sandbox has. What passes is counted like the rest."""
+        port = int(port)
+        there = int(there) or port
+        if not 1 <= port <= 65535 or there in OURS:
+            raise ValueError("this port is not one to open")
+        link = self._link(sbid)
+        key = f"out:{port}"
+        if key in link["ports"]:
+            return self._port_row(link, key)
+        ch = self.relay.open(port, label=label or f"this computer's {port}")   # the relay stands before the local program
+        spec = f"{LOOPBACK}:{there}:{LOOPBACK}:{ch['port']}"
+        rc, _, err = self._run(link, "-O", "forward", "-R", spec, "root@127.0.0.1")
+        if rc != 0:
+            self.relay.close(ch["id"])
+            raise ValueError(reason(err or "port forwarding failed"))
+        link["ports"][key] = {"kind": "out", "port": port, "there": there, "flag": "-R", "spec": spec, "channel": ch["id"], "label": ch["label"]}
+        self._remember(sbid, "out", port, there, ch["label"])
+        return self._port_row(link, key)
+
+    def _close(self, sbid: str, key, kind: str, port: int) -> dict:
+        link = self._link(sbid)
+        row = link["ports"].pop(key, None)
         if row is None:
-            raise KeyError(port)
+            raise KeyError(key)
         closed = self.relay.close(row["channel"])
-        self._run(link, "-O", "cancel", "-L", row["spec"], "root@127.0.0.1")
-        return {**closed, "remote_port": row["port"]}
+        self._run(link, "-O", "cancel", row["flag"], row["spec"], "root@127.0.0.1")
+        self._forget(sbid, kind, port)   # closed by the owner: not opened again by itself
+        return {**closed, "kind": kind, "remote_port": row.get("there", row["port"])}
+
+    def close_socks(self, sbid: str) -> dict:
+        return self._close(sbid, "socks", "socks", 0)
+
+    def close_back(self, sbid: str, port: int) -> dict:
+        return self._close(sbid, f"out:{int(port)}", "out", int(port))
+
+    def close_port(self, sbid: str, port: int) -> dict:
+        return self._close(sbid, int(port), "in", int(port))
 
     def pause_port(self, sbid: str, port: int, paused: bool = True) -> dict:
         link = self._link(sbid)
@@ -243,10 +352,15 @@ class Carrier:
         (self.relay.pause if paused else self.relay.resume)(row["channel"])
         return self._port_row(link, int(port))
 
-    def _port_row(self, link: dict, port: int) -> dict:
-        row = link["ports"][port]
+    def _port_row(self, link: dict, key) -> dict:
+        row = link["ports"][key]
         ch = next((c for c in self.relay.describe() if c["id"] == row["channel"]), {})
-        return {**ch, "remote_port": port}
+        out = {**ch, "kind": row["kind"], "remote_port": row.get("there", row["port"])}
+        if row["kind"] == "socks":
+            out["address"] = f"socks5://{LOOPBACK}:{ch.get('port', 0)}"
+        elif row["kind"] == "out":
+            out["local_port"] = row["port"]   # the program of this computer the sandbox reaches
+        return out
 
     # ---------------------------------------------------------------- what the sandbox tells
     def listening(self, sbid: str) -> list[dict]:
@@ -256,7 +370,9 @@ class Carrier:
         rows = parse_listening(out) if rc == 0 else []
         for r in rows:
             r["open"] = r["port"] in link["ports"]
-        return rows
+        # a port of this computer that the sandbox reaches listens there too: it is not one of the sandbox's own
+        mine = {row.get("there") for row in link["ports"].values() if row["kind"] == "out"}
+        return [r for r in rows if r["port"] not in mine]
 
     def health(self, sbid: str, workdir: str = "/work") -> dict:
         link = self._link(sbid)
@@ -271,13 +387,56 @@ class Carrier:
     def describe(self, sbid: str) -> dict:
         with self.lock:
             link = self.links.get(sbid)
+            lost = dict(self.lost.get(sbid, {}))
         if not link:
+            if lost:   # it fell: said with why, how many times it was tried, and when the next try comes
+                return {"id": sbid, "state": "lost", "ports": [], "why": lost["why"], "tries": lost["tries"],
+                        "retry_in": max(0.0, lost["next"] - time.monotonic()) if lost["tries"] < 10 else -1.0}
             return {"id": sbid, "state": "closed", "ports": []}
         up = link["master"] is not None and link["master"].poll() is None and link["proxy"].poll() is None
-        ports = [self._port_row(link, p) for p in sorted(link["ports"])]
+        ports = [self._port_row(link, p) for p in sorted(link["ports"], key=str)]
         return {"id": sbid, "state": "open" if up else "lost", "since": link["since"], "ports": ports,
                 "sent": sum(int(p.get("sent", 0)) for p in ports), "received": sum(int(p.get("received", 0)) for p in ports),
                 "sent_rate": sum(float(p.get("sent_rate", 0.0)) for p in ports), "received_rate": sum(float(p.get("received_rate", 0.0)) for p in ports)}
+
+    def watch_once(self) -> list[str]:
+        """Looks at every connection: one that fell is closed properly and noted as lost; a lost one is tried again
+        when its time has come (after 5, 15, 30 seconds, then every minute, ten times). Gives the ones it brought back.
+        A connection the owner closed is never tried again, and a paused machine is never started."""
+        with self.lock:
+            fallen = [sbid for sbid, link in self.links.items() if link["master"].poll() is not None or link["proxy"].poll() is not None]
+        for sbid in fallen:
+            self.disconnect(sbid, forget_lost=False)
+            with self.lock:
+                self.lost[sbid] = {"why": "the connection fell", "tries": 0, "next": time.monotonic() + RETRY[0]}
+        back = []
+        with self.lock:
+            due = [sbid for sbid, x in self.lost.items() if x["tries"] < 10 and time.monotonic() >= x["next"]]
+        for sbid in due:
+            try:
+                self.connect(sbid)
+                back.append(sbid)
+            except (ValueError, KeyError, OSError, RuntimeError) as e:
+                with self.lock:
+                    x = self.lost.setdefault(sbid, {"why": "", "tries": 0, "next": 0.0})
+                    x["tries"] += 1
+                    x["why"] = str(e)
+                    x["next"] = time.monotonic() + RETRY[min(x["tries"], len(RETRY) - 1)]
+        return back
+
+    def _watch(self) -> None:
+        if self._watching:
+            return
+        self._watching = True
+
+        def loop() -> None:
+            while True:
+                time.sleep(3.0)
+                try:
+                    self.watch_once()
+                except Exception:  # noqa: BLE001: the watch itself must not die
+                    pass
+        threading.Thread(target=loop, daemon=True, name="carrier-watch").start()
 
     def close_all(self) -> None:
         with self.lock:

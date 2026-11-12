@@ -14,7 +14,7 @@ opt, flags, rest = {"-o": []}, set(), []
 i = 0
 while i < len(args):
     a = args[i]
-    if a in ("-i", "-p", "-S", "-O", "-L"):
+    if a in ("-i", "-p", "-S", "-O", "-L", "-R", "-D"):
         opt[a] = args[i + 1]
         i += 2
     elif a == "-o":
@@ -70,17 +70,67 @@ elif opt.get("-O") == "check":
 elif opt.get("-O") == "forward":
     if not alive():
         sys.exit(255)
-    _, inner, _, port = opt["-L"].split(":")
     here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    code = ("import sys, time; sys.path.insert(0, %r); from engine.relay import Relay; r = Relay(); "
-            "r.open(%d, port=%d, tries=1); time.sleep(3600)") % (here, int(port), int(inner))
-    p = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if "-D" in opt:   # a SOCKS proxy: a small one of this computer stands for the sandbox's
+        inner = opt["-D"].split(":")[1]
+        code = r"""
+import socket, struct, sys, threading
+def pump(a, b):
+    try:
+        while True:
+            d = a.recv(65536)
+            if not d:
+                break
+            b.sendall(d)
+    except OSError:
+        pass
+    finally:
+        for s in (a, b):
+            try:
+                s.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+def serve(c):
+    try:
+        ver, n = c.recv(2)
+        c.recv(n)
+        c.sendall(b"\x05\x00")
+        ver, cmd, _, atyp = c.recv(4)
+        if atyp == 1:
+            host = socket.inet_ntoa(c.recv(4))
+        else:
+            host = c.recv(c.recv(1)[0]).decode()
+        port = struct.unpack(">H", c.recv(2))[0]
+        t = socket.create_connection((host, port), timeout=10)
+        c.sendall(b"\x05\x00\x00\x01" + bytes(6))
+        threading.Thread(target=pump, args=(c, t), daemon=True).start()
+        pump(t, c)
+    except OSError:
+        c.close()
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", int(sys.argv[1])))
+s.listen(16)
+while True:
+    c, _ = s.accept()
+    threading.Thread(target=serve, args=(c,), daemon=True).start()
+"""
+        p = subprocess.Popen([sys.executable, "-c", code, inner], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:             # -L and -R alike here: listen on the first port, carry to the last
+        _, inner, _, port = (opt.get("-L") or opt.get("-R")).split(":")
+        if os.environ.get("STANDIN_PORT_TAKEN") == inner:
+            sys.stderr.write("Error: remote port forwarding failed for listen port %s\n" % inner)
+            sys.exit(255)
+        code = ("import sys, time; sys.path.insert(0, %r); from engine.relay import Relay; r = Relay(); "
+                "r.open(%d, port=%d, tries=1); time.sleep(3600)") % (here, int(port), int(inner))
+        p = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     with open(f"{sock}.fwd.{inner}", "w") as f:
         f.write(str(p.pid))
     time.sleep(0.4)   # the forward listens once the command is back, as with OpenSSH
     sys.exit(0)
 elif opt.get("-O") in ("cancel", "exit"):
-    which = forwards() if opt["-O"] == "exit" else [f"{sock}.fwd.{opt['-L'].split(':')[1]}"]
+    spec = opt.get("-L") or opt.get("-R") or opt.get("-D") or ""
+    which = forwards() if opt["-O"] == "exit" else [f"{sock}.fwd.{spec.split(':')[1]}"]
     for f in which:
         try:
             os.kill(int(open(f).read()), signal.SIGTERM)

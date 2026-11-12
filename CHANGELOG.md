@@ -14,6 +14,17 @@ Newest first.
   the sandbox is doing: memory, load, disk, the time of a round trip. Nothing is made public; the sandbox's host
   key is remembered and a changed one refuses; a paused sandbox is never started. Not tried against a real sandbox
   yet: only against stand-ins for Fly.io and SSH.
+- A connection that falls comes back by itself, with what it carried, and the block says why it fell and when it
+  tries again. What you opened for a sandbox is remembered and comes back on the same address at the next
+  connection. A failure says its family: the key refused, the SSH server not up yet, no answer in time, the port
+  already taken on the other side, the host key changed.
+- Two sandboxes that listen on the same port each get their own address on this computer: the first keeps the
+  number, the second takes the next free one, and each keeps its own afterwards.
+- **Open a SOCKS proxy**: one address on this computer through which a program set on it reaches everything inside
+  the sandbox.
+- **Let the sandbox reach a port of this computer…**: a rule, for one port and one sandbox. Without a rule a sandbox
+  reaches nothing of this computer but its way back to the Second Brain. The rule has its wire, with what is asked
+  and answered, and stays until you close it.
 - Your sandboxes now come right under the inventory; the steps to make one and the costs follow.
 - The **☁ Sandboxes** tab opens on an **Inventory** that is always there: every sandbox made from this computer,
   the destroyed ones too. Before, a destroyed sandbox left the page, and with all of them destroyed the page listed

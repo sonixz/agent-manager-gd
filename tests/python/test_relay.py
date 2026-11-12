@@ -125,7 +125,7 @@ class RelayTest(unittest.TestCase):
         self.assertEqual((a.recv(10), b.recv(10)), (b"aaaa", b"bb"))
         self.assertTrue(wait_for(lambda: self.channel(ch["id"])["open_now"] == 2))
         # a byte is counted once it was handed on: the echo may be back here a moment before its own way out is counted
-        self.assertTrue(wait_for(lambda: self.channel(ch["id"])["sent"] == 6))
+        self.assertTrue(wait_for(lambda: (self.channel(ch["id"])["sent"], self.channel(ch["id"])["received"]) == (6, 6)))
         now = self.channel(ch["id"])
         self.assertEqual((now["sent"], now["received"], now["connections"]), (6, 6, 2))
         a.close()
