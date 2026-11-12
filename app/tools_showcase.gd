@@ -1299,11 +1299,16 @@ func _run() -> void:
 			main.new_dialog.hide()
 		"howto-make-it-yours":
 			var g := "make-it-yours"
-			await main.set_theme_name("neon")
 			main.grid_ids = [made["Checkout flow"], made["Flaky tests"], made["Rate limiter"], made["Test runner"]]
 			main.set_view("grid")
 			await wait(3.0)
+			main.view_btn.pressed.emit()  # the panel the step tells to open, then a theme picked in it: the panel stays
+			await wait(0.3)
+			(main.theme_chips["neon"] as Button).pressed.emit()
+			await wait(1.5)
+			report.append("howto make-it-yours: theme « %s », the panel open: %s" % [AmTheme.current, main.view_panel.visible])
 			await hshot(g, 1)
+			main.view_panel.hide()
 			await main.set_theme_name("focus")
 			main.set_view("shortcuts")
 			await wait(2.0)

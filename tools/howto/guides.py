@@ -278,8 +278,11 @@ guide(
     "make-it-yours", "Themes and shortcuts", "Start", 2,
     "Pick a look among seven themes and change any shortcut.",
     [],
-    [("Click <b>◐</b> at the top, or type <span class=\"say\">theme</span> in the command palette.",
-      "Seven themes, the same as Second Brain's: interface and terminal colours change together. Here, Neon."),
+    [("Click <b>View ▾</b> at the top (it reads <b>Focus ▾</b> or <b>Grid ▾</b>) and pick a theme, or type "
+      "<span class=\"say\">theme</span> in the command palette.",
+      "Seven themes, the same as Second Brain's, each shown in its own colours. The window changes at once and the "
+      "panel stays open, so you can try them one after the other. Interface and terminal colours change together. "
+      "Here, Neon."),
      ("Open <b>◐ › Shortcuts</b>, click an action, and press the new key.",
       "Every shortcut, and the voice keys (hold to talk). With <kbd>Shift</kbd> added, they also work inside a "
       "terminal."),
