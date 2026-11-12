@@ -42,11 +42,16 @@ def main(argv: list[str] | None = None) -> int:
     threading.Thread(target=monitor, args=(sessions,), daemon=True).start()  # Loop 16: sandbox health, once a minute
     from . import host_history
     sessions.host_watch = host_history.start(sessions, h)  # Loop 36: memory and sessions over time, every 30 seconds
+    from .relay import Relay
+    from .sandbox_carrier import Carrier
+    sessions.carrier = Carrier(sessions.sandboxes, Relay(), h)   # Loop 38: a sandbox's ports, brought to this computer
     print(f"engine ready on 127.0.0.1:{a.port} (data: {h})", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        sessions.carrier.close_all()   # what was opened toward the sandboxes does not outlive the engine
     return 0
 
 

@@ -147,6 +147,31 @@ def make_handler(sessions: Sessions, token: str):
                     for row in over["inventory"]["sandboxes"]:
                         row["name"] = names.get(row["session_id"], "")
                     return self._reply(200, over)
+                # Loop 38: a sandbox's lasting connection and its ports brought here (sandbox_carrier.py)
+                if len(parts) >= 3 and parts[0] == "sandboxes" and parts[2] in ("tunnel", "ports"):
+                    carrier = getattr(sessions, "carrier", None)
+                    if carrier is None:
+                        return self._reply(503, {"error": "this engine was started without the carrier"})
+                    sbid = parts[1]
+                    if parts[2:] == ["tunnel"] and method == "GET":
+                        link = carrier.describe(sbid)
+                        if link["state"] == "open":   # what listens there and how it is doing, read through the connection
+                            link["listening"] = carrier.listening(sbid)
+                            link["health"] = carrier.health(sbid, sessions.sandboxes.get(sbid).get("workdir") or "/work")
+                        return self._reply(200, link)
+                    if parts[2:] == ["tunnel", "connect"] and method == "POST":
+                        return self._reply(200, carrier.connect(sbid))
+                    if parts[2:] == ["tunnel", "disconnect"] and method == "POST":
+                        return self._reply(200, carrier.disconnect(sbid))
+                    if len(parts) == 5 and parts[2] == "ports" and parts[3].isdigit() and method == "POST":
+                        port, act = int(parts[3]), parts[4]
+                        if act == "open":
+                            b = self._body()
+                            return self._reply(200, carrier.open_port(sbid, port, int(b.get("local", 0) or 0), str(b.get("label", ""))))
+                        if act == "close":
+                            return self._reply(200, carrier.close_port(sbid, port))
+                        if act in ("pause", "resume"):
+                            return self._reply(200, carrier.pause_port(sbid, port, act == "pause"))
                 if parts == ["sandboxes", "budget"] and method == "POST":
                     b = self._body()
                     return self._reply(200, sessions.sandboxes.set_budget(float(b.get("monthly_usd", 0)), int(b.get("stop_idle_minutes", 0)),

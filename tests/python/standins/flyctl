@@ -1,0 +1,3 @@
+#!/bin/sh
+# Tests only: stands for « flyctl proxy », which stays up while the connection lives.
+exec sleep 600

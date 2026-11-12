@@ -19,6 +19,11 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   agents to chosen repositories, add it to an account made for them. A key is checked by one SSH connection to the
   repository's host with that key (`git ls-remote`), when you open the Repos page, on « Check all » or on
   « Check »; never while the page is closed.
+- **A sandbox's ports on this computer**: a port of a sandbox is brought here only when asked, through one lasting
+  SSH connection per sandbox. It listens on `127.0.0.1` and nowhere else; what passes is counted, never read; it can
+  be paused or closed. No public address is ever made. The sandbox's host key is remembered at that connection's
+  first use, and a key that changed refuses. Opening a connection never starts a paused machine. (The engine can do
+  this since Loop 38; the page that asks for it is not built yet.)
 - **Agents' logins**: agent CLIs run with their own login; Agent Manager never reads, copies or relays those tokens.
 - **Second Brain keys**: one per session, at the « propose » level (read, search, propose; the Brain's archivist files
   proposals with your rules); removing a session revokes its key.
