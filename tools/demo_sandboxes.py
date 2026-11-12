@@ -21,6 +21,9 @@ rows = [("a1c4e9f2", s_run, "e7843a1f0c2d98", now - 86400 * 2), ("b07d3e55", s_p
 for sbid, sid, mid, created in rows:
     db.execute("INSERT OR REPLACE INTO sandboxes (id, session_id, app, machine, region, size, secret, workdir, created) "
                "VALUES (?, ?, 'agmgd-demo0001', ?, 'yyz', 'shared-cpu-1x-1024', 'demo', '/work/gd-project', ?)", (sbid, sid, mid, created))
+# a third one, destroyed nine days ago: it stays in the inventory with the runs it had
+db.execute("INSERT OR REPLACE INTO sandboxes (id, session_id, app, machine, region, size, secret, workdir, destroyed, created) "
+           "VALUES ('old-5e21', '', 'agmgd-demo0001', '3d8c0b77a1e254', 'yyz', 'shared-cpu-1x-1024', 'demo', '/work', 1, ?)", (now - 86400 * 26,))
 db.execute("UPDATE sessions SET brain_client = 'demo-key' WHERE id = ?", (s_run,))
 # a month of past runs: a few hours most working days
 random.seed(7)
@@ -30,7 +33,8 @@ for d in range(1, 26):
     day0 = now - d * 86400
     start = day0 - random.uniform(2, 8) * 3600
     db.execute("INSERT OR REPLACE INTO sandbox_runs VALUES (?, 'shared-cpu-1x-1024', ?, ?)",
-               (random.choice(["a1c4e9f2", "b07d3e55", "old-5e21"]), start, start + random.uniform(1.5, 9) * 3600))
+               (random.choice(["a1c4e9f2", "b07d3e55", "old-5e21"]) if d > 9 else random.choice(["a1c4e9f2", "b07d3e55"]),
+                start, start + random.uniform(1.5, 9) * 3600))   # nothing of the destroyed one after its end
 db.commit()
 ms = lambda t: int(t * 1000)  # noqa: E731
 demo = {"machines": [

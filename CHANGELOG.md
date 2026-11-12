@@ -5,6 +5,18 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Sandboxes: the inventory, always · Loop 38 (first steps)
+- The **☁ Sandboxes** tab opens on an **Inventory** that is always there: every sandbox made from this computer,
+  the destroyed ones too. Before, a destroyed sandbox left the page, and with all of them destroyed the page listed
+  nothing. Four tiles: running now, paused, destroyed and kept (with what was measured in all), and **At Fly.io
+  now**, the machines Fly.io holds at this moment, marked when one is unknown to Agent Manager.
+- One line per sandbox, drawn: its state, its name, its size and region, and its life over the last 30 days as a
+  bar: filled where its machine ran, a mark where it was made, a cross where it was destroyed; then how long it ran
+  in all and what that cost at Fly.io's published price. The runs come from Fly.io's own machine history, kept
+  after the machine is gone. When Fly.io cannot be reached, what was last known is shown, and said to be so.
+- Under the hood, not visible yet: a relay on this computer that will carry and count what passes toward a
+  sandbox's port (it listens on 127.0.0.1 only).
+
 ### Repositories, a line each, and Azure DevOps · Loop 37
 - New, in a repository's unfolded line: **Branches and their folders**, a map drawn like a metro's. The base branch
   is the line at the top, its latest commits as stations, now at the right. Each branch that has commits of its

@@ -290,6 +290,36 @@ class SandboxesTest(unittest.TestCase):
         self.assertGreater(series["per_sandbox"][sb["id"]]["total"], 0)
         self.assertIsNotNone(series["per_sandbox"][sb["id"]]["running_since"])
 
+    def test_the_inventory_keeps_a_destroyed_sandbox_with_its_runs_and_its_cost(self):
+        self.s.sandboxes.prepare()
+        kept = self.s.create("Still there", "shell", "", host="sandbox")
+        gone = self.s.create("Cloud work", "shell", "", host="sandbox")
+        sb = self.s.sandboxes.by_session(gone["id"])
+        m = next(m for m in self.fly.machines if m["id"] == sb["machine"])
+        self.s.sandboxes.sync_runs({sb["machine"]: m})                  # ran 1 h, stopped 1 h, running again
+        self.s.sandboxes.destroy(sb["id"], True)
+        inv = self.s.sandboxes.overview()["inventory"]
+        by = {r["id"]: r for r in inv["sandboxes"]}
+        self.assertEqual(len(by), 2)                                     # the destroyed one is still listed
+        dead = by[sb["id"]]
+        self.assertEqual((dead["state"], dead["destroyed"], dead["running_now"]), ("destroyed", True, False))
+        self.assertEqual(dead["runs"][0], [1000.0, 4600.0])              # each period its machine ran, as Fly.io told it
+        self.assertEqual(dead["first_start"], 1000.0)
+        self.assertGreaterEqual(dead["run_seconds"], 3600)
+        self.assertGreater(dead["cost_usd"], 0)
+        self.assertNotIn("secret", dead)                                 # nothing of its secret in what the page gets
+        alive = by[self.s.sandboxes.by_session(kept["id"])["id"]]
+        self.assertEqual((alive["state"], alive["destroyed"]), ("started", False))
+        # what Fly.io holds now: asked and answered, a machine of ours, and one Agent Manager does not know
+        self.assertEqual((inv["at_fly"]["reachable"], inv["at_fly"]["unknown_here"] >= 1), (True, True))
+        self.assertGreaterEqual(inv["at_fly"]["machines"], 2)
+        def no_network(*args):
+            raise RuntimeError("no network")
+        self.fly.json = no_network
+        offline = self.s.sandboxes.overview()["inventory"]               # Fly.io not reached: the inventory is still there
+        self.assertEqual((offline["at_fly"]["reachable"], len(offline["sandboxes"])), (False, 2))
+        self.assertEqual({r["id"]: r["state"] for r in offline["sandboxes"]}[sb["id"]], "destroyed")
+
     def test_the_owner_routes_answer_over_http(self):
         """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
         tok = load_token(self.tmp)

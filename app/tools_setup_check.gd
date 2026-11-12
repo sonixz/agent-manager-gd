@@ -10,6 +10,7 @@ extends SceneTree
 const Probe := preload("res://scripts/setup_probe.gd")
 const View := preload("res://scripts/host_view.gd")
 const Repo := preload("res://scripts/repo_view.gd")
+const Sbx := preload("res://scripts/sandbox_view.gd")
 
 var failed := 0
 var passed := 0
@@ -42,6 +43,7 @@ func _initialize() -> void:
 			_cases()
 			_dashboard_cases()
 			_repo_cases()
+			_sandbox_cases()
 			print("%d passed, %d failed" % [passed, failed])
 			quit(1 if failed > 0 else 0)
 			return
@@ -450,4 +452,38 @@ func _repo_cases() -> void:
 	for i in 10:
 		many["branches"].append({"name": "b%d" % i, "ahead": 1, "behind": 1, "date": now - i, "subject": "", "worktree": "", "sessions": []})
 	check("map: past eight lines, the others are grey", Repo.metro(many, {})["lines"].map(func(l: Dictionary) -> int: return l["slot"]) == [0, 1, 2, 3, 4, 5, 6, 7, -1, -1])
+
+
+## The Sandboxes page's inventory (scripts/sandbox_view.gd): states, order, a sandbox's life as a bar, the tiles.
+func _sandbox_cases() -> void:
+	var now := 1800000000.0
+	var day := 86400.0
+	var up := {"id": "sb1", "name": "Cloud work", "state": "started", "destroyed": false, "size": "shared-cpu-1x-1024", "region": "yyz", "app": "agmgd-x", "machine": "m1",
+		"created": now - 3 * day, "runs": [[now - 3 * day, now - 2 * day], [now - 3600.0, null]], "run_seconds": 90000, "cost_usd": 0.2295, "first_start": now - 3 * day, "last_stop": now, "running_now": true}
+	var paused: Dictionary = up.duplicate(true)
+	paused.merge({"id": "sb2", "name": "", "state": "stopped", "running_now": false, "runs": [[now - 10 * day, now - 9 * day]], "created": now - 10 * day, "last_stop": now - 9 * day, "run_seconds": 86400, "cost_usd": 0.22}, true)
+	var dead: Dictionary = up.duplicate(true)
+	dead.merge({"id": "sb3", "name": "Old spike", "state": "destroyed", "destroyed": true, "running_now": false, "size": "performance-cpu-2x-4096",
+		"runs": [[now - 40 * day, now - 39 * day], [now - 15 * day, now - 15 * day + 60.0]], "created": now - 40 * day, "last_stop": now - 15 * day + 60.0, "run_seconds": 86460, "cost_usd": 1.5}, true)
+	var lost: Dictionary = paused.duplicate(true)
+	lost.merge({"id": "sb4", "name": "Lost", "state": "gone", "created": now - 5 * day, "last_stop": 0.0, "runs": [], "run_seconds": 0, "cost_usd": 0.0}, true)
+	check("sandboxes: a state in words: running, paused, destroyed, gone at Fly.io, Fly.io not reached", Sbx.state_of(up) == {"text": "running", "level": "ok"} and Sbx.state_of(paused)["text"] == "paused" and Sbx.state_of(dead) == {"text": "destroyed", "level": "off"} and Sbx.state_of(lost) == {"text": "gone at Fly.io", "level": "bad"} and Sbx.state_of({"state": "unknown"})["text"] == "Fly.io not reached")
+	check("sandboxes: a sandbox without a session's name still has one", Sbx.name_of(up) == "Cloud work" and Sbx.name_of(paused) == "sandbox sb2")
+	check("sandboxes: a size as people read it", Sbx.size_words("shared-cpu-1x-1024") == "shared · 1 CPU · 1 GB" and Sbx.size_words("performance-cpu-2x-4096") == "performance · 2 CPU · 4 GB" and Sbx.size_words("shared-cpu-1x-256") == "shared · 1 CPU · 256 MB" and Sbx.size_words("odd") == "odd")
+	check("sandboxes: money", Sbx.money(0.0) == "$0" and Sbx.money(0.0123) == "$0.012" and Sbx.money(1.5) == "$1.50")
+	check("sandboxes: the inventory's order: running, then paused or lost, then destroyed", Sbx.order([dead, lost, paused, up]).map(func(r: Dictionary) -> String: return r["id"]) == ["sb1", "sb4", "sb2", "sb3"])
+	var l: Dictionary = Sbx.life(up, now)
+	check("sandboxes: a life as a bar: each run between thirty days ago and now, the one still running marked", l["runs"].size() == 2 and is_equal_approx(l["runs"][0][0], 0.9) and is_equal_approx(l["runs"][1][1], 1.0) and l["runs"][1][2] == true and l["runs"][0][2] == false and is_equal_approx(l["made"], 0.9) and l["ended"] == -1.0)
+	var ld: Dictionary = Sbx.life(dead, now)
+	check("sandboxes: a destroyed one keeps the runs inside the bar, its end marked; what is older is left out", ld["runs"].size() == 1 and is_equal_approx(ld["runs"][0][0], 0.5) and ld["made"] == -1.0 and absf(ld["ended"] - 0.5) < 0.001 and ld["runs"][0][2] == false)
+	check("sandboxes: a sandbox whose machine never ran has an empty bar", Sbx.life(lost, now)["runs"].is_empty() and Sbx.tip(lost, now, 0).contains("never ran"))
+	check("sandboxes: a line in words", Sbx.tip(dead, now, 0).begins_with("Old spike · destroyed\nperformance · 2 CPU · 4 GB · yyz · made ") and Sbx.tip(dead, now, 0).contains("ran 2 times, 1 d 0 h in all: $1.50") and Sbx.tip(up, now, 0).contains("Last: running now."))
+	var inv := {"sandboxes": [up, paused, dead, lost], "at_fly": {"reachable": true, "machines": 2, "unknown_here": 0}}
+	var t := Sbx.tiles(inv)
+	check("sandboxes: the tiles: running, paused, destroyed and kept, at Fly.io now", t.map(func(x: Dictionary) -> String: return "%s=%s" % [x["id"], x["value"]]) == ["running=1", "paused=2", "destroyed=1", "fly=2"] and t[0]["note"] == "Cloud work" and str(t[2]["note"]).begins_with("$1.95 measured in all") and str(t[3]["note"]).ends_with("none that Agent Manager does not know"))
+	inv["at_fly"]["unknown_here"] = 1
+	check("sandboxes: a machine Agent Manager does not know is marked", Sbx.tiles(inv)[3]["level"] == "warn" and str(Sbx.tiles(inv)[3]["note"]).contains("1 that Agent Manager does not know"))
+	inv["at_fly"]["reachable"] = false
+	check("sandboxes: Fly.io not reached is said, and nothing is claimed", Sbx.tiles(inv)[3]["value"] == "?" and Sbx.tiles(inv)[3]["level"] == "warn")
+	check("sandboxes: nothing running says that nothing is billed for running", Sbx.tiles({"sandboxes": [dead], "at_fly": {"reachable": true, "machines": 0, "unknown_here": 0}})[0]["note"].begins_with("none: nothing is billed"))
 

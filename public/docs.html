@@ -517,8 +517,18 @@
           this computer only.</p>
 
         <h2 id="sandboxes">Cloud sandboxes and costs</h2>
-        <p>A cloud sandbox is a throw-away <b>Fly.io machine for one session</b>, with your Fly token (Keys). The
-          <b>☁ Sandboxes</b> tab works in steps:</p>
+        <p>A cloud sandbox is a throw-away <b>Fly.io machine for one session</b>, with your Fly token (Keys).</p>
+        <p>The <b>☁ Sandboxes</b> tab opens on the <b>Inventory</b>, and it is always there: every sandbox made from
+          this computer, the destroyed ones too. Four tiles first: running now, paused (only their disk is billed),
+          destroyed and kept in the inventory with what was measured in all, and <b>At Fly.io now</b>, the machines
+          Fly.io holds at this moment, marked when one of them is unknown to Agent Manager. Then one line per
+          sandbox: its state (a disc that breathes when it runs, a ring when it is paused, a cross when its machine is
+          gone at Fly.io, a struck ring when it was destroyed), its name, its size and region, and its life over the
+          last 30 days as a bar: filled where its machine ran, a small triangle where it was made, a cross where it
+          was destroyed; then how long it ran in all and what that cost. The runs come from Fly.io's own machine
+          history and are kept after the machine is gone. Rest the pointer on a line for its dates and its machine.
+          When Fly.io cannot be reached, the inventory still shows what was last known, and says so.</p>
+        <p>Under it, the tab works in steps:</p>
         <ol>
           <li><b>The image</b>: Ubuntu 24.04, tmux, git and OpenSSH, an SSH server with keys only, Node, Python, Claude
             Code and Codex. Deployed once to your organisation's private registry; <b>Rebuild</b> for newer agents.</li>

@@ -526,6 +526,41 @@ class Sandboxes:
     def cost(self, size: str, seconds: float) -> float:
         return round(PRICES.get(size, 6.70) / (30 * 24 * 3600) * seconds, 4)
 
+    # ---------------------------------------------------------------- the inventory: nothing made here is forgotten
+    def inventory(self, rows: list[dict], reachable: bool, orphans: list[dict], now: float | None = None) -> dict:
+        """Every sandbox ever made from here, the destroyed ones too (owner, 2026-11-12: « il faut toujours avoir
+        l'inventaire »): its state, each period its machine ran (copied from Fly.io's own history, kept after the
+        machine is gone), how long in all and what that cost at the published price. And what Fly.io holds now:
+        whether it could be asked, how many machines live there, and those Agent Manager does not know.
+        `rows` are the sandboxes as `overview` describes them (with their live state)."""
+        now = time.time() if now is None else now
+        by: dict[str, list[dict]] = {}
+        for r in self.runs():
+            by.setdefault(r["sandbox"], []).append(r)
+        out = []
+        for row in rows:
+            runs = by.get(row["id"], [])
+            seconds = 0.0
+            cost = 0.0
+            spans = []
+            for r in runs:
+                stop = float(r["stop"]) if r["stop"] is not None else now
+                took = max(0.0, stop - float(r["start"]))
+                seconds += took
+                cost += self.cost(r["size"], took)
+                spans.append([float(r["start"]), None if r["stop"] is None else float(r["stop"])])
+            out.append({"id": row["id"], "session_id": row.get("session_id", ""), "app": row["app"], "machine": row["machine"],
+                        "region": row["region"], "size": row["size"], "created": float(row["created"]), "state": row["state"],
+                        "destroyed": bool(row["destroyed"]), "finished": bool(row.get("finished", 0)),
+                        "runs": spans, "run_seconds": round(seconds), "cost_usd": round(cost, 4),
+                        "first_start": spans[0][0] if spans else 0.0,
+                        "last_stop": max((s[1] if s[1] is not None else now) for s in spans) if spans else 0.0,
+                        "running_now": any(s[1] is None for s in spans) and row["state"] == "started"})
+        live = [r for r in out if not r["destroyed"] and r["state"] not in ("gone", "unknown")]
+        return {"sandboxes": out, "now": now,
+                "at_fly": {"reachable": reachable, "app": self.config("app"), "machines": len(live) + len([o for o in orphans if o.get("machine")]),
+                           "unknown_here": len(orphans)}}
+
     def overview(self) -> dict:
         """Every sandbox Agent Manager knows (with its machine's live state and cost), and the orphans."""
         try:
@@ -567,7 +602,8 @@ class Sandboxes:
                 row["health"] = {**demo_h, "checked": time.time() - 20} if demo_h else None
         b = self.budget()
         spend = self.month_spend(live)
-        return {"sandboxes": rows, "orphans": orphans, "fly_reachable": reachable, **self.status(), "org": self.org(),
+        return {"sandboxes": rows, "orphans": orphans, "inventory": self.inventory(rows, reachable, orphans),
+                "fly_reachable": reachable, **self.status(), "org": self.org(),
                 "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 4), "budget": b, "month_spend_usd": spend,
                 "budget_percent": round(100 * spend / b["monthly_usd"], 1) if b["monthly_usd"] > 0 else None,
                 "storage_note": f"stopped machines: ${STOPPED_GB_MONTH}/GB/month of root disk",

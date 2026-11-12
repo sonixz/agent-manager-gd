@@ -142,7 +142,11 @@ def make_handler(sessions: Sessions, token: str):
                     from . import usage
                     return self._reply(200, usage.report(sessions.store.history()))
                 if parts == ["sandboxes"] and method == "GET":
-                    return self._reply(200, sessions.sandboxes.overview())
+                    over = sessions.sandboxes.overview()
+                    names = {r["id"]: r["name"] for r in sessions.store.history()}   # a destroyed sandbox keeps its session's name
+                    for row in over["inventory"]["sandboxes"]:
+                        row["name"] = names.get(row["session_id"], "")
+                    return self._reply(200, over)
                 if parts == ["sandboxes", "budget"] and method == "POST":
                     b = self._body()
                     return self._reply(200, sessions.sandboxes.set_budget(float(b.get("monthly_usd", 0)), int(b.get("stop_idle_minutes", 0)),

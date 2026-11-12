@@ -9,6 +9,8 @@ const HostView := preload("res://scripts/host_view.gd")
 const HostDash := preload("res://scripts/host_dash.gd")
 const RepoView := preload("res://scripts/repo_view.gd")
 const RepoWidgets := preload("res://scripts/repo_widgets.gd")
+const SandboxView := preload("res://scripts/sandbox_view.gd")
+const SandboxWidgets := preload("res://scripts/sandbox_widgets.gd")
 const ACT_KEYS := ["working", "approval", "waiting", "done", "idle", "exited", "missing"]
 
 var engine: EngineClient
@@ -3386,6 +3388,7 @@ func _load_sandboxes() -> void:
 	if sbx_box == null or not is_instance_valid(sbx_box):
 		return
 	for c in sbx_box.get_children():
+		sbx_box.remove_child(c)  # out of the page now: what is made in the same breath keeps its own name
 		c.queue_free()
 	sbx_live.clear()
 	if sbx_tick == null:
@@ -3410,6 +3413,24 @@ func _load_sandboxes() -> void:
 		var need := _wrap("First paste your Fly.io token in Keys (◐ → Keys…).")
 		need.add_theme_color_override("font_color", AmTheme.col("WARN"))
 		sbx_box.add_child(need)
+	# The inventory first, and always: every sandbox made from here, the destroyed ones too, and what Fly.io holds
+	# now. Before, a destroyed sandbox left the page (owner, 2026-11-12: « il faut toujours avoir l'inventaire »).
+	var inv: Dictionary = r.get("inventory", {})
+	if not inv.is_empty():
+		var tiles = RepoWidgets.Tiles.new(SandboxView.tiles(inv))
+		tiles.name = "SandboxTiles"
+		sbx_box.add_child(tiles)
+		sbx_box.add_child(_section_label("Inventory"))
+		var said := _wrap("Every sandbox made from here, the destroyed ones too: when its machine ran over the last %d days, how long in all, and what that cost at Fly.io's published price. Rest the pointer on a line for its dates and its machine." % SandboxView.DAYS)
+		said.add_theme_font_size_override("font_size", 12)
+		sbx_box.add_child(said)
+		if (inv.get("sandboxes", []) as Array).is_empty():
+			sbx_box.add_child(_muted("No sandbox was ever made from here."))
+		else:
+			var zone: Dictionary = Time.get_time_zone_from_system()
+			var life = SandboxWidgets.Life.new(inv, int(zone.get("bias", 0)))
+			life.name = "SandboxLife"
+			sbx_box.add_child(life)
 	sbx_box.add_child(_sbx_image_step(r))
 	sbx_box.add_child(_sbx_deploy_step(r))
 	sbx_box.add_child(_sbx_costs(r))

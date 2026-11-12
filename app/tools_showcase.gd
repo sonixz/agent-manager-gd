@@ -5,6 +5,7 @@ extends SceneTree
 
 const HostView := preload("res://scripts/host_view.gd")
 const RepoView := preload("res://scripts/repo_view.gd")
+const SandboxView := preload("res://scripts/sandbox_view.gd")
 var out := OS.get_environment("SHOW_OUT")
 var report: Array[String] = []
 var main: Control
@@ -1110,6 +1111,13 @@ func _run() -> void:
 			await wait(3.0)
 			await main._load_sandboxes()
 			await wait(2.5)
+			var over: Dictionary = await main.engine.call_api("GET", "/sandboxes", null, true, 60.0)
+			var inv: Dictionary = over["inventory"]
+			var life: Node = main.sbx_box.find_child("SandboxLife", true, false)
+			report.append("sandboxes: the inventory is on the page: %s | %s | at Fly.io: %s" % [life != null,
+				" ; ".join(SandboxView.order(inv["sandboxes"]).map(func(x: Dictionary) -> String: return "%s: %s, %d runs, %s, %s" % [SandboxView.name_of(x), SandboxView.state_of(x)["text"], x["runs"].size(), HostView.span(float(x["run_seconds"])), SandboxView.money(float(x["cost_usd"]))])),
+				" | ".join(SandboxView.tiles(inv).map(func(t: Dictionary) -> String: return "%s %s" % [t["label"], t["value"]]))])
+			report.append("sandboxes: the pointer on the destroyed one says: « %s »" % str(life._get_tooltip(Vector2(300, life.HEAD + life.ROW * 2.5))).replace("\n", " / ").left(170))
 			await shot("sandboxes")
 		"palette":
 			main.select(made["Sparks"])
