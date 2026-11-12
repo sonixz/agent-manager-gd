@@ -109,6 +109,9 @@ def make_handler(sessions: Sessions, token: str):
                 if parts == ["voice", "command"] and method == "POST":
                     from . import voice_commands
                     return self._reply(200, voice_commands.parse(str(self._body().get("text", "")), sessions.list()))
+                if parts == ["host"] and method == "GET":  # the engine room: memory, disk, what each session weighs
+                    from . import host
+                    return self._reply(200, host.report(sessions.store.all(), sessions.tmux.sessions()))
                 if parts == ["usage"] and method == "GET":
                     from . import usage
                     return self._reply(200, usage.report(sessions.store.history()))

@@ -4,7 +4,7 @@
 
 | File | Where it comes from |
 |---|---|
-| `windows-en.txt` | Recorded on a real Windows 11 (English, WSL 2.6.3, one Ubuntu distribution): the answer to the PowerShell call of `app/scripts/setup_probe.gd`, as the app receives it. |
+| `windows-en.txt` | Recorded on a real Windows 11 (English, WSL 2.6.3, one Ubuntu distribution): the answer to the PowerShell call of `app/scripts/setup_probe.gd`, as the app receives it. The sizes (memory, disk file, drive) are rounded. |
 | `doctor.txt` | Recorded in that distribution: the answer of `engine/doctor.sh 8790`, with the user's name replaced by `dev` and the engine's process number by `4242`. |
 
 Every other state in the script (no WSL, no distribution, Docker Desktop's distribution as the default one, WSL 1,

@@ -2,6 +2,7 @@
 build=26200
 virt_firmware=True
 hypervisor=True
+ram=34359738368
 service=True
 #version 0
 WSL version: 2.6.3.0
@@ -18,4 +19,8 @@ Ubuntu-24.04
 * Ubuntu-24.04    Running         2
 #running 0
 Ubuntu-24.04
+#disks 0
+disk=Ubuntu-24.04|C:|48318382080|73014444032|999653638144
+#wslconfig 0
+present=False
 #end 0

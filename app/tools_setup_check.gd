@@ -34,6 +34,8 @@ func _initialize() -> void:
 			print(JSON.stringify(f.get("windows", {})))
 			print("(the engine itself is not asked here: its line is what the app would say if it did not answer)")
 			_show(f, false, p.on_windows)
+			for l in Probe.engine_room(f, {}, p.on_windows):
+				print("room   %-24s %s%s" % [l["label"], l["text"], "  (!)" if l["warn"] else ""])
 		_:
 			_cases()
 			print("%d passed, %d failed" % [passed, failed])
@@ -183,6 +185,45 @@ func _cases() -> void:
 	check("flyctl: the app does not say it downloads it", not str(Probe.HOW["flyctl"]).contains("download"))
 	var greeted := Probe.parse_programs("Welcome to Ubuntu 24.04.4 LTS\nPATH=/usr/bin: something a profile printed\n" + real_l)
 	check("what a login shell prints before is not a program", greeted.size() == found.size() and not greeted.has("PATH"))
+
+	# --- the engine room
+	check("recorded: this computer's memory, the distribution's disk file and its drive are read", w["ram"] > 1073741824 and w["disks"].has(w["default"]) and w["disks"][w["default"]]["drive"] == "C:" and w["disks"][w["default"]]["file"] > 0 and w["disks"][w["default"]]["free"] < w["disks"][w["default"]]["total"])
+	check("recorded: no .wslconfig", not w["wslconfig"]["present"] and w["wslconfig"]["lines"].is_empty())
+	var gib := 1073741824
+	var host := {"wsl": true, "distro": "Ubuntu-24.04", "uptime": 70200.0, "memory": {"total": 16 * gib, "available": 14 * gib, "used": 2 * gib, "swap_total": 4 * gib, "swap_used": 0},
+		"disk": {"total": 1007 * gib, "free": 918 * gib}, "drives": [{"letter": "c", "total": 931 * gib, "free": 68 * gib}],
+		"sessions": [{"id": "a", "name": "Checkout flow", "bytes": gib / 2}, {"id": "b", "name": "Flaky tests", "bytes": gib / 2}], "sessions_bytes": gib,
+		"on_windows_disk": [{"id": "a", "name": "Checkout flow", "drive": "c"}]}
+	var ww: Dictionary = w.duplicate(true)
+	ww["ram"] = 32 * gib
+	ww["disks"] = {"Ubuntu-24.04": {"drive": "C:", "file": 45 * gib, "free": 68 * gib, "total": 931 * gib}}
+	var room := Probe.engine_room({"windows": ww}, host, true)
+	var text := func(lines: Array, label: String) -> String:
+		for l in lines:
+			if l["label"] == label:
+				return str(l["text"])
+		return ""
+	var warns := func(lines: Array, label: String) -> bool:
+		for l in lines:
+			if l["label"] == label:
+				return bool(l["warn"])
+		return false
+	check("engine room: memory, here and for the whole computer", text.call(room, "Memory") == "2.0 of 16 GB used inside WSL · this computer has 32 GB.")
+	check("engine room: what the sessions weigh, and how many more would fit", text.call(room, "Sessions") == "2 running, about 1.0 GB together: Checkout flow 0.5 GB, Flaky tests 0.5 GB. About 28 more of that weight would fit in the memory that is free.")
+	check("engine room: the true room is the Windows drive's, said with a warning when it is nearly full", text.call(room, "Disk") == "Linux reports 918 GB free. Its disk is a 45 GB file on C:, where 68 GB are free (93 % full): that is the true room." and warns.call(room, "Disk"))
+	check("engine room: sessions on the Windows disk", text.call(room, "Folders").begins_with("1 of 2 sessions work in a folder on the Windows disk (C:)"))
+	check("engine room: no .wslconfig, WSL's defaults", text.call(room, "Limits").begins_with("No .wslconfig"))
+	check("engine room: how long it has been up", text.call(room, "Up for") == "19 h (WSL).")
+	var wc := Probe.parse_windows(_windows(26100, true, true, true, "#wslconfig 0\npresent=True\nmemory = 8GB\n  processors=4\n"))
+	check("a .wslconfig's limits are read as they are written", text.call(Probe.engine_room({"windows": wc}, {}, true), "Limits") == "From your .wslconfig: memory=8GB · processors=4.")
+	var down_room := Probe.engine_room({"windows": ww}, {}, true)
+	check("engine room, engine down: only what Windows knows is said", text.call(down_room, "Memory, sessions") != "" and text.call(down_room, "Disk").begins_with("Its disk is a 45 GB file on C:") and text.call(down_room, "Memory") == "")
+	var tight: Dictionary = host.duplicate(true)
+	tight["memory"]["available"] = gib / 4
+	check("engine room: no room for one more session is a warning", warns.call(Probe.engine_room({"windows": ww}, tight, true), "Sessions") and warns.call(Probe.engine_room({"windows": ww}, tight, true), "Memory"))
+	var plain := Probe.engine_room({}, {"wsl": false, "distro": "", "uptime": 300000.0, "memory": {"total": 16 * gib, "available": 8 * gib, "used": 8 * gib, "swap_total": 0, "swap_used": 0}, "disk": {"total": 500 * gib, "free": 200 * gib}, "drives": [], "sessions": [], "sessions_bytes": 0, "on_windows_disk": []}, false)
+	check("engine room on Linux: memory, no session, the disk as it is, no word of WSL", text.call(plain, "Memory") == "8.0 of 16 GB used." and text.call(plain, "Sessions") == "None is running." and text.call(plain, "Disk") == "200 GB free of 500." and text.call(plain, "Limits") == "" and text.call(plain, "Up for") == "3 days.")
+	check("the registry and the settings file are read without a backslash in the script", not Probe.WINDOWS_SCRIPT.contains("\\"))
 
 	# --- on Linux: no rung for Windows
 	var on_linux := Probe.ladder({"port": 8790, "linux": linux}, true, false)

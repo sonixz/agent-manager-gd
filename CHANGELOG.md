@@ -5,7 +5,15 @@ Newest first.
 
 ## Unreleased: alpha
 
-### The setup check reads from the ground up · Loop 36 (first step)
+### The setup check reads from the ground up, and its engine room · Loop 36 (first steps)
+- New, under the Setup check: the **Engine room**. Memory used, and what the whole computer has; what the running
+  sessions weigh, the heaviest first, and about how many more would fit; the disk; the sessions that work on the
+  Windows disk, where git is slower; the limits your `.wslconfig` sets (read, never changed); how long it has been up.
+- On Windows the disk line tells the true room: WSL keeps a distribution's disk in one file on a Windows drive, and
+  Linux may report hundreds of gigabytes free on a drive that has few left. The line is a warning when that drive is
+  nearly full.
+- **Restart WSL…** stops WSL and starts the engine again. It names the sessions that would stop, then asks you to
+  type « restart ». Not tried for real yet: only against a stand-in for WSL's command.
 - On Windows, the Setup check now starts with Windows itself (its version, virtualization), then WSL, then the Linux
   distribution, before the programs, the engine and the agents. It stops at the first thing that is missing and
   says what to run; the lines under it are marked « · ».

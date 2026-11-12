@@ -121,6 +121,16 @@
           it), it is starting or stuck, another program holds its port, or it runs inside WSL and Windows cannot reach
           it. <b>It only looks</b>: it installs and downloads nothing; you run the commands yourself. The window stays
           free while it reads, which takes a few seconds on Windows.</p>
+        <p>Under the check, the <b>Engine room</b> says how the ground is doing; you will rarely look at it, and it is
+          there when something is slow or full. <b>Memory</b>: what is used, and on Windows what the whole computer has.
+          <b>Sessions</b>: what the running ones weigh, the heaviest first, and about how many more would fit.
+          <b>Disk</b>: on Windows, WSL keeps a distribution's disk in one file on a Windows drive, so the room left on
+          that drive is the true room, whatever Linux reports; the line turns to a warning when the drive is nearly
+          full. <b>Folders</b>: the sessions that work on the Windows disk (<code>/mnt/c/…</code>), where git is slower
+          than inside Linux. <b>Limits</b>: what your <code>.wslconfig</code> sets, read and never changed.</p>
+        <p><b>Restart WSL…</b> (Windows) stops WSL entirely and starts the engine again. It first names the sessions
+          that would stop, then asks you to type « restart »: it also stops anything else you run in WSL. Conversations
+          are kept; restart a session afterwards and it resumes.</p>
 
         <h2 id="concepts">How it fits together</h2>
         <div class="arch">

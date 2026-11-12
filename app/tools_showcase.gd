@@ -518,8 +518,50 @@ func _run() -> void:
 					before = Time.get_ticks_msec()
 			report.append("setup: the page opened in %d ms; the reading took %.1f s, during which %d frames were drawn, the longest in %d ms" % [open_ms, (Time.get_ticks_msec() - began) / 1000.0, drawn, worst])
 			await wait(0.2)
-			report.append("setup: everything there: %s | « %s »" % [_setup_marks(), _setup_last()])
+			report.append("setup: everything there: %s | « %s »" % [_setup_marks(), _setup_text("Everything needed")])
+			# the engine room: the engine's own answer first (this display's real figures: only their shape is reported), then made-up figures for the picture
+			var real: Dictionary = await main.engine.call_api("GET", "/host")
+			report.append("setup: the engine's figures: memory %s | disk %s | %d sessions weighed, the lightest above 1 MB: %s" % [int(real["memory"]["total"]) > 0, int(real["disk"]["total"]) > 0, real["sessions"].size(), real["sessions"].all(func(x: Dictionary) -> bool: return int(x["bytes"]) > 1048576)])
+			var gib := 1073741824
+			main.setup_host = {"wsl": true, "distro": "Ubuntu-24.04", "uptime": 70200.0, "memory": {"total": 16 * gib, "available": 14 * gib, "used": 2 * gib, "swap_total": 4 * gib, "swap_used": 0},
+				"disk": {"total": 1007 * gib, "free": 918 * gib}, "drives": [{"letter": "c", "total": 931 * gib, "free": 68 * gib}],
+				"sessions": [{"id": "a", "name": "Checkout flow", "bytes": 505 * 1048576}, {"id": "b", "name": "Flaky tests", "bytes": 412 * 1048576}, {"id": "c", "name": "Rate limiter", "bytes": 398 * 1048576}, {"id": "d", "name": "Sparks", "bytes": 371 * 1048576}, {"id": "e", "name": "Docs refresh", "bytes": 96 * 1048576}],
+				"sessions_bytes": 1782 * 1048576, "on_windows_disk": [{"id": "a", "name": "Checkout flow", "drive": "c"}, {"id": "b", "name": "Flaky tests", "drive": "c"}]}
+			main._layout_view()
+			await wait(0.2)
+			report.append("setup: engine room: « %s » | « %s » | « %s »" % [_setup_text("of 16 GB used"), _setup_text("running, about"), _setup_text("true room")])
 			await shot("setup")
+			# « Restart WSL… »: nothing is run before the word is typed; a wrong word runs nothing
+			var ran := []
+			main.setup_probe.runner = func(a: Array) -> Dictionary:
+				ran.append(" ".join(a.slice(0, 2)))
+				return {"code": 0, "out": win if str(a[0]) == "powershell.exe" else doc}
+			_find_button(main.content, "Restart WSL…").pressed.emit()
+			await wait(0.4)
+			report.append("setup: restart WSL asks first: « %s »" % str(main.confirm_dialog.dialog_text).replace("\n", " / "))
+			await shot("setup-restart-wsl")
+			main.confirm_dialog.hide()
+			main.confirm_done.call()
+			await wait(0.4)
+			var asks: String = main.ask_dialog.title
+			main.ask_dialog.hide()
+			main.ask_done.call("yes")
+			await wait(0.4)
+			report.append("setup: then « %s »; a wrong word: commands run: %s | status line: « %s »" % [asks, ran.filter(func(c: String) -> bool: return c.begins_with("wsl.exe --")), main.status_label.text])
+			_find_button(main.content, "Restart WSL…").pressed.emit()
+			await wait(0.4)
+			main.confirm_dialog.hide()
+			main.confirm_done.call()
+			await wait(0.4)
+			main.ask_dialog.hide()
+			main.ask_done.call("restart")
+			await wait(0.2)
+			while main.setup_restart != null or main.setup_thread != null:
+				await process_frame
+			await wait(0.5)
+			report.append("setup: the word typed: commands run: %s | status line: « %s »" % [ran.filter(func(c: String) -> bool: return c.begins_with("wsl.exe --")), main.status_label.text])
+			main.setup_probe.runner = func(a: Array) -> Dictionary:
+				return {"code": 0, "out": win if str(a[0]) == "powershell.exe" else doc}
 			# WSL is not installed: Windows answers, and nothing is asked of WSL
 			var asked := []
 			main.setup_probe.runner = func(a: Array) -> Dictionary:
@@ -1226,8 +1268,9 @@ func _speed(ids: Array) -> void:
 func _setup_marks() -> String:
 	var o := ""
 	for g in main.content.find_children("*", "GridContainer", true, false):
-		for i in range(0, g.get_child_count(), 4):
-			o += (g.get_child(i) as Label).text
+		if (g as GridContainer).columns == 4:  # the ladder; the engine room's lines are in a grid of two
+			for i in range(0, g.get_child_count(), 4):
+				o += (g.get_child(i) as Label).text
 	return o
 
 

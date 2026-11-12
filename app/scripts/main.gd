@@ -97,6 +97,8 @@ var setup_probe = SetupProbe.new()
 var setup_facts := {}       # what the last reading of the ground gave (Setup check); {} before the first one
 var setup_thread: Thread    # the reading on its way: it takes seconds and never runs while a frame is drawn
 var setup_again := false    # a reading was asked while one was on its way
+var setup_host := {}        # the engine's own figures (memory, disk, what each session weighs); {} when it does not answer
+var setup_restart: Thread   # « Restart WSL » on its way
 var f_brief: CheckBox
 var dictation: Dictation
 var voice_mode := "dictate"     # F8 dictate, F9 command
@@ -258,6 +260,8 @@ func _notification(what: int) -> void:
 func _exit_tree() -> void:
 	if setup_thread != null:
 		setup_thread.wait_to_finish()  # a thread must be joined before it is freed; at most the few seconds of a reading
+	if setup_restart != null:
+		setup_restart.wait_to_finish()
 
 
 # ------------------------------------------------------------------ shortcuts
@@ -4839,6 +4843,15 @@ func _setup_read() -> void:
 	get_tree().create_timer(20.0).timeout.connect(func() -> void:
 		if setup_thread != null and view == "setup":
 			status_label.text = "Still reading: Windows or WSL is slow to answer.")
+	_setup_ask_host()
+
+
+## The engine room's figures that only the engine knows. Asked aside: the page does not wait for them.
+func _setup_ask_host() -> void:
+	var r := await engine.call_api("GET", "/host") if engine.connected else {}
+	setup_host = {} if r.has("error") else r
+	if view == "setup":
+		_layout_view()
 
 
 func _setup_done(f: Dictionary) -> void:
@@ -4913,7 +4926,77 @@ func _setup_rows() -> Array:
 	rows.append(grid)
 	rows.append(_wrap(SetupProbe.verdict(rungs) + ("  Looking again…" if setup_thread != null and not setup_facts.is_empty() else "")))
 	rows.append(_small("Check again", _setup_check_again))
+	# --- the engine room (Loop 36): how the ground is doing. Rarely looked at; there when something is slow or full.
+	var room: Array = SetupProbe.engine_room(setup_facts, setup_host, setup_probe.on_windows)
+	if not setup_facts.is_empty() and room.any(func(l: Dictionary) -> bool: return l["label"] != "Memory, sessions"):  # something real to say
+		var gap := Control.new()
+		gap.custom_minimum_size.y = 10
+		rows.append(gap)
+		rows.append(_section_label("Engine room"))
+		rows.append(_wrap("How the ground under the engine is doing%s. It only reads." % (": this computer and WSL" if setup_probe.on_windows else "")))
+		var lines := GridContainer.new()
+		lines.columns = 2
+		lines.add_theme_constant_override("h_separation", 18)
+		lines.add_theme_constant_override("v_separation", 8)
+		for l in room:
+			var label := Label.new()
+			label.text = str(l["label"])
+			label.add_theme_font_override("font", AmTheme.ui_font(650))
+			label.size_flags_vertical = SIZE_SHRINK_BEGIN
+			lines.add_child(label)
+			var text := _wrap(str(l["text"]))
+			text.custom_minimum_size.x = 430
+			text.size_flags_horizontal = SIZE_EXPAND_FILL
+			if l["warn"]:
+				text.add_theme_color_override("font_color", AmTheme.col("WARN"))
+			lines.add_child(text)
+		rows.append(lines)
+		if setup_probe.on_windows and bool(setup_facts.get("windows", {}).get("wsl", false)):
+			rows.append(_small("Restart WSL…", _setup_restart_wsl, "Stops WSL entirely, every session with it, then starts the engine again. It asks first."))
 	return rows
+
+
+## « Restart WSL… »: says what would stop, by name, then asks for a typed word. WSL's own command does the rest.
+func _setup_restart_wsl() -> void:
+	if setup_restart != null:
+		return
+	var live := []
+	for x in sessions:
+		if str(x.get("state", "")) == "running":
+			live.append(str(x["name"]))
+	var what := "no session is running here" if live.is_empty() else ("the %d session%s running here (%s)" % [live.size(), "" if live.size() == 1 else "s", ", ".join(live)])
+	_confirm("Restart WSL?\n\nIt stops WSL entirely: %s, and anything else that runs in WSL (Docker, other terminals).\nConversations are kept: restart a session afterwards and it resumes.\n\nThe next box asks you to type « restart »." % what, func() -> void:
+		_ask.call_deferred("Type « restart » to stop WSL now", "", func(word: String) -> void:
+			if word.to_lower() != "restart":
+				status_label.text = "WSL was not restarted."
+				return
+			_setup_do_restart()))
+
+
+func _setup_do_restart() -> void:
+	status_label.text = "Restarting WSL…"
+	engine.connected = false
+	setup_restart = Thread.new()
+	setup_restart.start(func() -> void:
+		var r: Dictionary = setup_probe.run(["wsl.exe", "--shutdown"])
+		_setup_restarted.call_deferred(int(r["code"])))
+
+
+func _setup_restarted(code: int) -> void:
+	setup_restart.wait_to_finish()
+	setup_restart = null
+	if code != 0:
+		status_label.text = "WSL did not stop (exit %d)." % code
+	else:
+		status_label.text = "WSL stopped. Starting the engine…"
+		if await engine.connect_engine():
+			status_label.text = "WSL restarted: the engine answers."
+			await refresh()
+		else:
+			status_label.text = "WSL stopped, but the engine did not start: see the setup check."
+	_setup_read()
+	if view == "setup":
+		_layout_view()
 
 
 func _shortcut_rows() -> Array:

@@ -20,6 +20,10 @@ const OPTIONAL := ["claude", "codex", "flyctl"]
 ##    stand-in wsl.exe that offers to install it: a check that only looks must never start that.
 ##  - WSL_UTF8 makes wsl.exe write plain text instead of UTF-16 (measured, WSL 2.6.3). It is set inside this one
 ##    call, not for the app: the terminals keep what they have.
+##  - For the engine room: this computer's memory; each distribution's disk, which is one file on a Windows drive
+##    (its size, and the room left on that drive: the true room, whatever Linux reports); and the few lines of the
+##    user's .wslconfig that set limits. All read, none written. No folder's name is printed: only the drive.
+##    No backslash is written in this script: one less thing to escape twice.
 ##  - Nothing here is read by its words: the table's titles and states follow Windows' language. Rows are found by
 ##    the distributions' names, the default by its star, the running ones by the list of names that run.
 const WINDOWS_SCRIPT := """$ErrorActionPreference='SilentlyContinue'
@@ -32,6 +36,7 @@ $p=Get-CimInstance Win32_Processor|Select-Object -First 1
 $c=Get-CimInstance Win32_ComputerSystem
 'virt_firmware='+$p.VirtualizationFirmwareEnabled
 'hypervisor='+$c.HypervisorPresent
+'ram='+$c.TotalPhysicalMemory
 $s=[bool](Get-Service WslService) -or [bool](Get-Service LxssManager)
 'service='+$s
 if($s -and (Get-Command wsl.exe)){
@@ -41,6 +46,25 @@ $o=& wsl.exe @a 2>$null
 '#'+$q[0]+' '+$LASTEXITCODE
 $o
 }}
+'#disks 0'
+$bs=[string][char]92
+Get-ChildItem 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Lxss'|ForEach-Object{
+$r=Get-ItemProperty $_.PSPath
+$b=[string]$r.BasePath
+if($b.StartsWith($bs+$bs+'?'+$bs)){$b=$b.Substring(4)}
+$n=[string]$r.VhdFileName
+if(-not $n){$n='ext4.vhdx'}
+$f=Join-Path $b $n
+$z=0
+if(Test-Path -LiteralPath $f){$z=(Get-Item -LiteralPath $f).Length}
+$d=Get-PSDrive -Name $b.Substring(0,1)
+'disk='+$r.DistributionName+'|'+$b.Substring(0,2)+'|'+$z+'|'+$d.Free+'|'+($d.Used+$d.Free)
+}
+'#wslconfig 0'
+$w=Join-Path $env:USERPROFILE '.wslconfig'
+if(Test-Path -LiteralPath $w){'present=True'
+Get-Content -LiteralPath $w|Where-Object{$_ -match '^[ ]*(memory|processors|swap|localhostForwarding|networkingMode|vmIdleTimeout)[ ]*='}
+}else{'present=False'}
 '#end 0'
 """
 
@@ -124,6 +148,20 @@ static func parse_windows(text: String) -> Dictionary:
 		if kv.size() == 2:
 			w[kv[0].strip_edges()] = kv[1].strip_edges()
 	w["build"] = int(str(w.get("build", "0")))
+	w["ram"] = int(str(w.get("ram", "0")))
+	w["disks"] = {}
+	for line in sections.get("disks", []):
+		var d: PackedStringArray = str(line).trim_prefix("disk=").split("|")
+		if str(line).begins_with("disk=") and d.size() == 5:
+			w["disks"][d[0]] = {"drive": d[1], "file": int(d[2]), "free": int(d[3]), "total": int(d[4])}
+	var limits := []
+	var present := false
+	for line in sections.get("wslconfig", []):
+		if str(line).strip_edges() == "present=True":
+			present = true
+		elif not str(line).begins_with("present="):
+			limits.append(str(line).strip_edges().replace(" ", ""))
+	w["wslconfig"] = {"present": present, "lines": limits}
 	# A name of a distribution holds no space; a sentence (« there is no distribution », in any language) does.
 	if int(codes.get("names", 1)) == 0:
 		for line in sections.get("names", []):
@@ -301,6 +339,80 @@ static func ladder(f: Dictionary, connected: bool, windows := OS.get_name() == "
 	# it goes after the programs it needs and before the optional ones
 	rungs.insert(rungs.size() - OPTIONAL.size(), engine_rung)
 	return rungs
+
+
+static func gb(bytes: int) -> String:
+	var v := bytes / 1073741824.0
+	return ("%.1f" % v) if v < 10.0 else ("%d" % int(round(v)))
+
+
+static func _line(label: String, text: String, warn := false) -> Dictionary:
+	return {"label": label, "text": text, "warn": warn}
+
+
+static func _span(seconds: float) -> String:
+	if seconds < 3600.0:
+		return "%d min" % int(seconds / 60.0)
+	if seconds < 172800.0:
+		return "%d h" % int(seconds / 3600.0)
+	return "%d days" % int(seconds / 86400.0)
+
+
+## The engine room: how the ground is doing. `f` is what `read` gave; `host` is the engine's answer to /host ({}
+## when the engine does not answer: then only what Windows knows is said). Each line: label, text, warn.
+static func engine_room(f: Dictionary, host: Dictionary, windows := OS.get_name() == "Windows") -> Array:
+	var lines: Array = []
+	var w: Dictionary = f.get("windows", {})
+	var inside := " inside WSL" if bool(host.get("wsl", false)) else ""
+	if host.is_empty():
+		lines.append(_line("Memory, sessions", "The engine tells them, once it answers."))
+	else:
+		var m: Dictionary = host["memory"]
+		var text := "%s of %s GB used%s" % [gb(int(m["used"])), gb(int(m["total"])), inside]
+		if int(w.get("ram", 0)) > 0:
+			text += " · this computer has %s GB" % gb(int(w["ram"]))
+		if int(m["swap_used"]) > 104857600:
+			text += " · %s GB of swap in use" % gb(int(m["swap_used"]))
+		lines.append(_line("Memory", text + ".", int(m["total"]) > 0 and float(m["available"]) / float(m["total"]) < 0.08))
+		var ss: Array = host.get("sessions", [])
+		if ss.is_empty():
+			lines.append(_line("Sessions", "None is running."))
+		else:
+			var top := []
+			for x in ss.slice(0, 3):
+				top.append("%s %s GB" % [str(x["name"]), gb(int(x["bytes"]))])
+			var each := int(host["sessions_bytes"]) / ss.size()
+			var more := int(m["available"]) / maxi(each, 1)
+			lines.append(_line("Sessions", "%d running, about %s GB together: %s%s. %s" % [ss.size(), gb(int(host["sessions_bytes"])), ", ".join(top), " and others" if ss.size() > 3 else "",
+				("About %d more of that weight would fit in the memory that is free." % more) if more >= 1 else "There is no room left for one more of that weight."], more < 1))
+	# --- the disk: on Windows, the distribution's disk is one file on a Windows drive, and that drive's room is the true one
+	var name := str(host.get("distro", "")) if str(host.get("distro", "")) != "" else usable(w)
+	var d: Dictionary = w.get("disks", {}).get(name, {})
+	var linux_free := ("Linux reports %s GB free. " % gb(int(host["disk"]["free"]))) if not host.is_empty() else ""
+	if not d.is_empty() and int(d["total"]) > 0:
+		var full := int(round(100.0 * (1.0 - float(d["free"]) / float(d["total"]))))
+		lines.append(_line("Disk", "%sIts disk is a %s GB file on %s, where %s GB are free (%d %% full): that is the true room." % [linux_free, gb(int(d["file"])), str(d["drive"]), gb(int(d["free"])), full],
+			full >= 90 or int(d["free"]) < 21474836480))
+	elif not host.is_empty():
+		var disk: Dictionary = host["disk"]
+		lines.append(_line("Disk", "%s GB free of %s." % [gb(int(disk["free"])), gb(int(disk["total"]))], int(disk["total"]) > 0 and float(disk["free"]) / float(disk["total"]) < 0.1))
+	var on_win: Array = host.get("on_windows_disk", [])
+	if not on_win.is_empty():
+		var letters := {}
+		for x in on_win:
+			letters[str(x["drive"]).to_upper() + ":"] = true
+		lines.append(_line("Folders", "%d of %d sessions work in a folder on the Windows disk (%s): git is slower there than in a folder inside Linux." % [on_win.size(), host.get("sessions", []).size(), ", ".join(letters.keys())]))
+	if windows and w.has("wslconfig"):
+		var c: Dictionary = w["wslconfig"]
+		if not bool(c["present"]):
+			lines.append(_line("Limits", "No .wslconfig: WSL's defaults apply (it may take up to half of this computer's memory)."))
+		elif c["lines"].is_empty():
+			lines.append(_line("Limits", "Your .wslconfig sets no limit on memory, processors or swap."))
+		else:
+			lines.append(_line("Limits", "From your .wslconfig: %s." % " · ".join(c["lines"])))
+	if not host.is_empty() and float(host.get("uptime", 0.0)) > 0.0:
+		lines.append(_line("Up for", _span(float(host["uptime"])) + ("" if inside == "" else " (WSL)") + "."))
+	return lines
 
 
 ## One sentence for the whole ladder.
