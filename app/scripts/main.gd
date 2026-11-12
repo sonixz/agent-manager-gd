@@ -1719,6 +1719,14 @@ func _card(s: Dictionary) -> SessionCard:
 	return card
 
 
+## A group as the list holds it now (null when it is gone).
+func _group(gname: String) -> Variant:
+	for g in tree:
+		if str(g["name"]) == gname:
+			return g
+	return null
+
+
 ## A session's group and its rank in it, as the list shows them now.
 func _place_of(id: String) -> Array:
 	for g in tree:
@@ -1743,9 +1751,15 @@ func _group_header(g: Dictionary) -> Button:
 	b.add_theme_font_override("font", AmTheme.ui_font(700))
 	b.tooltip_text = "Click to fold · drag to reorder · right click for more"
 	b.pressed.connect(func() -> void:
-		g["folded"] = not bool(g["folded"])  # folded on screen at once; the engine is told after
+		# The group as the list holds it now, not as it was when this row was made: a row whose content did not
+		# change is kept across refreshes, and each refresh brings new data. Folding the old copy changed nothing on
+		# screen until the engine had answered (the owner, 2026-11-11: « ça prend une demi-seconde, puis ça réduit »).
+		var now: Variant = _group(gname)
+		if now == null:
+			return
+		now["folded"] = not bool(now["folded"])  # folded on screen at once; the engine is told after
 		_show_now()
-		await _tell_engine("POST", "/groups/%s/fold" % gname.uri_encode(), {"folded": bool(g["folded"])}))
+		await _tell_engine("POST", "/groups/%s/fold" % gname.uri_encode(), {"folded": bool(now["folded"])}))
 	b.gui_input.connect(func(e: InputEvent) -> void:
 		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
 			menu_target = gname

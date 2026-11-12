@@ -1084,6 +1084,25 @@ func _speed(ids: Array) -> void:
 	while not main.tree.any(func(g): return str(g["name"]) == gname):
 		await process_frame
 	var g_done := _ms(t3)
+	# a group folded by a click on its header, after a refresh has brought new data (the row itself is kept)
+	await main.refresh()
+	await wait(0.3)
+	var folds := []
+	for turn in 4:
+		var head: Button = null
+		for row in main.rows:
+			if row[0] == "group" and row[1] == "Acme Store":
+				head = row[3]
+		var was: bool = main._group("Acme Store")["folded"]
+		var shown: int = main.rows.size()
+		var t4 := Time.get_ticks_usec()
+		head.pressed.emit()
+		folds.append(_ms(t4) if main._group("Acme Store")["folded"] != was and main.rows.size() != shown else -1.0)
+		while main.local_wait > 0 or main._group("Acme Store")["folded"] == was:
+			await process_frame
+		await main.refresh()
+		await wait(0.2)
+	report.append("      groups | a group folded or opened by a click: on screen after %s" % (("%.1f" % _med(folds)) if folds.min() >= 0.0 else "the engine's answer"))
 	report.append("      groups | a session moved to another group: on screen after %s, confirmed after %.0f | a group created: on screen after %s, confirmed after %.0f" % [
 		("%.1f" % _med(seen)) if _med(seen) >= 0.0 else "the engine's answer", _med(done), ("%.1f" % g_seen) if g_seen >= 0.0 else "the engine's answer", g_done])
 

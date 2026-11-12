@@ -74,6 +74,8 @@ Newest first.
 - Each change is logged; the engine's API token is now refused to the agents' file tools too.
 
 ### Fixed
+- Folding or opening a group by a click waited for the engine before anything moved: its header acted on an old copy
+  of the list. It now folds at once.
 - When the microphone gives nothing (Windows changed the audio device, a headset went off), the dictation box says so
   after a few seconds and opens the microphone again once. Before, it listened, nothing came, and nothing said why.
 - The first session started on a fresh tmux server (after a reboot) could fail with « server exited unexpectedly »:
