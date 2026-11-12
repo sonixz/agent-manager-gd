@@ -13,6 +13,10 @@ Newest first.
 - F9 uses the same box: a command runs (it still asks first), anything else joins the text.
 - A dictation is written down piece by piece, cut at each pause, each piece with the words said just before: a long
   one never waits for one long transcription.
+- The box goes where you want: drag it by its top line, anywhere in the window; it remembers its place, and a double
+  click sends it back. See-through while it waits, solid while you use it.
+- A pause in the middle of a sentence no longer leaves a full stop there, and a pause must last a little longer
+  (0.9 s) to cut.
 
 ### Faster · Loop 33
 - Picking a session, changing view and the 2-second refresh no longer stutter. Measured with twenty sessions on the

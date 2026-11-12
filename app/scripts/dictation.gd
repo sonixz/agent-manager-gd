@@ -9,7 +9,7 @@ signal piece(index: int, wav: PackedByteArray, seconds: float)
 
 const SPEECH := 0.03     # louder than this, someone speaks
 const QUIET := 0.02      # quieter than this for PAUSE seconds, after speech: a pause, where a piece ends
-const PAUSE := 0.7
+const PAUSE := 0.9      # 0.7 cut the owner's sentences at each hesitation (2026-11-11)
 const MIN_PIECE := 1.2   # seconds: a piece is never shorter (a breath is not a pause)
 const MAX_PIECE := 30.0  # seconds: a piece is never longer, pause or not
 

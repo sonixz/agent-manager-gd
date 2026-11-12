@@ -107,6 +107,12 @@ var take := {}                  # the dictation being heard or written: mode, te
 var earlier: Array = []         # what was sent or emptied before, newest first (kept on this computer)
 var send_when_written := false  # Enter was pressed while the last words were still being written
 var draft_cost := 0.0           # what the writing of the box's text cost so far (shown in its title)
+const NO_PLACE := Vector2(-1, -1)
+var voice_place := NO_PLACE     # where the owner put the box (its top left corner in the window); NO_PLACE: its own place
+var voice_drag := ""            # "held" then "moved" while the mouse drags the box by its top line
+var voice_area: Control         # the main area, whose bottom centre is the box's own place
+var voice_looks: Array = []     # the box's two looks: see-through while it waits, solid while it is used
+var voice_solid := false
 const DRAFT_FILE := "user://dictation-draft.txt"
 const EARLIER_FILE := "user://dictation-earlier.json"
 const VOICE_MAX_SECONDS := 300  # a key release that got lost (the window lost the focus) must not record for ever
@@ -2493,16 +2499,20 @@ func _open_finish(id: String) -> void:
 ## corrected. Nothing goes to an agent until the owner presses Enter there: then all of it is sent.
 func _build_voice_overlay(area: Control) -> void:
 	voice_overlay = PanelContainer.new()
-	voice_overlay.set_anchors_preset(PRESET_CENTER_BOTTOM)
-	voice_overlay.grow_horizontal = GROW_DIRECTION_BOTH
-	voice_overlay.grow_vertical = GROW_DIRECTION_BEGIN
-	voice_overlay.position.y = -40
 	voice_overlay.visible = false
+	voice_area = area
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS)
+	voice_place = cfg.get_value("ui", "voice_box", NO_PLACE)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
 	voice_overlay.add_child(v)
-	var top := HBoxContainer.new()
+	var top := HBoxContainer.new()  # its top line is its handle: the box goes anywhere in the window and stays there
 	top.add_theme_constant_override("separation", 6)
+	top.mouse_filter = MOUSE_FILTER_STOP
+	top.mouse_default_cursor_shape = CURSOR_MOVE
+	top.tooltip_text = "Drag to move the box · double click: back to its own place"
+	top.gui_input.connect(_box_drag)
 	v.add_child(top)
 	voice_label = Label.new()  # what the box is doing, and for which session
 	voice_label.add_theme_font_size_override("font_size", 13)
@@ -2540,7 +2550,17 @@ func _build_voice_overlay(area: Control) -> void:
 	voice_hint.size_flags_horizontal = SIZE_EXPAND_FILL
 	foot.add_child(voice_hint)
 	foot.add_child(_small("Send", _draft_send, "Send all of it to the selected session (Enter)"))
-	area.add_child(voice_overlay)
+	add_child(voice_overlay)  # over the whole window, not only the main area: it can be put anywhere
+	var look := Timer.new()
+	look.wait_time = 0.15
+	look.autostart = true
+	look.timeout.connect(func() -> void:
+		if voice_overlay.visible:
+			_box_look())
+	add_child(look)
+	resized.connect(func() -> void:
+		if voice_overlay.visible:
+			_box_place())
 	earlier_menu = PopupMenu.new()
 	earlier_menu.index_pressed.connect(func(i: int) -> void: _draft_add(str(earlier[i]["text"])))
 	add_child(earlier_menu)
@@ -2555,12 +2575,17 @@ func _build_voice_overlay(area: Control) -> void:
 			_voice_stop())
 
 
-## A little see-through, so the terminal behind it is still there. Coloured again at every theme change.
+## See-through while it only waits, so what is behind it is still there; solid while it is used (listening, writing,
+## under the mouse, with the keyboard), so it can be read wherever it was put. Coloured again at every theme change.
 func _style_voice_box() -> void:
-	var st := AmTheme.box(Color(AmTheme.col("PANEL_2"), 0.66), 14, Color(AmTheme.col("MINT"), 0.7), 1, 12)
-	st.shadow_color = Color(0, 0, 0, 0.30 if not AmTheme.is_light() else 0.12)
-	st.shadow_size = 14
-	voice_overlay.add_theme_stylebox_override("panel", st)
+	voice_looks = []
+	for alpha in [0.6, 0.95]:
+		var st := AmTheme.box(Color(AmTheme.col("PANEL_2"), alpha), 14, Color(AmTheme.col("MINT"), 0.7), 1, 12)
+		st.shadow_color = Color(0, 0, 0, 0.30 if not AmTheme.is_light() else 0.12)
+		st.shadow_size = 14
+		voice_looks.append(st)
+	voice_solid = not voice_solid  # so that the next line sets it
+	_box_look()
 	var field := AmTheme.box(Color(AmTheme.col("BG"), 0.30), 8, Color(AmTheme.col("BORDER"), 0.5), 1, 8)
 	for state in ["normal", "focus", "read_only"]:
 		voice_text.add_theme_stylebox_override(state, field)
@@ -2570,6 +2595,14 @@ func _style_voice_box() -> void:
 	voice_label.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 	voice_live.add_theme_color_override("font_color", AmTheme.col("INFO"))
 	voice_hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+
+
+func _box_look() -> void:
+	var used: bool = dictation.recording or int(take.get("pending", 0)) > 0 or voice_drag != "" or voice_text.has_focus() \
+		or (voice_overlay.visible and voice_overlay.get_global_rect().has_point(get_global_mouse_position()))
+	if used != voice_solid:
+		voice_solid = used
+		voice_overlay.add_theme_stylebox_override("panel", voice_looks[1 if used else 0])
 
 
 ## The line at the top of the box: listening (for whom, since when), writing, or how much text waits.
@@ -2587,9 +2620,43 @@ func _box_title() -> void:
 		voice_label.text = "Dictation%s   ·   %d word%s%s" % [(" for « %s »" % to) if to != "" else "", words, "" if words == 1 else "s", ("   ·   ≈ $%.4f" % draft_cost) if draft_cost > 0.0 and words > 0 else ""]
 
 
+## Where the box stands. Its own place is the bottom centre of the main area, growing upwards; once the owner has
+## moved it, its top left corner stays where it was put. Always whole inside the window.
+func _box_place() -> void:
+	voice_overlay.reset_size()
+	var room := size
+	var sz := voice_overlay.size
+	var at := voice_place
+	if at == NO_PLACE:
+		var a := voice_area.get_global_rect()
+		at = Vector2(a.position.x + (a.size.x - sz.x) / 2.0, a.end.y - sz.y - 40.0) - global_position
+	voice_overlay.position = at.clamp(Vector2.ZERO, (room - sz).max(Vector2.ZERO))
+
+
+## The mouse on the box's top line: a drag moves the box, and its place is remembered; a double click sends it back.
+func _box_drag(e: InputEvent) -> void:
+	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+		if e.pressed and e.double_click:
+			voice_drag = ""
+			voice_place = NO_PLACE
+			_save("voice_box", voice_place)
+			_box_place()
+			return
+		if e.pressed:
+			voice_drag = "held"
+		else:
+			if voice_drag == "moved":
+				voice_place = voice_overlay.position
+				_save("voice_box", voice_place)
+			voice_drag = ""
+	elif e is InputEventMouseMotion and voice_drag != "":
+		voice_drag = "moved"
+		voice_overlay.position = (voice_overlay.position + e.relative).clamp(Vector2.ZERO, (size - voice_overlay.size).max(Vector2.ZERO))
+
+
 func _box_show(keys: bool) -> void:
 	voice_overlay.visible = true
-	voice_overlay.reset_size()
+	_box_place()
 	_box_title()
 	if keys:
 		voice_text.grab_focus()
@@ -2667,8 +2734,18 @@ func _on_piece(i: int, wav: PackedByteArray, seconds: float) -> void:
 		await _take_done(t)
 
 
+## The pieces of one dictation, put together. A piece is cut at a pause, not at the end of a sentence, and the
+## writing ends each of them with a full stop: when the next piece goes on in lower case, that stop was only the pause.
 func _take_text(t: Dictionary) -> String:
-	return " ".join((t["texts"] as Array).filter(func(x): return x is String and x != ""))
+	var out := ""
+	for x in t["texts"]:
+		if not (x is String) or x == "":
+			continue
+		var first: String = x.left(1)
+		if out.ends_with(".") and not out.ends_with("..") and first != first.to_upper():
+			out = out.left(out.length() - 1)
+		out += ("" if out == "" else " ") + x
+	return out
 
 
 func _take_show(t: Dictionary) -> void:
@@ -2677,7 +2754,7 @@ func _take_show(t: Dictionary) -> void:
 	var writing := dictation.recording or int(t["pending"]) > 0
 	voice_live.text = (_take_text(t) + (" …" if writing else "")).strip_edges()
 	voice_live.visible = voice_live.text != ""
-	voice_overlay.reset_size()
+	_box_place()
 
 
 ## The key is released and every piece is written. A command runs; anything else joins the text of the box. Nothing

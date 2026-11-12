@@ -312,6 +312,50 @@ func _run() -> void:
 			report.append("voice-box, key released: the box holds « %s » | it has the keyboard: %s | saved on disk: %s | sent to the agent: no" % [
 				held, main.voice_text.has_focus(), FileAccess.get_file_as_string(main.DRAFT_FILE) == held])
 			await shot("voice-box-ready")
+			# the box is moved by its top line, stays where it was put, and a double click sends it back
+			var home: Vector2 = main.voice_overlay.position
+			var press := InputEventMouseButton.new()
+			press.button_index = MOUSE_BUTTON_LEFT
+			press.pressed = true
+			main._box_drag(press)
+			var drag := InputEventMouseMotion.new()
+			drag.relative = Vector2(-700, -640)
+			main._box_drag(drag)
+			var release := InputEventMouseButton.new()
+			release.button_index = MOUSE_BUTTON_LEFT
+			main._box_drag(release)
+			await wait(0.4)
+			var put: Vector2 = main.voice_overlay.position
+			main._box_show(true)
+			report.append("voice-box, dragged by its top line: from %s to %s | it stays there when shown again: %s | its place is remembered: %s" % [
+				home, put, main.voice_overlay.position == put, main.voice_place == put])
+			await shot("voice-box-moved")
+			var twice := InputEventMouseButton.new()
+			twice.button_index = MOUSE_BUTTON_LEFT
+			twice.pressed = true
+			twice.double_click = true
+			main._box_drag(twice)
+			report.append("voice-box, a double click on its top line: back to its own place: %s" % (main.voice_overlay.position.distance_to(home) < 2.0))
+			# and with the mouse itself, as the window receives it: press on the top line, move, release
+			var grip: Vector2 = main.voice_label.get_global_rect().get_center()
+			var was: Vector2 = main.voice_overlay.position
+			for step in [["down", Vector2.ZERO], ["move", Vector2(-120, -90)], ["move", Vector2(-240, -180)], ["up", Vector2(-240, -180)]]:
+				var ev: InputEvent
+				if step[0] == "move":
+					ev = InputEventMouseMotion.new()
+					ev.relative = Vector2(-120, -90)
+					ev.button_mask = MOUSE_BUTTON_MASK_LEFT
+				else:
+					ev = InputEventMouseButton.new()
+					ev.button_index = MOUSE_BUTTON_LEFT
+					ev.pressed = step[0] == "down"
+				ev.position = grip + step[1]
+				ev.global_position = grip + step[1]
+				Input.parse_input_event(ev)
+				await process_frame
+				await process_frame
+			report.append("voice-box, dragged with the mouse itself: moved by %s | solid while it has the keyboard: %s" % [main.voice_overlay.position - was, main.voice_solid])
+			main._box_drag(twice)
 			_hold("dictate")  # a second dictation adds to the first
 			await _say(2.2)
 			await main._voice_stop()

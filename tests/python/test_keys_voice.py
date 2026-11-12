@@ -102,7 +102,8 @@ class VoicePiecesTest(unittest.TestCase):
         told = voice.prompt_for("Ajoute une carte cadeau.\n   Elle ne prend jamais plus que son solde.")
         self.assertTrue(told.startswith(voice.PROMPT))
         self.assertIn("« Ajoute une carte cadeau. Elle ne prend jamais plus que son solde. »", told)
-        self.assertLess(len(voice.prompt_for("mot " * 2000)), len(voice.PROMPT) + 400)  # the last words only
+        self.assertLess(len(voice.prompt_for("mot " * 2000)), len(voice.PROMPT) + 520)  # the last words only
+        self.assertIn("pas de majuscule au début", told)  # a piece that goes on with the same sentence
         sent = {}
 
         def answer(req, timeout=0):

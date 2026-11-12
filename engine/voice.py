@@ -38,7 +38,8 @@ def prompt_for(context: str) -> str:
     """What the model is told with the audio. A dictation comes in pieces, cut at each pause: the words said just
     before go with each piece, so a sentence that spans two pieces keeps its spelling, its names and its punctuation."""
     said = " ".join((context or "").split())[-300:]
-    return PROMPT + (" Ce qui vient d'être dit juste avant, à ne pas répéter : « " + said + " »" if said else "")
+    return PROMPT + ((" Ce qui vient d'être dit juste avant, à ne pas répéter : « " + said + " ». Ce morceau peut continuer "
+                      "la même phrase : dans ce cas, pas de majuscule au début.") if said else "")
 
 
 def transcribe(wav: bytes, key: str, seconds: float, language: str = "", context: str = "") -> dict:
