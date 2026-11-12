@@ -486,4 +486,16 @@ func _sandbox_cases() -> void:
 	inv["at_fly"]["reachable"] = false
 	check("sandboxes: Fly.io not reached is said, and nothing is claimed", Sbx.tiles(inv)[3]["value"] == "?" and Sbx.tiles(inv)[3]["level"] == "warn")
 	check("sandboxes: nothing running says that nothing is billed for running", Sbx.tiles({"sandboxes": [dead], "at_fly": {"reachable": true, "machines": 0, "unknown_here": 0}})[0]["note"].begins_with("none: nothing is billed"))
+	# --- tunnels and ports
+	check("ports: a rate and an amount in words", Sbx.rate(0.2) == "0" and Sbx.rate(850) == "850 B/s" and Sbx.rate(1234) == "1.2 kB/s" and Sbx.rate(3400000) == "3.4 MB/s" and Sbx.amount(0) == "0" and Sbx.amount(512) == "512 B" and Sbx.amount(12345) == "12 kB" and Sbx.amount(3400000) == "3.4 MB" and Sbx.amount(1200000000) == "1.2 GB")
+	var tun := {"state": "open", "ports": [{"remote_port": 8501, "port": 8501, "state": "open", "address": "http://127.0.0.1:8501", "sent": 1200, "received": 250000, "sent_rate": 40.0, "received_rate": 9000.0, "open_now": 2, "label": "dashboard"},
+			{"remote_port": 9000, "port": 9001, "state": "paused", "address": "http://127.0.0.1:9001", "sent": 0, "received": 0, "sent_rate": 0.0, "received_rate": 0.0, "open_now": 0, "label": ""}],
+		"listening": [{"port": 53, "program": "", "inside": true, "open": false}, {"port": 8000, "program": "python3", "inside": true, "open": false}, {"port": 8501, "program": "streamlit", "inside": false, "open": true}]}
+	check("ports: the connection in words", Sbx.link_of(tun) == {"text": "connected · 2 ports on your localhost", "level": "ok"} and Sbx.link_of({"state": "open", "ports": []})["text"] == "connected · no port brought here yet" and Sbx.link_of({})["level"] == "off" and Sbx.link_of({"state": "lost"})["level"] == "bad")
+	var pr := Sbx.port_rows(tun)
+	check("ports: what is brought here first, then what listens, by number", pr.map(func(r: Dictionary) -> int: return r["port"]) == [8501, 9000, 53, 8000] and pr[0]["program"] == "streamlit" and pr[0]["local"] == 8501 and pr[0]["received_rate"] == 9000.0)
+	check("ports: a port brought here whose program no longer listens stays listed, and says so", pr[1]["listening"] == false and Sbx.port_words(pr[1]) == "a program on 9000 is on your localhost:9001 · paused: it carries nothing · nothing listens there any more")
+	check("ports: a line in words", Sbx.port_words(pr[0]) == "streamlit on 8501 is on your localhost:8501" and Sbx.port_words(pr[3]) == "python3 listens on 8000 (inside the sandbox only)")
+	var hw := Sbx.health_words({"memory_total": 1009636 * 1024.0, "memory_used": 405056 * 1024.0, "load": 0.42, "disk_total": 8350298112.0, "disk_free": 5771362304.0, "round_trip_ms": 48})
+	check("ports: how the sandbox is doing, in four figures", hw.map(func(x: Array) -> String: return "%s %s" % [x[0], x[1]]) == ["Memory 396 MB of 1.0 GB", "Load 0.42", "Disk free 5.4 GB", "Round trip 48 ms"] and not hw[0][2] and Sbx.health_words({}).is_empty())
 

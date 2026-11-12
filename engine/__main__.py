@@ -44,7 +44,8 @@ def main(argv: list[str] | None = None) -> int:
     sessions.host_watch = host_history.start(sessions, h)  # Loop 36: memory and sessions over time, every 30 seconds
     from .relay import Relay
     from .sandbox_carrier import Carrier
-    sessions.carrier = Carrier(sessions.sandboxes, Relay(), h)   # Loop 38: a sandbox's ports, brought to this computer
+    # Loop 38: a sandbox's ports, brought to this computer. AGMGD_CARRIER_SSH puts a stand-in for ssh (captures only).
+    sessions.carrier = Carrier(sessions.sandboxes, Relay(), h, ssh=os.environ.get("AGMGD_CARRIER_SSH") or "ssh")
     print(f"engine ready on 127.0.0.1:{a.port} (data: {h})", flush=True)
     try:
         srv.serve_forever()

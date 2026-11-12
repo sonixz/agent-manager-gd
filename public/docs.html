@@ -528,7 +528,19 @@
           was destroyed; then how long it ran in all and what that cost. The runs come from Fly.io's own machine
           history and are kept after the machine is gone. Rest the pointer on a line for its dates and its machine.
           When Fly.io cannot be reached, the inventory still shows what was last known, and says so.</p>
-        <p>Under it, the tab works in steps:</p>
+        <p>Under the inventory come <b>Your sandboxes</b>. A running one has a block <b>Tunnel and ports</b>: this is
+          how a sandbox becomes an extension of your localhost. <b>Connect</b> opens one lasting SSH connection to
+          the sandbox, apart from its terminal (closing the terminal no longer closes it; it never starts a paused
+          sandbox). The block then says how the sandbox is doing (memory, load, disk, the time of a round trip) and
+          lists what listens there: a web server, a Streamlit dashboard. <b>Bring it to my localhost</b> opens that
+          port on <code>127.0.0.1</code> of this computer, on the same number when it is free, and
+          <b>Open in the browser</b> shows it. A wire is drawn between this computer and the sandbox for each port
+          brought here: dots run toward the sandbox for what is sent and back for what is received, with both rates
+          and the totals. <b>Pause</b> keeps the port but carries nothing; <b>Close</b> gives it back;
+          <b>Disconnect</b> closes everything that connection brought. Nothing is ever made public: every port
+          listens on this computer only. The sandbox's host key is remembered at the first connection, and a key
+          that changed refuses. Not tried against a real sandbox yet: only against stand-ins for Fly.io and SSH.</p>
+        <p>Then the tab works in steps:</p>
         <ol>
           <li><b>The image</b>: Ubuntu 24.04, tmux, git and OpenSSH, an SSH server with keys only, Node, Python, Claude
             Code and Codex. Deployed once to your organisation's private registry; <b>Rebuild</b> for newer agents.</li>

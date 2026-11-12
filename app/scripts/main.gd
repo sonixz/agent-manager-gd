@@ -3380,6 +3380,10 @@ func _sandboxes_view() -> Control:
 
 
 var sbx_live: Array = []  # [Label, running_since] pairs ticking every second
+var sbx_tunnels := {}     # a sandbox -> its connection as the engine last told it (state, ports, what listens, how it is doing)
+var sbx_tunnel_boxes := {} # a sandbox -> the box of its « Tunnel and ports » on the page
+var sbx_tunnel_names := {}
+var sbx_seconds := 0
 var sbx_tick: Timer
 
 
@@ -3431,9 +3435,8 @@ func _load_sandboxes() -> void:
 			var life = SandboxWidgets.Life.new(inv, int(zone.get("bias", 0)))
 			life.name = "SandboxLife"
 			sbx_box.add_child(life)
-	sbx_box.add_child(_sbx_image_step(r))
-	sbx_box.add_child(_sbx_deploy_step(r))
-	sbx_box.add_child(_sbx_costs(r))
+	# the sandboxes themselves come right under the inventory (their tunnels and ports are what one comes for); the
+	# steps to make one, and the costs, follow
 	var rows: Array = r.get("sandboxes", [])
 	var alive: Array = rows.filter(func(x): return int(x["destroyed"]) == 0)
 	if not alive.is_empty():
@@ -3450,6 +3453,9 @@ func _load_sandboxes() -> void:
 				await _load_sandboxes()))
 		fb.size_flags_horizontal = SIZE_SHRINK_BEGIN
 		sbx_box.add_child(fb)
+	sbx_box.add_child(_sbx_image_step(r))
+	sbx_box.add_child(_sbx_deploy_step(r))
+	sbx_box.add_child(_sbx_costs(r))
 	_sbx_orphans(r)
 	# keep the view current while it is shown
 	get_tree().create_timer(30.0).timeout.connect(func() -> void:
@@ -3457,7 +3463,117 @@ func _load_sandboxes() -> void:
 			_load_sandboxes())
 
 
+## A running sandbox's « Tunnel and ports »: its lasting connection, how it is doing, the wires of what is brought to
+## this computer with what passes in each, and one line per port with its buttons.
+func _sbx_tunnel(sbid: String, name: String) -> Control:
+	var box := VBoxContainer.new()
+	box.name = "Tunnel_" + sbid
+	box.add_theme_constant_override("separation", 6)
+	sbx_tunnel_boxes[sbid] = box
+	sbx_tunnel_names[sbid] = name
+	_sbx_tunnel_fill(sbid)
+	if not sbx_tunnels.has(sbid):
+		_sbx_tunnel_ask(sbid)
+	return box
+
+
+func _sbx_tunnel_ask(sbid: String) -> void:
+	var t := await engine.call_api("GET", "/sandboxes/%s/tunnel" % sbid, null, true, 30.0)
+	if not t.has("error"):
+		sbx_tunnels[sbid] = t
+		_sbx_tunnel_fill(sbid)
+
+
+func _sbx_tunnel_do(sbid: String, path: String, body := {}, said := "") -> void:
+	var res := await engine.call_api("POST", "/sandboxes/%s/%s" % [sbid, path], body, true, 120.0)
+	if res.has("error"):
+		_toast(str(res["error"]))
+	elif said != "":
+		_toast(said)
+	await _sbx_tunnel_ask(sbid)
+
+
+func _sbx_tunnel_fill(sbid: String) -> void:
+	var box: VBoxContainer = sbx_tunnel_boxes.get(sbid)
+	if box == null or not is_instance_valid(box):
+		return
+	for c in box.get_children():
+		box.remove_child(c)
+		c.queue_free()
+	var t: Dictionary = sbx_tunnels.get(sbid, {})
+	var link: Dictionary = SandboxView.link_of(t)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	box.add_child(head)
+	var title := Label.new()
+	title.text = "Tunnel and ports"
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	title.add_theme_font_size_override("font_size", 13)
+	head.add_child(title)
+	var said := _muted(str(link["text"]))
+	said.add_theme_font_size_override("font_size", 12)
+	said.size_flags_horizontal = SIZE_EXPAND_FILL
+	if link["level"] == "ok":
+		said.add_theme_color_override("font_color", AmTheme.col("MINT"))
+	elif link["level"] == "bad":
+		said.add_theme_color_override("font_color", AmTheme.col("ERROR"))
+	head.add_child(said)
+	if str(t.get("state", "closed")) == "open":
+		head.add_child(_small("Disconnect", _sbx_tunnel_do.bind(sbid, "tunnel/disconnect", {}, "Disconnected: what was brought here is closed"), "Closes the connection and every port it brought here. The sandbox and its terminal are not touched."))
+	else:
+		head.add_child(_small("Connect", _sbx_tunnel_do.bind(sbid, "tunnel/connect", {}, ""), "Opens one lasting SSH connection to this sandbox, apart from its terminal. It never starts a paused sandbox."))
+		return
+	var figures: Array = SandboxView.health_words(t.get("health", {}))
+	if not figures.is_empty():
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 18)
+		box.add_child(row)
+		for f in figures:
+			var l := _muted("%s  %s" % [f[0], f[1]])
+			l.add_theme_font_size_override("font_size", 12)
+			if f[2]:
+				l.text = "! " + l.text
+				l.add_theme_color_override("font_color", AmTheme.col("WARN"))
+			row.add_child(l)
+	var rows: Array = SandboxView.port_rows(t)
+	if rows.any(func(x: Dictionary) -> bool: return x["open"]):
+		var wire = SandboxWidgets.Wire.new(rows.filter(func(x: Dictionary) -> bool: return x["open"]), str(sbx_tunnel_names.get(sbid, sbid)))
+		wire.name = "Wire_" + sbid
+		box.add_child(wire)
+	if rows.is_empty():
+		box.add_child(_muted("Nothing listens in this sandbox yet. Start a web server or a dashboard there: it shows here within a few seconds."))
+	for x in rows:
+		var port := int(x["port"])
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 6)
+		box.add_child(line)
+		var words := _muted(SandboxView.port_words(x))
+		words.add_theme_font_size_override("font_size", 12)
+		words.size_flags_horizontal = SIZE_EXPAND_FILL
+		if x["open"]:
+			words.add_theme_color_override("font_color", AmTheme.col("TEXT"))
+		line.add_child(words)
+		if not x["open"]:
+			line.add_child(_small("Bring it to my localhost", _sbx_tunnel_do.bind(sbid, "ports/%d/open" % port, {"label": str(x["program"])}, ""), "Opens it on 127.0.0.1 of this computer, on the same number when it is free. Nothing is made public."))
+			continue
+		var address := str(x["address"])
+		line.add_child(_small("Open in the browser", func() -> void: OS.shell_open(address), address))
+		line.add_child(_small("Copy the address", func() -> void:
+			DisplayServer.clipboard_set(address)
+			_toast("Copied: " + address)))
+		if str(x["state"]) == "paused":
+			line.add_child(_small("Resume", _sbx_tunnel_do.bind(sbid, "ports/%d/resume" % port, {}, "")))
+		else:
+			line.add_child(_small("Pause", _sbx_tunnel_do.bind(sbid, "ports/%d/pause" % port, {}, ""), "It keeps its port but carries nothing until you resume it"))
+		line.add_child(_small("Close", _sbx_tunnel_do.bind(sbid, "ports/%d/close" % port, {}, "")))
+
+
 func _sbx_second() -> void:
+	sbx_seconds += 1
+	if view == "sandboxes" and sbx_seconds % 3 == 0:  # what passes and what listens, asked again while one looks
+		for sbid in sbx_tunnel_boxes.keys():
+			if is_instance_valid(sbx_tunnel_boxes[sbid]) and str(sbx_tunnels.get(sbid, {}).get("state", "closed")) == "open":
+				_sbx_tunnel_ask(sbid)
 	if view != "sandboxes":
 		return
 	for pair in sbx_live:
@@ -3780,6 +3896,8 @@ func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 			_toast(str(d.get("error", "Sandbox destroyed")))
 			await refresh()
 			await _load_sandboxes())))
+	if st == "started":  # Loop 38: its ports, brought to this computer on a click, with what passes
+		v.add_child(_sbx_tunnel(sbid, str(sess.get("name", "sandbox " + sbid))))
 	return card
 
 

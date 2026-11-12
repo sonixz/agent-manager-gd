@@ -6,6 +6,15 @@ Newest first.
 ## Unreleased: alpha
 
 ### Sandboxes: the inventory, always · Loop 38 (first steps)
+- New, on a running sandbox: **Tunnel and ports**. **Connect** opens one lasting SSH connection to the sandbox,
+  apart from its terminal. The block lists what listens in the sandbox (a web server, a dashboard) and
+  **Bring it to my localhost** opens that port on `127.0.0.1` of this computer, on the same number when it is
+  free; **Open in the browser** shows it. A wire is drawn for each port brought here, with dots running each way
+  for what is sent and received, both rates and the totals. **Pause**, **Close**, **Disconnect**. It also says how
+  the sandbox is doing: memory, load, disk, the time of a round trip. Nothing is made public; the sandbox's host
+  key is remembered and a changed one refuses; a paused sandbox is never started. Not tried against a real sandbox
+  yet: only against stand-ins for Fly.io and SSH.
+- Your sandboxes now come right under the inventory; the steps to make one and the costs follow.
 - The **☁ Sandboxes** tab opens on an **Inventory** that is always there: every sandbox made from this computer,
   the destroyed ones too. Before, a destroyed sandbox left the page, and with all of them destroyed the page listed
   nothing. Four tiles: running now, paused, destroyed and kept (with what was measured in all), and **At Fly.io
@@ -14,8 +23,6 @@ Newest first.
   bar: filled where its machine ran, a mark where it was made, a cross where it was destroyed; then how long it ran
   in all and what that cost at Fly.io's published price. The runs come from Fly.io's own machine history, kept
   after the machine is gone. When Fly.io cannot be reached, what was last known is shown, and said to be so.
-- Under the hood, not visible yet: a relay on this computer that will carry and count what passes toward a
-  sandbox's port (it listens on 127.0.0.1 only).
 
 ### Repositories, a line each, and Azure DevOps · Loop 37
 - New, in a repository's unfolded line: **Branches and their folders**, a map drawn like a metro's. The base branch

@@ -126,3 +126,88 @@ static func tiles(inv: Dictionary) -> Array:
 		{"id": "destroyed", "label": "Destroyed, kept here", "value": str(destroyed), "note": "%s measured in all, the destroyed ones included" % money(cost), "level": "ok"},
 		at_fly,
 	]
+
+
+# ---------------------------------------------------------------- tunnels and ports
+## 0, 850 B/s, 1.2 kB/s, 3.4 MB/s.
+static func rate(per_second: float) -> String:
+	if per_second < 0.5:
+		return "0"
+	if per_second < 1000.0:
+		return "%d B/s" % int(round(per_second))
+	if per_second < 1000000.0:
+		return "%.1f kB/s" % (per_second / 1000.0)
+	return "%.1f MB/s" % (per_second / 1000000.0)
+
+
+## 0, 512 B, 12 kB, 3.4 MB, 1.2 GB.
+static func amount(bytes: float) -> String:
+	if bytes < 1.0:
+		return "0"
+	if bytes < 1000.0:
+		return "%d B" % int(bytes)
+	if bytes < 1000000.0:
+		return "%d kB" % int(round(bytes / 1000.0))
+	if bytes < 1000000000.0:
+		return "%.1f MB" % (bytes / 1000000.0)
+	return "%.1f GB" % (bytes / 1000000000.0)
+
+
+## The connection to a sandbox in words, with its level.
+static func link_of(tunnel: Dictionary) -> Dictionary:
+	var st := str(tunnel.get("state", "closed"))
+	if st == "open":
+		var n: int = tunnel.get("ports", []).size()
+		return {"text": "connected · %s" % ("no port brought here yet" if n == 0 else "%d port%s on your localhost" % [n, "" if n == 1 else "s"]), "level": "ok"}
+	if st == "lost":
+		return {"text": "the connection was lost: connect again", "level": "bad"}
+	return {"text": "not connected: its ports are not reachable from here", "level": "off"}
+
+
+## Every port worth a line: what listens in the sandbox, and what is brought here (a port brought here whose program
+## stopped listening stays listed: it is still open on this side). Brought ones first, then by number.
+## Each: {"port", "program", "inside", "open", "state", "address", "local", "sent", "received", "sent_rate", "received_rate", "open_now"}.
+static func port_rows(tunnel: Dictionary) -> Array:
+	var by := {}
+	for l in tunnel.get("listening", []):
+		by[int(l["port"])] = {"port": int(l["port"]), "program": str(l.get("program", "")), "inside": bool(l.get("inside", false)), "listening": true,
+			"open": false, "state": "", "address": "", "local": 0, "sent": 0.0, "received": 0.0, "sent_rate": 0.0, "received_rate": 0.0, "open_now": 0, "label": ""}
+	for p in tunnel.get("ports", []):
+		var n := int(p.get("remote_port", 0))
+		var row: Dictionary = by.get(n, {"port": n, "program": "", "inside": true, "listening": false})
+		row.merge({"open": true, "state": str(p.get("state", "")), "address": str(p.get("address", "")), "local": int(p.get("port", 0)),
+			"sent": float(p.get("sent", 0)), "received": float(p.get("received", 0)), "sent_rate": float(p.get("sent_rate", 0.0)),
+			"received_rate": float(p.get("received_rate", 0.0)), "open_now": int(p.get("open_now", 0)), "label": str(p.get("label", ""))}, true)
+		by[n] = row
+	var out := by.values()
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["port"] < b["port"] if a["open"] == b["open"] else a["open"])
+	return out
+
+
+## A port's line in words.
+static func port_words(row: Dictionary) -> String:
+	var what := str(row["program"]) if str(row["program"]) != "" else "a program"
+	if not row["open"]:
+		return "%s listens on %d%s" % [what, row["port"], " (inside the sandbox only)" if row["inside"] else ""]
+	var out := "%s on %d is on your localhost:%d" % [what, row["port"], row["local"]]
+	if str(row["state"]) == "paused":
+		out += " · paused: it carries nothing"
+	if not bool(row.get("listening", true)):
+		out += " · nothing listens there any more"
+	return out
+
+
+## How the sandbox is doing, in three short figures.
+static func health_words(h: Dictionary) -> Array:
+	if h.is_empty():
+		return []
+	var out := []
+	if float(h.get("memory_total", 0)) > 0.0:
+		out.append(["Memory", "%s of %s" % [HostView.mem(float(h["memory_used"])), HostView.mem(float(h["memory_total"]))], float(h["memory_used"]) / float(h["memory_total"]) > 0.92])
+	out.append(["Load", "%.2f" % float(h.get("load", 0.0)), false])
+	if float(h.get("disk_total", 0)) > 0.0:
+		out.append(["Disk free", HostView.mem(float(h["disk_free"])), float(h["disk_free"]) / float(h["disk_total"]) < 0.1])
+	out.append(["Round trip", "%d ms" % int(h.get("round_trip_ms", 0)), int(h.get("round_trip_ms", 0)) > 800])
+	return out
+

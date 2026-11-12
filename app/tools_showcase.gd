@@ -1119,6 +1119,60 @@ func _run() -> void:
 				" | ".join(SandboxView.tiles(inv).map(func(t: Dictionary) -> String: return "%s %s" % [t["label"], t["value"]]))])
 			report.append("sandboxes: the pointer on the destroyed one says: « %s »" % str(life._get_tooltip(Vector2(300, life.HEAD + life.ROW * 2.5))).replace("\n", " / ").left(170))
 			await shot("sandboxes")
+		"sandbox-ports":  # Loop 38: a sandbox's port on localhost. Fly.io, ssh and the sandbox are stand-ins (nothing leaves this computer); the relay, its counting and the page are the real ones. A small web server here stands for a dashboard in the sandbox.
+			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
+			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), OS.get_environment("AGMGD_HOME"), str(pa["id"]), str(pb["id"])], [])
+			var site := OS.get_environment("STANDIN_SS").get_base_dir().path_join("dashboard")
+			DirAccess.make_dir_recursive_absolute(site)
+			var page := FileAccess.open(site.path_join("index.html"), FileAccess.WRITE)
+			page.store_string("<title>Sales, this week</title><h1>Sales, this week</h1>" + "<p>a line of the dashboard</p>".repeat(300))
+			page.close()
+			var inside := 18501
+			var web := OS.create_process("python3", ["-m", "http.server", str(inside), "--bind", "127.0.0.1", "--directory", site])
+			var ss := FileAccess.open(OS.get_environment("STANDIN_SS"), FileAccess.WRITE)
+			ss.store_string("LISTEN 0 128 0.0.0.0:2222 0.0.0.0:* users:((\"sshd\",pid=41,fd=3))\nLISTEN 0 5 127.0.0.1:8765 0.0.0.0:* users:((\"sshd\",pid=77,fd=9))\nLISTEN 0 511 0.0.0.0:%d 0.0.0.0:* users:((\"streamlit\",pid=412,fd=6))\nLISTEN 0 5 127.0.0.1:8000 0.0.0.0:* users:((\"python3\",pid=500,fd=3))\n" % inside)
+			ss.close()
+			var hl := FileAccess.open(OS.get_environment("STANDIN_HEALTH"), FileAccess.WRITE)
+			hl.store_string("MemTotal:        1009636 kB\nMemFree:          211208 kB\nMemAvailable:     604580 kB\n---\n0.42 0.31 0.12 1/97 2231\n---\n5123.40 9001.11\n---\nFilesystem      1-blocks       Used  Available Capacity Mounted on\n/dev/vdb     8350298112 2147483648 5771362304      28% /\n")
+			hl.close()
+			await main.refresh()
+			main.set_view("sandboxes")
+			await wait(3.0)
+			var sbid := "a1c4e9f2"
+			report.append("ports: before: « %s » | a button to connect: %s" % [SandboxView.link_of(main.sbx_tunnels.get(sbid, {}))["text"], _find_button(main.content, "Connect") != null])
+			await main._sbx_tunnel_do(sbid, "tunnel/connect")
+			await wait(0.5)
+			var seen: Array = SandboxView.port_rows(main.sbx_tunnels.get(sbid, {}))
+			report.append("ports: connected: « %s » | what listens there: %s | how it is doing: %s" % [SandboxView.link_of(main.sbx_tunnels[sbid])["text"],
+				" ; ".join(seen.map(func(x: Dictionary) -> String: return SandboxView.port_words(x))), ", ".join(SandboxView.health_words(main.sbx_tunnels[sbid].get("health", {})).map(func(f: Array) -> String: return "%s %s" % [f[0], f[1]]))])
+			await main._sbx_tunnel_do(sbid, "ports/%d/open" % inside, {"label": "streamlit"})
+			await wait(0.5)
+			var brought: Dictionary = SandboxView.port_rows(main.sbx_tunnels[sbid])[0]
+			# the page is asked for a few times a second for a while, as a browser left on a dashboard would
+			var fetch := OS.create_process("python3", ["-c", "import time, urllib.request\nfor i in range(60):\n    urllib.request.urlopen('%s/', timeout=5).read()\n    time.sleep(0.15)\n" % str(brought["address"])])
+			await wait(4.0)
+			await main._sbx_tunnel_ask(sbid)
+			await wait(0.4)
+			var now_row: Dictionary = SandboxView.port_rows(main.sbx_tunnels[sbid])[0]
+			var got := []
+			OS.execute("python3", ["-c", "import urllib.request; print(urllib.request.urlopen('%s/', timeout=5).read()[:30].decode())" % str(brought["address"])], got)
+			report.append("ports: brought here: « %s » | the page through it starts with: « %s » | something passes: sent %s, received %s, rates above zero: %s | the wire is drawn: %s" % [SandboxView.port_words(now_row),
+				"".join(got).strip_edges(), int(now_row["sent"]) > 0, int(now_row["received"]) > 5000, float(now_row["received_rate"]) > 0.0, main.content.find_child("Wire_" + sbid, true, false) != null])
+			var scroller: ScrollContainer = main.sbx_box.get_parent()
+			scroller.scroll_vertical = int(maxf(0.0, (main.sbx_tunnel_boxes[sbid] as Control).global_position.y - main.sbx_box.global_position.y - 330.0))
+			await wait(0.4)
+			await shot("sandbox-ports")
+			await main._sbx_tunnel_do(sbid, "ports/%d/pause" % inside)
+			await wait(0.4)
+			var refused := []
+			var code := OS.execute("python3", ["-c", "import urllib.request; urllib.request.urlopen('%s/', timeout=3).read()" % str(brought["address"])], refused, true)
+			report.append("ports: paused: « %s » | the page no longer comes: %s" % [SandboxView.port_words(SandboxView.port_rows(main.sbx_tunnels[sbid])[0]), code != 0])
+			await main._sbx_tunnel_do(sbid, "tunnel/disconnect")
+			await wait(0.4)
+			report.append("ports: disconnected: « %s »" % SandboxView.link_of(main.sbx_tunnels.get(sbid, {}))["text"])
+			OS.kill(fetch)
+			OS.kill(web)
 		"palette":
 			main.select(made["Sparks"])
 			await wait(2.0)

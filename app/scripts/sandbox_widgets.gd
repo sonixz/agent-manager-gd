@@ -135,3 +135,71 @@ class Life extends Control:
 			draw_string(font, Vector2(b.end.x + 18.0, y + ROW / 2.0 + 5.0), ran, HORIZONTAL_ALIGNMENT_RIGHT, RAN_W - 14.0, 12, muted if gone else ink)
 			draw_string(font, Vector2(b.end.x + 18.0 + RAN_W, y + ROW / 2.0 + 5.0), SandboxView.money(float(row.get("cost_usd", 0.0))), HORIZONTAL_ALIGNMENT_RIGHT, COST_W - 14.0, 12, muted if gone else ink)
 			draw_line(Vector2(0, y + ROW - 0.5), Vector2(size.x, y + ROW - 0.5), Color(line, 0.3), 1.0)
+
+
+## The wires between this computer and a sandbox: one per port brought here. At the left, the address on this
+## computer; at the right, the program and its port in the sandbox; on the wire, what passes: dots that run toward
+## the sandbox for what is sent and back for what is received, faster when more passes, and both rates in figures
+## with the totals. A paused port is a dashed grey wire that carries nothing.
+class Wire extends Control:
+	const ROW := 34.0
+	const PAD := 10.0
+	const SIDE := 190.0
+	var rows: Array
+	var name_there: String
+	var font: Font
+	var bold: Font
+
+	func _init(the_rows: Array, sandbox_name: String) -> void:
+		rows = the_rows
+		name_there = sandbox_name
+		font = AmTheme.ui_font(400)
+		bold = AmTheme.ui_font(650)
+		custom_minimum_size.y = PAD * 2.0 + 20.0 + rows.size() * ROW
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_process(true)
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	## How fast the dots run for a rate: slowly for a few bytes, a little faster each time it is ten times more.
+	static func speed(per_second: float) -> float:
+		return 0.0 if per_second < 0.5 else clampf(0.12 + 0.1 * log(per_second) / log(10.0), 0.12, 0.9)
+
+	func _draw() -> void:
+		var ink := AmTheme.col("TEXT")
+		var muted := AmTheme.col("MUTED")
+		var here := Rect2(0, 0, SIDE, size.y)
+		var there := Rect2(size.x - SIDE, 0, SIDE, size.y)
+		for box in [here, there]:
+			draw_style_box(AmTheme.box(AmTheme.col("PANEL_2"), 10, AmTheme.col("BORDER"), 1, 0), box)
+		draw_string(bold, Vector2(here.position.x + 12.0, 22.0), "This computer", HORIZONTAL_ALIGNMENT_LEFT, SIDE - 20.0, 12, ink)
+		draw_string(bold, Vector2(there.position.x + 12.0, 22.0), "☁ " + name_there, HORIZONTAL_ALIGNMENT_LEFT, SIDE - 20.0, 12, ink)
+		var t := Time.get_ticks_msec() / 1000.0
+		for i in rows.size():
+			var row: Dictionary = rows[i]
+			var y := PAD + 26.0 + i * ROW + ROW / 2.0 - 6.0
+			var x0 := here.end.x
+			var x1 := there.position.x
+			var paused := str(row["state"]) == "paused"
+			draw_string(font, Vector2(here.position.x + 12.0, y + 5.0), "localhost:%d" % int(row["local"]), HORIZONTAL_ALIGNMENT_LEFT, SIDE - 20.0, 12, muted if paused else ink)
+			var what := (str(row["program"]) + " " if str(row["program"]) != "" else "") + ":%d" % int(row["port"])
+			draw_string(font, Vector2(there.position.x + 12.0, y + 5.0), what, HORIZONTAL_ALIGNMENT_LEFT, SIDE - 20.0, 12, muted if paused else ink)
+			if paused:
+				draw_dashed_line(Vector2(x0, y), Vector2(x1, y), AmTheme.col("FAINT"), 2.0, 6.0)
+				draw_string(font, Vector2(x0, y - 7.0), "paused", HORIZONTAL_ALIGNMENT_CENTER, x1 - x0, 11, AmTheme.col("FAINT"))
+				continue
+			draw_line(Vector2(x0, y), Vector2(x1, y), Color(AmTheme.col("BORDER"), 0.9), 2.0, true)
+			var so := speed(float(row["sent_rate"]))
+			var si := speed(float(row["received_rate"]))
+			for k in 5:  # what is sent runs toward the sandbox, a little above the wire; what is received runs back, a little under
+				if so > 0.0:
+					draw_circle(Vector2(lerpf(x0, x1, fposmod(t * so + k / 5.0, 1.0)), y - 3.0), 2.5, AmTheme.col("INFO"))
+				if si > 0.0:
+					draw_circle(Vector2(lerpf(x1, x0, fposmod(t * si + k / 5.0, 1.0)), y + 3.0), 2.5, AmTheme.col("MINT"))
+			var figures := "sent %s (%s)   ·   received %s (%s)%s" % [SandboxView.rate(float(row["sent_rate"])), SandboxView.amount(float(row["sent"])),
+				SandboxView.rate(float(row["received_rate"])), SandboxView.amount(float(row["received"])),
+				("   ·   %d open now" % int(row["open_now"])) if int(row["open_now"]) > 0 else ""]
+			draw_string(font, Vector2(x0, y - 9.0), figures, HORIZONTAL_ALIGNMENT_CENTER, x1 - x0, 11, muted)
+
