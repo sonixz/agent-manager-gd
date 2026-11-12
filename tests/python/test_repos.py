@@ -254,6 +254,39 @@ class HostsAndListTest(unittest.TestCase):
         self.settle()
         self.assertEqual(self.repos.all()[0]["folder"]["branch"], "main")
 
+    def test_the_branches_as_a_map(self):
+        r = self.repos.add("file://" + self.bare, self.work)
+        # « gift-cards » leaves main, makes two commits in a folder of its own (a worktree); main then makes one;
+        # « tax » leaves main there and makes none (nothing to show for it yet); « old » was merged long ago
+        wt = os.path.join(self.tmp, "wt-gift")
+        git(self.work, "branch", "old")
+        git(self.work, "worktree", "add", "-q", "-b", "gift-cards", wt)
+        for i in (1, 2):
+            git(wt, "commit", "-q", "--allow-empty", "-m", f"gift {i}")
+        git(self.work, "commit", "-q", "--allow-empty", "-m", "main moves on")
+        git(self.work, "branch", "tax")
+        m = self.repos.branches(r["id"])
+        self.assertTrue(m["read"])
+        self.assertEqual((m["base"]["name"], os.path.realpath(m["base"]["worktree"])), ("main", os.path.realpath(self.work)))
+        self.assertEqual(m["base"]["subject"], "main moves on")
+        by = {b["name"]: b for b in m["branches"]}
+        self.assertEqual((by["gift-cards"]["ahead"], by["gift-cards"]["behind"], by["gift-cards"]["merged"]), (2, 1, False))
+        self.assertEqual(os.path.realpath(by["gift-cards"]["worktree"]), os.path.realpath(wt))
+        self.assertEqual(by["gift-cards"]["subject"], "gift 2")
+        self.assertEqual((by["tax"]["ahead"], by["tax"]["behind"], by["tax"]["merged"], by["tax"]["worktree"]), (0, 0, True, ""))
+        self.assertEqual((by["old"]["ahead"], by["old"]["behind"], by["old"]["merged"]), (0, 1, True))
+        self.assertEqual((m["worktrees"], m["more"]), (2, 0))
+        self.assertEqual(self.repos.branches(r["id"], limit=1)["more"], 2)      # the latest only; the rest is counted
+        git(self.work, "checkout", "-q", "--detach")                              # the main folder on no branch: main is still the base
+        self.assertEqual(self.repos.branches(r["id"])["base"]["name"], "main")
+
+    def test_no_folder_no_map_and_it_says_why(self):
+        r = self.repos.add("git@github.com:acme/not-cloned.git")
+        m = self.repos.branches(r["id"])
+        self.assertEqual((m["read"], "cloned" in m["why"]), (False, True))
+        with self.assertRaises(KeyError):
+            self.repos.branches("nope")
+
     def test_a_folder_that_is_gone_is_said_and_nothing_breaks(self):
         r = self.repos.add("file://" + self.bare, self.work)
         shutil.rmtree(self.work)

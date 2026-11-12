@@ -17,7 +17,8 @@ empties in ten minutes (the age at which the page checks it again), what the key
 Manager's copy, its branch, commits not pushed, files changed), a dot per open session, and the sessions started on
 it day by day over fourteen days. Rest the pointer on any of them for the words. The repositories that need a hand come first, unfolded. A click
 on a name or its arrow unfolds the rest: the public key, where to add it, Check, Rotate the key, Disconnect, the
-folder. Opening the page reads the folders again and checks again the keys checked more than ten minutes ago;
+folder, and a map of its branches drawn like a metro's (the base branch at the top, each branch with commits, a
+worktree or an open session running under it, with its sessions as dots). Opening the page reads the folders again and checks again the keys checked more than ten minutes ago;
 **Check all** does it at once. Nothing is checked while the page is closed.
 
 ## Connect a repository

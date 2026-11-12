@@ -1112,6 +1112,22 @@ class Sessions:
         except KeyError:
             return ""
 
+    def repo_branches(self, rid: str) -> dict:
+        """The repository's branch map, with the open sessions that work in each branch's folder."""
+        data = self.repos.branches(rid)
+        if not data.get("read") or not data.get("base"):
+            return data
+        by_folder: dict[str, list[dict]] = {}
+        for s in self.store.history():
+            if s.get("archived") or s.get("repo_id") != rid and not s.get("worktree"):
+                continue
+            folder = s.get("worktree") or s.get("cwd") or ""
+            if folder:
+                by_folder.setdefault(os.path.realpath(folder), []).append({"id": s["id"], "name": s["name"]})
+        for b in [data["base"]] + data["branches"]:
+            b["sessions"] = by_folder.get(os.path.realpath(b["worktree"]), []) if b["worktree"] else []
+        return data
+
     def repo_sessions(self, rid: str) -> list[dict]:
         return [{"id": r["id"], "name": r["name"], "archived": r["archived"], "created": r["created"]}
                 for r in self.store.history() if r.get("repo_id") == rid]

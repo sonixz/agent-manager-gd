@@ -8,6 +8,7 @@ extends RefCounted
 ## Loaded with preload, not by a class name (see setup_probe.gd).
 
 const RepoView := preload("res://scripts/repo_view.gd")
+const HostView := preload("res://scripts/host_view.gd")
 
 
 # ====================================================================== the base of every piece in a line
@@ -279,3 +280,181 @@ class Tiles extends Control:
 			draw_string(bold, Vector2(at.x + 14.0, at.y + 48.0), str(t["value"]), HORIZONTAL_ALIGNMENT_LEFT, 60.0, 22, AmTheme.col("TEXT"))
 			var vw := bold.get_string_size(str(t["value"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
 			draw_string(font, Vector2(at.x + 14.0 + vw + 10.0, at.y + 47.0), str(t["note"]), HORIZONTAL_ALIGNMENT_LEFT, w - 38.0 - vw, 12, AmTheme.col("MUTED"))
+
+
+# ====================================================================== the map of the branches
+## A repository's branches as a metro map (owner, 2026-11-12: « c'est comme un peu la vue métro »). The base branch
+## is the line at the top, its latest commits as stations, now at the right. Each branch worth a look leaves it
+## where it was made, runs under it with one station per commit of its own, and ends at its tip. At the right of
+## each line: its name, what it has (a triangle up) and what the base made since (a triangle down), a small folder
+## when it is checked out in a folder of its own (a worktree), and a dot per session that works there. Rest the
+## pointer on a line for its words; click a line whose session runs to show that session.
+class Metro extends Control:
+	signal picked(id: String)
+	const TOP := 26.0
+	const LANE := 30.0
+	const LABEL := 380.0
+	const LEFT := 26.0
+	const R := 10.0
+	var map: Dictionary
+	var colours: Dictionary  # session id -> the colour the session list gives its state
+	var now: float
+	var hover := -2          # -1 the base line, 0 and up a branch, -2 nothing
+	var font: Font
+	var bold: Font
+
+	func _init(the_map: Dictionary, the_colours: Dictionary, the_now: float) -> void:
+		map = the_map
+		colours = the_colours
+		now = the_now
+		font = AmTheme.ui_font(400)
+		bold = AmTheme.ui_font(650)
+		var note := int(map.get("merged", 0)) > 0 or int(map.get("more", 0)) > 0
+		custom_minimum_size.y = TOP + map["lines"].size() * LANE + 20.0 + (20.0 if note else 0.0)
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		mouse_exited.connect(func() -> void:
+			hover = -2
+			queue_redraw())
+		var working := false
+		for l in [map["base"]] + map["lines"]:
+			for d in l["dots"]:
+				working = working or (d["running"] and str(d["activity"]) == "working")
+		set_process(working)
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	## The map starts at the left and takes the room it needs: a base line with few commits is not stretched across
+	## the page, one with many is packed so the names keep their room at the right.
+	func step() -> float:
+		return clampf((size.x - LABEL - LEFT - 40.0) / float(maxi(int(map["span"]), 1)), 9.0, 56.0)
+
+	func x_tip() -> float:
+		return LEFT + 30.0 + int(map["span"]) * step()
+
+	func lane_y(i: int) -> float:
+		return TOP + (i + 1) * LANE
+
+	func lane_at(y: float) -> int:
+		if absf(y - TOP) <= LANE / 2.0:
+			return -1
+		var i := int(round((y - TOP) / LANE)) - 1
+		return i if i >= 0 and i < map["lines"].size() else -2
+
+	func _get_tooltip(at: Vector2) -> String:
+		var i := lane_at(at.y)
+		if i == -1:
+			var b: Dictionary = map["base"]
+			return RepoView.metro_tip({"name": b["name"], "ahead": 0, "behind": 0, "subject": b["subject"], "date": b["date"], "worktree": b["worktree"], "dots": b["dots"]}, str(b["name"]), now).replace("\nno commit of its own yet", "\nThe base line: the branch the others leave from.")
+		if i >= 0:
+			return RepoView.metro_tip(map["lines"][i], str(map["base"]["name"]), now)
+		return ""
+
+	func _gui_input(e: InputEvent) -> void:
+		if e is InputEventMouseMotion:
+			var i := lane_at(e.position.y)
+			if i != hover:
+				hover = i
+				var dots: Array = map["base"]["dots"] if i == -1 else (map["lines"][i]["dots"] if i >= 0 else [])
+				mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if dots.any(func(d: Dictionary) -> bool: return d["running"]) else Control.CURSOR_ARROW
+				queue_redraw()
+		elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			var i := lane_at(e.position.y)
+			var dots: Array = map["base"]["dots"] if i == -1 else (map["lines"][i]["dots"] if i >= 0 else [])
+			for d in dots:
+				if d["running"]:
+					picked.emit(str(d["id"]))
+					return
+
+	func _station(at: Vector2, col: Color, big := false) -> void:
+		if big:
+			draw_circle(at, 6.0, AmTheme.col("PANEL"))
+			draw_circle(at, 5.0, col)
+		else:
+			draw_circle(at, 3.6, col)
+			draw_circle(at, 2.0, AmTheme.col("PANEL"))
+
+	## A line's name, its figures, its folder and its dots, at the right of its tip.
+	func _label(y: float, line: Dictionary, strong: bool, base: bool) -> void:
+		var x := x_tip() + 18.0
+		var ink := AmTheme.col("TEXT")
+		var muted := AmTheme.col("MUTED")
+		var name := str(line["name"])
+		var nw := minf(bold.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x, 170.0)
+		draw_string(bold, Vector2(x, y + 5.0), name, HORIZONTAL_ALIGNMENT_LEFT, 170.0, 13, ink if strong or base else Color(ink, 0.9))
+		x += nw + 12.0
+		var ahead := int(line.get("ahead", 0))
+		var behind := int(line.get("behind", 0))
+		if ahead > 0:
+			draw_colored_polygon(PackedVector2Array([Vector2(x, y + 4), Vector2(x + 8, y + 4), Vector2(x + 4, y - 4)]), AmTheme.col("MINT"))
+			draw_string(font, Vector2(x + 11.0, y + 5.0), str(ahead), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ink)
+			x += 13.0 + font.get_string_size(str(ahead), HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 8.0
+		if behind > 0:
+			draw_colored_polygon(PackedVector2Array([Vector2(x, y - 4), Vector2(x + 8, y - 4), Vector2(x + 4, y + 4)]), AmTheme.col("INFO"))
+			draw_string(font, Vector2(x + 11.0, y + 5.0), str(behind), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ink)
+			x += 13.0 + font.get_string_size(str(behind), HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 8.0
+		if str(line.get("worktree", "")) != "":  # a small folder: this branch is checked out in a folder of its own
+			draw_rect(Rect2(x, y - 5.0, 5, 3), muted)
+			draw_rect(Rect2(x, y - 3.0, 12, 8), muted, false, 1.5)
+			x += 20.0
+		var breath := 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.004)
+		for d in line.get("dots", []):
+			var col: Color = colours.get(str(d["id"]), AmTheme.col("FAINT"))
+			if not d["running"]:
+				draw_arc(Vector2(x + 5.0, y), 4.0, 0.0, TAU, 18, AmTheme.col("FAINT"), 1.5, true)
+			else:
+				draw_circle(Vector2(x + 5.0, y), 5.0, Color(col, breath) if str(d["activity"]) == "working" else col)
+			x += 15.0
+		if base and x < size.x - 60.0 and str(line.get("subject", "")) != "":
+			draw_string(font, Vector2(x + 4.0, y + 5.0), str(line["subject"]), HORIZONTAL_ALIGNMENT_LEFT, size.x - x - 10.0, 11, AmTheme.col("FAINT"))
+
+	func _draw() -> void:
+		var tip := x_tip()
+		var dx := step()
+		var span := int(map["span"])
+		var base_col := Color(AmTheme.col("TEXT"), 0.75)
+		var x0 := tip - span * dx - 16.0
+		# the branches first, so the base line and its stations lie over the places they leave from
+		for i in map["lines"].size():
+			var line: Dictionary = map["lines"][i]
+			var col: Color = HostView.hue(int(line["slot"]), AmTheme.is_light()) if int(line["slot"]) >= 0 else AmTheme.col("MUTED")
+			var w := 4.0 if hover == i else 3.0
+			var y := lane_y(i)
+			var behind := int(line["behind"])
+			var fx := tip - mini(behind, span) * dx
+			var n := mini(int(line["ahead"]), RepoView.METRO_AHEAD)
+			var room := maxf(12.0, tip - (fx + R))
+			var st := minf(dx, room / maxf(float(n), 1.0))
+			var end := fx + R + (n * st if n > 0 else 12.0)
+			var pts := PackedVector2Array()
+			if behind > span:  # it left before the map starts: it comes in from the left, on its own height
+				draw_dashed_line(Vector2(x0 - 8.0, y), Vector2(fx + R, y), Color(col, 0.7), w, 5.0)
+				pts.append(Vector2(fx + R, y))
+			else:
+				pts.append(Vector2(fx, TOP))
+				pts.append(Vector2(fx, y - R))
+				for k in range(1, 9):
+					var a := PI - k * (PI / 2.0) / 8.0
+					pts.append(Vector2(fx + R + R * cos(a), y - R + R * sin(a)))
+			pts.append(Vector2(end, y))
+			draw_polyline(pts, col, w, true)
+			for k in range(1, n):
+				_station(Vector2(fx + R + k * st, y), col)
+			_station(Vector2(end, y), col, true)
+			draw_line(Vector2(end + 8.0, y), Vector2(tip + 10.0, y), Color(col, 0.22), 1.0)  # a thread to its name
+			_label(y, line, hover == i, false)
+		draw_line(Vector2(x0, TOP), Vector2(tip, TOP), base_col, 4.0 if hover == -1 else 3.0, true)
+		draw_line(Vector2(x0 - 14.0, TOP), Vector2(x0, TOP), Color(base_col, 0.3), 3.0, true)  # it goes on, before
+		for k in range(1, span + 1):
+			_station(Vector2(tip - k * dx, TOP), base_col)
+		_station(Vector2(tip, TOP), AmTheme.col("TEXT"), true)
+		_label(TOP, map["base"], hover == -1, true)
+		var note := []
+		if int(map.get("merged", 0)) > 0:
+			note.append("%d merged branch%s with nothing of %s own, not drawn" % [int(map["merged"]), "" if int(map["merged"]) == 1 else "es", "its" if int(map["merged"]) == 1 else "their"])
+		if int(map.get("more", 0)) > 0:
+			note.append("%d older branch%s not read" % [int(map["more"]), "" if int(map["more"]) == 1 else "es"])
+		if not note.is_empty():
+			draw_string(font, Vector2(LEFT, size.y - 6.0), " · ".join(note) + ".", HORIZONTAL_ALIGNMENT_LEFT, size.x - LEFT, 11, AmTheme.col("FAINT"))
+

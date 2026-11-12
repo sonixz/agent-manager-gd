@@ -431,4 +431,23 @@ func _repo_cases() -> void:
 	var top := Repo.tiles([gh, az, broken, other], live)
 	check("repos: the tiles: keys that work, who needs a hand, sessions running, hosts", top.map(func(t: Dictionary) -> String: return "%s=%s" % [t["id"], t["value"]]) == ["connected=2", "hand=2", "running=2", "hosts=3"] and top[1]["note"] == "Client Portal, zeta" and top[1]["level"] == "bad" and top[3]["note"] == "GitHub 2 · Azure DevOps 1 · git.example.org 1")
 	check("repos: the tiles when all is well and nothing runs", Repo.tiles([gh], {})[1]["note"] == "none" and Repo.tiles([gh], {})[1]["level"] == "ok" and Repo.tiles([gh], {})[2]["note"] == "on no repository" and Repo.tiles([gh], {})[0]["note"] == "of 1 repository")
+	# --- the map of the branches
+	var graph := {"read": true, "worktrees": 3, "more": 1, "base": {"name": "main", "tip": "abc", "date": now - 600.0, "subject": "main moves on", "worktree": "/code/shop", "sessions": [{"id": "s2", "name": "Docs"}]},
+		"branches": [
+			{"name": "am/tax-rules", "ahead": 0, "behind": 0, "date": now - 100.0, "subject": "main moves on", "worktree": "/wt/tax", "upstream": "", "sessions": [{"id": "s9", "name": "Tax rules"}]},
+			{"name": "am/gift-cards", "ahead": 3, "behind": 2, "date": now - 50.0, "subject": "gift 3", "worktree": "/wt/gift", "upstream": "", "sessions": [{"id": "s1", "name": "Gift cards"}]},
+			{"name": "spike", "ahead": 40, "behind": 90, "date": now - 9 * 86400.0, "subject": "try", "worktree": "", "upstream": "origin/spike", "sessions": []},
+			{"name": "old", "ahead": 0, "behind": 12, "date": now - 30 * 86400.0, "subject": "done", "worktree": "", "upstream": "", "sessions": []}]}
+	var map := Repo.metro(graph, live)
+	check("map: the lines worth a look, the one with a running session first, then the ones with a folder, then by last commit", map["lines"].map(func(l: Dictionary) -> String: return l["name"]) == ["am/gift-cards", "am/tax-rules", "spike"])
+	check("map: a merged branch with no folder and no session is counted, not drawn", map["merged"] == 1 and map["more"] == 1)
+	check("map: each line has its place's hue, and the base line shows no more than its latest commits", map["lines"].map(func(l: Dictionary) -> int: return l["slot"]) == [0, 1, 2] and map["span"] == Repo.METRO_SPAN)
+	check("map: the base and who works in its folder", map["base"]["name"] == "main" and map["base"]["dots"].size() == 1 and map["base"]["dots"][0]["running"] == false)
+	check("map: a line in words", Repo.metro_tip(map["lines"][0], "main", now) == "am/gift-cards\n3 commits of its own · main made 2 since it left\nLast: gift 3 (50 s ago)\nIts folder: /wt/gift\n● Gift cards: working")
+	check("map: a branch with a folder and nothing of its own yet is said so", Repo.metro_tip(map["lines"][1], "main", now).contains("no commit of its own yet") and Repo.metro_tip(map["lines"][1], "main", now).contains("● Tax rules: not running"))
+	check("map: no folder, no map, and why", Repo.metro({"read": false, "why": "no folder yet"}, {})["why"] == "no folder yet" and Repo.metro({"read": true, "base": null, "branches": []}, {})["read"] == false)
+	var many := {"read": true, "base": graph["base"], "branches": [], "more": 0}
+	for i in 10:
+		many["branches"].append({"name": "b%d" % i, "ahead": 1, "behind": 1, "date": now - i, "subject": "", "worktree": "", "sessions": []})
+	check("map: past eight lines, the others are grey", Repo.metro(many, {})["lines"].map(func(l: Dictionary) -> int: return l["slot"]) == [0, 1, 2, 3, 4, 5, 6, 7, -1, -1])
 

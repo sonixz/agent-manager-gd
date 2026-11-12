@@ -339,6 +339,61 @@ class Repos:
             r["busy"] = sorted(f["busy"])
         return r
 
+    # ---------------------------------------------------------------- the branches, as a map
+    def branches(self, rid: str, limit: int = 24) -> dict:
+        """The repository's local branches, for the map the page draws: the base branch (the one its main folder is
+        on), and for every other branch how many commits the base made since that branch left it (`behind`), how
+        many the branch made (`ahead`), and the folder (worktree) where it is checked out. Read from the disk:
+        nothing is fetched. The latest `limit` branches by their last commit; `more` says how many were left out."""
+        with closing(self._db()) as db:
+            row = db.execute("SELECT local_path FROM repos WHERE id = ?", (rid,)).fetchone()
+        if not row:
+            raise KeyError(rid)
+        path = row["local_path"] or ""
+        if not path or not os.path.isdir(os.path.join(path, ".git")):
+            return {"read": False, "why": "no folder yet: the branches show once the repository is cloned" if not path or not os.path.isdir(path)
+                    else "the folder is not a git repository yet"}
+        sep = "\x1f"
+        rc, out = self._git(path, "for-each-ref", "refs/heads", "--sort=-committerdate",
+                            "--format=%(refname:short)" + sep + "%(objectname:short)" + sep + "%(committerdate:unix)" + sep
+                            + "%(upstream:short)" + sep + "%(contents:subject)")
+        if rc != 0:
+            return {"read": False, "why": "git could not list the branches"}
+        found = []
+        for line in out.splitlines():
+            p = line.split(sep)
+            if len(p) >= 5 and p[0]:
+                found.append({"name": p[0], "tip": p[1], "date": float(p[2] or 0), "upstream": p[3], "subject": p[4][:120]})
+        # where each branch is checked out: the main folder first, then the worktrees
+        where: dict[str, str] = {}
+        main_branch = ""
+        rc, out = self._git(path, "worktree", "list", "--porcelain")
+        folder = ""
+        folders = 0
+        for line in out.splitlines() if rc == 0 else []:
+            if line.startswith("worktree "):
+                folder = line[9:].strip()
+                folders += 1
+            elif line.startswith("branch refs/heads/"):
+                name = line[18:].strip()
+                where[name] = folder
+                if folders == 1:
+                    main_branch = name
+        names = [b["name"] for b in found]
+        base = main_branch if main_branch in names else next((n for n in ("main", "master") if n in names), names[0] if names else "")
+        if not base:
+            return {"read": True, "base": None, "branches": [], "worktrees": folders, "more": 0}
+        others = [b for b in found if b["name"] != base]
+        out_branches = []
+        for b in others[:limit]:
+            rc, counts = self._git(path, "rev-list", "--left-right", "--count", f"{base}...{b['name']}")
+            two = counts.split()
+            behind, ahead = (int(two[0]), int(two[1])) if rc == 0 and len(two) == 2 else (0, 0)
+            out_branches.append({**b, "behind": behind, "ahead": ahead, "merged": ahead == 0, "worktree": where.get(b["name"], "")})
+        base_row = next(b for b in found if b["name"] == base)
+        return {"read": True, "base": {**base_row, "worktree": where.get(base, "")}, "branches": out_branches,
+                "worktrees": folders, "more": max(0, len(others) - limit)}
+
     # ---------------------------------------------------------------- what is slow, read aside
     def refresh(self, keys: bool = False, key_age: float = 600.0, folder_age: float = 30.0) -> dict:
         """Reads again, aside and four at a time, what is older than its age: each folder; and, when `keys` is asked

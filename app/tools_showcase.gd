@@ -946,8 +946,26 @@ func _run() -> void:
 			var gh_new: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/pixel-forge.git", "local_path": code.path_join("pixel-forge")})
 			report.append("repos: Azure DevOps: key « %s… », opens « %s », its page %s | checked through the stand-in: %s" % [str(az["public_key"]).left(7), az["key_scope"], az["key_page"], (await main.engine.call_api("GET", "/repos"))["repos"].filter(func(x: Dictionary) -> bool: return x["id"] == az["id"])[0]["status"]])
 			# sessions on two of them, so the lines have their dots: an agent at work, an agent that waits, a shell
-			for made_on in [["acme-store", "Gift cards", "claude"], ["acme-store", "Tax rules", "claude"], ["acme-store", "A look around", "shell"], ["orbit-api", "Retry budget", "codex"]]:
-				await main.engine.call_api("POST", "/sessions", {"name": made_on[1], "tool": made_on[2], "repo": ids[made_on[0]], "group": "Repositories", "brain": false})
+			# The two agents each work in a branch and a folder of their own (a worktree); the shell in the main folder.
+			# Then some history for the map: commits in each branch, and one on main after they left it.
+			for made_on in [["acme-store", "Gift cards", "claude", true], ["acme-store", "Tax rules", "claude", true], ["acme-store", "A look around", "shell", false], ["orbit-api", "Retry budget", "codex", false]]:
+				await main.engine.call_api("POST", "/sessions", {"name": made_on[1], "tool": made_on[2], "repo": ids[made_on[0]], "group": "Repositories", "brain": false, "worktree": made_on[3]})
+			# where each branch is checked out is asked of the engine; git is only ever run inside the fictional home
+			var first_map: Dictionary = await main.engine.call_api("GET", "/repos/%s/branches" % ids["acme-store"])
+			var commit := func(folder: String, message: String) -> void:
+				if folder != "" and folder.begins_with(code.get_base_dir()) and DirAccess.dir_exists_absolute(folder):
+					OS.execute("git", ["-C", folder, "-c", "user.name=dev", "-c", "user.email=dev@example.com", "commit", "-q", "--allow-empty", "-m", message])
+			for br in first_map.get("branches", []):
+				if str(br["name"]).contains("gift"):
+					for i in 5:
+						commit.call(str(br["worktree"]), "Gift card redemption, step %d" % (i + 1))
+				elif str(br["name"]).contains("tax"):
+					commit.call(str(br["worktree"]), "Tax rules per region")
+			for m in ["Bump the test runner", "Fix a typo in the README"]:
+				commit.call(code.path_join("acme-store"), m)
+			if code.path_join("acme-store").begins_with(code.get_base_dir()):
+				OS.execute("git", ["-C", code.path_join("acme-store"), "branch", "spike/checkout-v2", "HEAD~2"])
+				OS.execute("git", ["-C", code.path_join("acme-store"), "-c", "user.name=dev", "-c", "user.email=dev@example.com", "commit", "-q", "--allow-empty", "-m", "Release notes"])
 			await wait(2.5)
 			await main.refresh()
 			var asked_at := Time.get_ticks_msec()
@@ -986,16 +1004,34 @@ func _run() -> void:
 					unfolded.append(main.repos_cache.filter(func(x: Dictionary) -> bool: return "Repo_" + str(x["id"]) == str(c.name))[0]["name"])
 			report.append("repos: columns: %s | unfolded: %s | the form is folded away: %s | the bar: %s" % [", ".join(head), ", ".join(unfolded), not main.repos_form.visible, main.view_buttons["repos"].text])
 			report.append("repos: the Azure DevOps line says where the key goes: « %s »" % _setup_text("SSH public keys › New Key").left(90))
-			await shot("repos")
+			await shot("repos-lines")
 			# a line is folded and unfolded by its name
 			var name_btn: Button = null
 			for b in main.repos_list.find_children("*", "Button", true, false):
 				if (b as Button).text == "acme-store":
 					name_btn = b
 			name_btn.pressed.emit()
-			await wait(0.4)
+			for i in 40:  # the engine reads the branches from the folder: the map comes when it has
+				await wait(0.25)
+				if main.repos_branches.has(ids["acme-store"]):
+					break
+			await wait(0.5)
 			report.append("repos: a click on « acme-store »: unfolded: %s | its public key is shown: %s" % [main.repos_open.get(ids["acme-store"], false), main.repos_list.find_child("Repo_" + ids["acme-store"], true, false).find_children("*", "LineEdit", true, false).size() == 1])
-			await shot("repos-open")
+			var live := {}
+			for x in main.sessions:
+				live[str(x["id"])] = x
+			var map: Dictionary = RepoView.metro(main.repos_branches[ids["acme-store"]], live)
+			var drawn: Node = main.repos_list.find_child("Metro_" + ids["acme-store"], true, false)
+			report.append("repos: the map of its branches is drawn: %s | base « %s » with %d session in its folder | lines: %s | merged, not drawn: %d" % [drawn != null, map["base"]["name"], map["base"]["dots"].size(),
+				" ; ".join(map["lines"].map(func(l: Dictionary) -> String: return "%s ↑%d ↓%d%s%s" % [l["name"], l["ahead"], l["behind"], " folder" if l["worktree"] != "" else "", (" " + ",".join(l["dots"].map(func(d: Dictionary) -> String: return d["name"]))) if not l["dots"].is_empty() else ""])), map["merged"]])
+			# a click on a line whose session runs shows that session
+			var lane := InputEventMouseButton.new()
+			lane.position = Vector2(200, drawn.lane_y(0))
+			lane.button_index = MOUSE_BUTTON_LEFT
+			lane.pressed = true
+			var tip_words: String = drawn._get_tooltip(lane.position)
+			report.append("repos: the pointer on the first line says: « %s »" % tip_words.replace("\n", " / ").left(150))
+			await shot("repos")  # the website's picture: the lines, and one unfolded on the map of its branches
 			# the form: an address being typed says what it will be; a web address is answered with its SSH form
 			_find_button(main.content, "+ Connect a repository").pressed.emit()
 			await wait(0.3)

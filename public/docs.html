@@ -464,8 +464,15 @@
           <b>Started, 14 days</b>, the sessions started on it day by day, today at the right. Rest the pointer on any
           of them for the words. The repositories that need a hand come first, already unfolded. Click a name or its arrow
           to unfold a line: the public key and <b>Copy the public key</b>, where to add it, the key's kind and age,
-          <b>Check</b>, <b>Rotate the key</b>, <b>Disconnect</b>, and the folder. <b>New session</b> starts a session on
-          that repository. In a narrow window some columns leave, the host last. The <b>⎇ Repos</b> button of the top
+          <b>Check</b>, <b>Rotate the key</b>, <b>Disconnect</b>, the folder, and <b>Branches and their folders</b>, a
+          map drawn like a metro's: the base branch is the line at the top, its latest commits as stations, now at
+          the right; each branch that has commits of its own, a folder of its own (a worktree) or an open session
+          leaves it where it was made and runs under it, one station per commit. At the right of each line: its
+          name, a triangle up with its commits, a triangle down with what the base made since, a small folder when
+          it is checked out in a worktree, and a dot per session working there. Rest the pointer on a line for its
+          words, click a line whose session runs to show that session. Branches merged and left with nothing of
+          their own are counted under the map, not drawn. It is read from the disk: nothing is fetched.
+          <b>New session</b> starts a session on that repository. In a narrow window some columns leave, the host last. The <b>⎇ Repos</b> button of the top
           bar carries a <b>!</b> or a <b>✗</b> when a repository needs a hand.</p>
         <p><b>+ Connect a repository</b> opens the form: give the repository's SSH address and its folder (your own
           clone, or Agent Manager clones it in its data folder). As you type, the form says which host it is and what

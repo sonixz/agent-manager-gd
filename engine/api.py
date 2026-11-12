@@ -73,6 +73,8 @@ def make_handler(sessions: Sessions, token: str):
                 if parts == ["repos"] and method == "POST":
                     b = self._body()
                     return self._reply(201, sessions.repos.add(str(b.get("url", "")), str(b.get("local_path", "")), str(b.get("name", ""))))
+                if len(parts) == 3 and parts[0] == "repos" and parts[2] == "branches" and method == "GET":  # the map of its branches
+                    return self._reply(200, sessions.repo_branches(parts[1]))
                 if parts == ["repos", "refresh"] and method == "POST":  # the slow facts, read aside: answers at once
                     b = self._body()
                     if b.get("force"):   # « Check all »: whatever their age

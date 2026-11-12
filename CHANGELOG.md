@@ -6,6 +6,13 @@ Newest first.
 ## Unreleased: alpha
 
 ### Repositories, a line each, and Azure DevOps · Loop 37
+- New, in a repository's unfolded line: **Branches and their folders**, a map drawn like a metro's. The base branch
+  is the line at the top, its latest commits as stations, now at the right. Each branch that has commits of its
+  own, a folder of its own (a worktree) or an open session leaves it where it was made and runs under it, one
+  station per commit, in its own colour. At the right of each line: its name, its commits, what the base made
+  since, a small folder for a worktree, and a dot per session working there, breathing while it works. Rest the
+  pointer on a line for its words; click a line whose session runs to show that session. Read from the disk:
+  nothing is fetched.
 - The **⎇ Repos** page is drawn, like the engine room. Four tiles on top: the keys that work, the repositories
   that need a hand, the sessions running, the hosts. Then one repository per line, each column a small drawing: the
   host as a chip; the key's state (a disc, a ring, a cross) with a thin bar that empties in ten minutes, and a sign

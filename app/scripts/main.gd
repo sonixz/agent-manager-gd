@@ -166,6 +166,8 @@ var repos_form_open := false
 var repos_open := {}           # a repository -> its line is unfolded (asked for; the ones that need a hand unfold by themselves)
 var repos_ticks := 0
 var repos_unfolding := ""      # the line a click just unfolded: its details fade in
+var repos_branches := {}       # a repository -> its branches as the engine last read them (the map of an unfolded line)
+var repos_branches_at := {}    # a repository -> when that was asked
 var f_repo: OptionButton
 var confirm_dialog: ConfirmationDialog
 var confirm_done: Callable
@@ -4410,12 +4412,45 @@ func _repo_details(r: Dictionary, tint: Color, now: float) -> Control:
 			repos_open.erase(rid)
 			await _load_repos())))
 	v.add_child(_repo_folder_row(r))
+	# the map of its branches: the base line, each branch that has something of its own, its folder, its sessions
+	var head := _muted("Branches and their folders")
+	head.add_theme_font_override("font", AmTheme.ui_font(650))
+	head.add_theme_font_size_override("font_size", 12)
+	v.add_child(head)
+	if repos_branches.has(rid):
+		var by_id := {}
+		var hues := {}
+		for x in sessions:
+			by_id[str(x["id"])] = x
+			hues[str(x["id"])] = activity_of(x)[0]
+		var map: Dictionary = RepoView.metro(repos_branches[rid], by_id)
+		if not map["read"]:
+			v.add_child(_muted(str(map["why"]).left(1).to_upper() + str(map["why"]).substr(1) + "."))
+		else:
+			var metro = RepoWidgets.Metro.new(map, hues, now)
+			metro.name = "Metro_" + rid
+			metro.picked.connect(_setup_open_session)
+			v.add_child(metro)
+	else:
+		v.add_child(_muted("Reading the branches…"))
+	if not repos_branches_at.has(rid) or Time.get_ticks_msec() - int(repos_branches_at[rid]) > 30000:
+		_repos_ask_branches(rid)  # asked when the line is unfolded, then every half minute while it stays so
 	var sess: Array = r.get("sessions", [])
 	if not sess.is_empty():
 		var l := _wrap("Sessions on it: " + ", ".join(sess.map(func(x: Dictionary) -> String: return str(x["name"]) + (" (archived)" if int(x["archived"]) == 1 else ""))))
 		l.add_theme_font_size_override("font_size", 12)
 		v.add_child(l)
 	return wrap
+
+
+## The branches of an unfolded repository, read by the engine from its folder (a few git commands: nothing is
+## fetched). The line is drawn again when the answer comes.
+func _repos_ask_branches(rid: String) -> void:
+	repos_branches_at[rid] = Time.get_ticks_msec()
+	var r := await engine.call_api("GET", "/repos/%s/branches" % rid, null, true, 30.0)
+	repos_branches[rid] = {"read": false, "why": str(r["error"])} if r.has("error") else r
+	if view == "repos":
+		_render_repos()
 
 
 ## The top bar's « Repos » button carries a mark when a repository needs a hand; its tooltip says which.

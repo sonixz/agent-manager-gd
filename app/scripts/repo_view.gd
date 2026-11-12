@@ -315,3 +315,58 @@ static func tiles(repos: Array, by_id: Dictionary) -> Array:
 		{"id": "hosts", "label": "Hosts", "value": str(hosts.size()), "note": " · ".join(where), "level": "ok"},
 	]
 
+
+# ---------------------------------------------------------------- the map of the branches
+const METRO_SPAN := 24     # the base line shows that many of its latest commits; a branch that left before is drawn at its start
+const METRO_AHEAD := 14    # a branch shows that many stations of its own; past it, a figure says how many more
+const METRO_LINES := 8     # as many hues as the engine room has: past them, the lines are grey
+
+## What the map draws, from the engine's answer (/repos/<id>/branches) and the app's own sessions (id -> session).
+## The lines worth a look: a branch that has commits of its own, or a folder (a worktree), or an open session.
+## A branch merged and left with none of these is only counted. The order: the ones with a running session, then
+## the ones with a folder, then by their last commit. Each line keeps its place's hue.
+## Gives {"read", "why", "base": {...}, "lines": [...], "span", "merged", "more"}.
+static func metro(data: Dictionary, by_id: Dictionary) -> Dictionary:
+	if not bool(data.get("read", false)) or data.get("base") == null:
+		return {"read": false, "why": str(data.get("why", "This repository has no branch yet.")), "lines": [], "span": 0, "merged": 0, "more": 0}
+	var dots := func(b: Dictionary) -> Array:
+		return session_dots({"sessions": b.get("sessions", [])}, by_id)
+	var lines := []
+	var merged := 0
+	var far := 1
+	for b in data.get("branches", []):
+		var d: Array = dots.call(b)
+		if int(b.get("ahead", 0)) == 0 and str(b.get("worktree", "")) == "" and d.is_empty():
+			merged += 1
+			continue
+		var running: bool = d.any(func(x: Dictionary) -> bool: return x["running"])
+		lines.append({"name": str(b["name"]), "ahead": int(b.get("ahead", 0)), "behind": int(b.get("behind", 0)), "date": float(b.get("date", 0.0)),
+			"subject": str(b.get("subject", "")), "worktree": str(b.get("worktree", "")), "upstream": str(b.get("upstream", "")),
+			"dots": d, "rank": 0 if running else (1 if str(b.get("worktree", "")) != "" else 2)})
+		far = maxi(far, mini(int(b.get("behind", 0)), METRO_SPAN))
+	lines.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["rank"] < b["rank"] if a["rank"] != b["rank"] else a["date"] > b["date"])
+	for i in lines.size():
+		lines[i]["slot"] = i if i < METRO_LINES else -1
+	var base: Dictionary = data["base"]
+	return {"read": true, "why": "", "base": {"name": str(base["name"]), "subject": str(base.get("subject", "")), "date": float(base.get("date", 0.0)),
+			"worktree": str(base.get("worktree", "")), "dots": dots.call(base)},
+		"lines": lines, "span": far, "merged": merged, "more": int(data.get("more", 0))}
+
+
+## A line of the map in words, for the pointer: what it is, what it holds, where it is checked out, who works there.
+static func metro_tip(line: Dictionary, base_name: String, now: float) -> String:
+	var out := str(line["name"])
+	var ahead := int(line.get("ahead", 0))
+	var behind := int(line.get("behind", 0))
+	out += "\n%s" % ("no commit of its own yet" if ahead == 0 else "%d commit%s of its own" % [ahead, "" if ahead == 1 else "s"])
+	if behind > 0:
+		out += " · %s made %d since it left" % [base_name, behind]
+	if str(line.get("subject", "")) != "":
+		out += "\nLast: %s%s" % [str(line["subject"]), (" (" + HostView.ago(now - float(line["date"])) + ")") if float(line.get("date", 0.0)) > 0.0 else ""]
+	if str(line.get("worktree", "")) != "":
+		out += "\nIts folder: " + str(line["worktree"])
+	for d in line.get("dots", []):
+		out += "\n● %s: %s" % [d["name"], "not running" if not d["running"] else (str(d["activity"]) if str(d["activity"]) != "" else "running")]
+	return out
+
