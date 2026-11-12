@@ -377,6 +377,22 @@ func _run() -> void:
 			await wait(1.0)
 			report.append("voice-box, Enter with an agent selected: the box is empty and hidden: %s | kept in Earlier: %s | status line: « %s »" % [
 				main.voice_text.text == "" and not main.voice_overlay.visible, main.earlier.size(), main.status_label.text])
+		"voice-mute":  # a check: the key is held and the microphone gives nothing (Windows took the audio device away): the box must say so
+			main.select(made["Checkout flow"])
+			await wait(2.0)
+			_hold("dictate")
+			main.voice_mute = false
+			var mic: Dictation = main.dictation
+			mic._live = true
+			mic._loudest = 0.0
+			mic._fed_ms = Time.get_ticks_msec()
+			mic._reopened = false
+			mic._told = false
+			await wait(4.5)
+			report.append("voice-mute: after 4.5 s without a sound from the microphone: opened again once: %s | the box says: « %s » | status line: « %s »" % [
+				mic._reopened, main.voice_label.text, main.status_label.text])
+			await shot("voice-mute")
+			await main._voice_stop()
 		"voice-long":  # a check: a long dictation whose writing is slow (AGMGD_VOICE_FAKE="a | b | c" AGMGD_VOICE_FAKE_DELAY=<s>): every phrase must arrive, in order
 			main.select(made["Checkout flow"])
 			await wait(2.5)

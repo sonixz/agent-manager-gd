@@ -74,6 +74,8 @@ Newest first.
 - Each change is logged; the engine's API token is now refused to the agents' file tools too.
 
 ### Fixed
+- When the microphone gives nothing (Windows changed the audio device, a headset went off), the dictation box says so
+  after a few seconds and opens the microphone again once. Before, it listened, nothing came, and nothing said why.
 - The first session started on a fresh tmux server (after a reboot) could fail with « server exited unexpectedly »:
   the server and its first session are now started in one tmux call, and asked once more if the server was dying.
 - A long dictation was thrown away: the app waited 10 seconds for the text while the writing of a long recording

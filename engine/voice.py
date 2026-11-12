@@ -53,8 +53,9 @@ def transcribe(wav: bytes, key: str, seconds: float, language: str = "", context
         import time
         global _fake_turn
         time.sleep(float(os.environ.get("AGMGD_VOICE_FAKE_DELAY") or 0))  # checks: a long dictation takes a while to write down
-        if whole and os.environ.get("AGMGD_VOICE_FAKE_WHOLE"):  # checks: the recording in one piece reads better than its pieces
-            return {"text": os.environ["AGMGD_VOICE_FAKE_WHOLE"], "model": "fake", "cost_usd": 0.0}
+        if whole:  # checks: the recording in one piece reads better than its pieces; by default, the pieces end to end
+            return {"text": os.environ.get("AGMGD_VOICE_FAKE_WHOLE") or " ".join(p.strip() for p in fake.split("|")),
+                    "model": "fake", "cost_usd": 0.0}
         said = [p.strip() for p in fake.split("|")]  # checks: « a | b | c » gives one phrase per piece, in turn
         _fake_turn += 1
         return {"text": said[(_fake_turn - 1) % len(said)], "model": "fake", "cost_usd": 0.0}

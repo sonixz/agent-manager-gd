@@ -114,6 +114,7 @@ var voice_place := NO_PLACE     # where the owner put the box (its top left corn
 var voice_drag := ""            # "held" then "moved" while the mouse drags the box by its top line
 var voice_area: Control         # the main area, whose bottom centre is the box's own place
 var voice_looks: Array = []     # the box's two looks: see-through while it waits, solid while it is used
+var voice_mute := false         # the key is held and the microphone gives nothing: said in the box
 var voice_solid := false
 const DRAFT_FILE := "user://dictation-draft.txt"
 const EARLIER_FILE := "user://dictation-earlier.json"
@@ -2582,8 +2583,14 @@ func _build_voice_overlay(area: Control) -> void:
 	_style_voice_box()
 	_draft_load()
 	dictation.piece.connect(_on_piece)
+	dictation.mute.connect(func(_s: float) -> void:
+		voice_mute = true
+		status_label.text = "Voice: the microphone gives nothing. Windows may have changed the audio device."
+		_box_title())
 	dictation.level.connect(func(x: float) -> void:
 		voice_meter.value = lerpf(voice_meter.value, x * 3.0, 0.4)
+		if x > 0.0:
+			voice_mute = false  # it gives sound again
 		_box_title()
 		if dictation.recording and (Time.get_ticks_msec() - dictation.started_ms) / 1000 >= VOICE_MAX_SECONDS:
 			_toast("Stopped listening after %d minutes" % (VOICE_MAX_SECONDS / 60))
@@ -2624,7 +2631,9 @@ func _box_look() -> void:
 func _box_title() -> void:
 	var to := str(_session(selected).get("name", ""))
 	var command := str(take.get("mode", "")) == "command"
-	if dictation.recording:
+	if dictation.recording and voice_mute:
+		voice_label.text = "⚠  The microphone gives nothing. Check the audio device in Windows, then hold %s again; restarting the app brings it back too." % key_text("dictate")
+	elif dictation.recording:
 		var s := (Time.get_ticks_msec() - dictation.started_ms) / 1000
 		var what := "a command (« approve … », « go to … », « who is waiting? »)" if command else (("« %s »" % to) if to != "" else "the box")
 		voice_label.text = "●  Listening for %s   ·   %d:%02d   ·   release %s" % [what, s / 60, s % 60, key_text("command" if command else "dictate")]
@@ -2706,6 +2715,7 @@ func _voice_start() -> void:
 		_toast("No microphone found")
 		return
 	take = {"mode": voice_mode, "texts": [], "pending": 0, "ended": false, "failed": [], "cost": 0.0}
+	voice_mute = false
 	dictation.start()
 	voice_live.text = "…"
 	voice_live.visible = true

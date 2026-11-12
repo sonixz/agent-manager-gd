@@ -6,6 +6,7 @@ extends Node
 
 signal level(value: float)
 signal piece(index: int, wav: PackedByteArray, seconds: float)
+signal mute(seconds: float)  # the key is held and the microphone has given nothing for that long
 
 const SPEECH := 0.03     # louder than this, someone speaks
 const QUIET := 0.02      # quieter than this for PAUSE seconds, after speech: a pause, where a piece ends
@@ -24,6 +25,11 @@ var whole := PackedByteArray()  # all of them end to end, as 16 kHz mono 16-bit 
 var _heard := false      # speech in the piece being recorded
 var _ever := false       # speech anywhere in this recording; when never, the levels tell nothing and everything is given
 var _quiet := 0.0        # seconds of quiet at the end of the piece being recorded
+var _live := false       # recording from the real microphone (the checks feed sound themselves)
+var _fed_ms := 0         # when the audio last gave frames at all
+var _loudest := 0.0      # the loudest sample of this recording: exactly 0 means no microphone behind the frames
+var _reopened := false   # it was opened again once in this recording
+var _told := false       # « it gives nothing » was said once in this recording
 
 
 func _ready() -> void:
@@ -56,6 +62,11 @@ func start() -> void:
 	player.play()
 	recording = true
 	started_ms = Time.get_ticks_msec()
+	_live = true
+	_loudest = 0.0
+	_fed_ms = started_ms
+	_reopened = false
+	_told = false
 
 
 func _process(_d: float) -> void:
@@ -63,7 +74,28 @@ func _process(_d: float) -> void:
 		return
 	var n := capture.get_frames_available()
 	if n > 0:
+		_fed_ms = Time.get_ticks_msec()
 		feed(capture.get_buffer(n))
+	if _live:
+		# An open microphone always gives something: frames at every tick, and never a perfect zero for long (a room
+		# is never that quiet). No frame at all, or nothing but zeros since the key went down, means it is gone:
+		# Windows took the audio device away (a headset switched off, another default device). It happened on
+		# 2026-11-11: the box listened, nothing came, and nothing said why.
+		var now := Time.get_ticks_msec()
+		var dry := maxi(now - _fed_ms, (now - started_ms) if _loudest == 0.0 else 0)
+		if dry > 1500 and not _reopened:
+			_reopened = true
+			reopen()
+		elif dry > 3500 and not _told:
+			_told = true
+			mute.emit(dry / 1000.0)
+
+
+## Opens the microphone again: after the audio device changed, the old opening gives nothing any more.
+func reopen() -> void:
+	player.stop()
+	player.stream = AudioStreamMicrophone.new()
+	player.play()
 
 
 ## What the microphone gave since the last frame. A pause after speech ends the piece, which is given at once.
@@ -73,6 +105,7 @@ func feed(chunk: PackedVector2Array) -> void:
 	for i in range(0, chunk.size(), 32):
 		peak = maxf(peak, absf(chunk[i].x))
 	level.emit(peak)
+	_loudest = maxf(_loudest, peak)
 	var rate := AudioServer.get_mix_rate()
 	if peak > SPEECH:
 		_heard = true
@@ -101,6 +134,7 @@ func _give() -> void:
 ## tap). A silent tail is not given, unless no speech was ever told apart (a very quiet microphone: all of it goes).
 func stop() -> int:
 	recording = false
+	_live = false
 	player.stop()
 	var n := capture.get_frames_available()
 	if n > 0:
