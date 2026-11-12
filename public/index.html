@@ -305,8 +305,9 @@
         <div class="section-head reveal">
           <p class="overline">Git manager · SSH, handled</p>
           <h2>Git that sets up its own keys</h2>
-          <p>Connect a repository and Agent Manager makes an SSH deploy key for it alone, checks it, and gives it to
-            the sessions on that repository. No <code>~/.ssh</code> to edit, no key shared between projects.</p>
+          <p>Connect a repository, on GitHub or Azure DevOps, and Agent Manager makes an SSH key for it, checks it,
+            and gives it to the sessions on that repository. No <code>~/.ssh</code> to edit, no key shared between
+            projects.</p>
         </div>
 
         <div class="feature reveal">
@@ -314,16 +315,18 @@
             <span class="tag">Connected repositories</span>
             <h3>One repository, one key</h3>
             <ul>
-              <li><b>Add the SSH address</b>: an ed25519 deploy key is made for it, its public half shown to paste in
-                GitHub's <i>Deploy keys</i>.</li>
-              <li><b>Checked for you</b>: read access, write access, the right <code>origin</code>.</li>
+              <li><b>Add the SSH address</b>: a key is made for it, its public half shown with where to paste it. On
+                GitHub, a deploy key for that repository only; on Azure DevOps, a key on your profile, and the line
+                says it opens your whole account.</li>
+              <li><b>One line each</b>: the host, whether the key works and when that was checked, the folder's
+                branch and what waits in it, the sessions running. What needs a hand comes first.</li>
               <li><b>Passed through <code>GIT_SSH_COMMAND</code></b> to that repository's sessions only (its own
                 known_hosts, <code>IdentitiesOnly</code>). Nothing written to <code>~/.ssh</code> or to the repository's config.</li>
               <li><b>Your own clone</b>: « I already have it », or « clone it » where you choose. Rotate or disconnect any time.</li>
             </ul>
           </div>
           <figure class="screen">
-            <img src="assets/showcase/repos.webp" width="1920" height="1200" loading="lazy" alt="The Repos tab: connected repositories with their deploy key fingerprint, the check result (read and write OK), the local folder and the sessions using each one.">
+            <img src="assets/showcase/repos.webp" width="1920" height="1200" loading="lazy" alt="The Repos tab: five repositories, one per line, on GitHub and Azure DevOps, with the state of each key, what it opens and the folder's branch. The first line, an Azure DevOps repository that waits for its key, is unfolded: its public key, where to add it, Check, Rotate the key, Disconnect.">
           </figure>
         </div>
 
@@ -443,6 +446,7 @@
           <li><span class="when">Loop 34</span><b>The dictation box</b><span>What you say appears as you say it, stays in a box, and Enter sends all of it.</span></li>
           <li><span class="when">Loop 35</span><b>What you do shows at once</b><span>Groups and sessions move on screen before the engine has answered; a dictation is written once more, in one piece.</span></li>
           <li><span class="when">Loop 36</span><b>The setup check, from the ground up</b><span>First steps: it reads Windows, WSL and the Linux distribution before the programs and the engine, says why the engine does not answer, installs the missing programs on your click in a terminal you see, and has an engine room, a dashboard of the ground: memory in use by session over the last hour to the last seven days, what each session weighs, the true room on the disk. The top bar makes room for more: one View button for the ways to look at the sessions, and one button per manager.</span></li>
+          <li><span class="when">Loop 37</span><b>Repositories, a line each, and Azure DevOps</b><span>The Repos page shows one repository per line with its host, its key's state and age, what that key opens and the folder's branch; a line unfolds to the key and its actions. Azure DevOps repositories connect with the RSA key it asks for, and the line says that key opens the whole account. The list no longer waits on git.</span></li>
         </ol>
       </div>
     </section>

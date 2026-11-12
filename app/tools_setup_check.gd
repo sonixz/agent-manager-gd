@@ -9,6 +9,7 @@ extends SceneTree
 
 const Probe := preload("res://scripts/setup_probe.gd")
 const View := preload("res://scripts/host_view.gd")
+const Repo := preload("res://scripts/repo_view.gd")
 
 var failed := 0
 var passed := 0
@@ -40,6 +41,7 @@ func _initialize() -> void:
 		_:
 			_cases()
 			_dashboard_cases()
+			_repo_cases()
 			print("%d passed, %d failed" % [passed, failed])
 			quit(1 if failed > 0 else 0)
 			return
@@ -366,3 +368,52 @@ func _dashboard_cases() -> void:
 	b = View.button("WSL", {}, {}, true, [], true)
 	check("top bar: before anything was read, nothing is claimed", b["level"] == "ok" and b["text"] == "● WSL" and str(b["tip"]).begins_with("WSL: Not read yet."))
 
+
+
+## The Repos page (scripts/repo_view.gd): what a line says, in which order, and what GitHub and Azure DevOps change.
+func _repo_cases() -> void:
+	var now := 1800000000.0
+	var gh := {"id": "a1", "name": "acme-store", "host": "github.com", "host_kind": "github", "key_scope": "repository", "key_type": "ed25519",
+		"status": "connected", "checked_at": now - 125.0, "last_used": now - 3 * 3600.0, "key_made": now - 3 * 86400.0, "fingerprint": "SHA256:abc", "busy": [],
+		"folder": {"path": "/home/dev/code/acme-store", "exists": true, "git": true, "read": true, "managed": false, "origin_state": "same", "branch": "main", "upstream": "origin/main", "ahead": 2, "behind": 0, "changed": 3},
+		"sessions": [{"id": "s1", "name": "Checkout flow", "archived": 0}, {"id": "s2", "name": "Docs", "archived": 0}, {"id": "s3", "name": "Old", "archived": 1}]}
+	var az := {"id": "b2", "name": "Client Portal", "host": "ssh.dev.azure.com", "host_kind": "azure", "key_scope": "account", "key_type": "rsa",
+		"status": "waiting", "checked_at": 0.0, "last_used": 0.0, "key_made": now - 40.0, "fingerprint": "SHA256:def", "busy": [],
+		"folder": {"path": "", "exists": false, "git": false, "read": true, "managed": false, "origin_state": ""}, "sessions": []}
+	var broken: Dictionary = gh.duplicate(true)
+	broken.merge({"id": "c3", "name": "zeta", "status": "failed", "message": "the key is not on the repository yet"}, true)
+	var other := {"id": "d4", "name": "tools", "host": "git.example.org", "host_kind": "other", "key_scope": "unknown", "key_type": "ed25519", "status": "connected", "checked_at": 0.0, "busy": ["key"],
+		"folder": {"path": "/data/repos/tools", "exists": true, "git": true, "read": false, "managed": true, "origin_state": ""}, "sessions": []}
+	check("repos: the host is named as people name it", Repo.host_label(gh) == "GitHub" and Repo.host_label(az) == "Azure DevOps" and Repo.host_label(other) == "git.example.org")
+	check("repos: a key that works says how old that knowledge is", Repo.key_cell(gh, now) == {"text": "works · checked 2 min ago", "level": "ok"})
+	check("repos: a key not added yet waits, one that fails is said, one being checked too", Repo.key_cell(az, now) == {"text": "waits to be added", "level": "warn"} and Repo.key_cell(broken, now) == {"text": "does not work", "level": "bad"} and Repo.key_cell(other, now)["text"] == "checking…")
+	check("repos: what the key opens is said on every line", Repo.opens_cell(gh) == "this repository only" and Repo.opens_cell(az) == "your whole account" and Repo.opens_cell(other) == "as its host decides")
+	check("repos: the folder: whose it is, its branch, what is not pushed, what changed", Repo.folder_cell(gh) == {"text": "yours · main · ↑2 · 3 changed", "level": "ok"})
+	check("repos: the folder's arrows are said in words in its tooltip", Repo.folder_tip(gh).contains("2 commits not pushed") and Repo.folder_tip(gh).contains("3 files changed or new") and Repo.folder_tip(gh).ends_with("nothing is fetched."))
+	check("repos: no folder yet, and a folder not read yet", Repo.folder_cell(az)["text"] == "cloned on first use" and Repo.folder_cell(other)["text"] == "its copy · reading…")
+	var gone: Dictionary = gh.duplicate(true)
+	gone["folder"] = {"path": "/x", "exists": false, "git": false, "read": true, "managed": false, "origin_state": ""}
+	var stray: Dictionary = gh.duplicate(true)
+	stray["folder"]["origin_state"] = "other"
+	var bare: Dictionary = gh.duplicate(true)
+	bare["folder"]["origin_state"] = "missing"
+	var detached: Dictionary = gh.duplicate(true)
+	detached["folder"].merge({"branch": "", "ahead": 0, "behind": 4, "changed": 0}, true)
+	check("repos: a folder that is gone, another repository's folder, no remote, no branch", Repo.folder_cell(gone) == {"text": "the folder is gone", "level": "warn"} and Repo.folder_cell(stray)["level"] == "bad" and Repo.folder_cell(bare) == {"text": "yours · no remote yet", "level": "warn"} and Repo.folder_cell(detached)["text"] == "yours · no branch · ↓4")
+	check("repos: how many of its sessions run now", Repo.sessions_cell(gh, {"s1": "running", "s2": "exited", "s3": "running"}) == "1 running" and Repo.sessions_cell(gh, {}) == "2, none running" and Repo.sessions_cell(az, {}) == "–")
+	check("repos: when it was last used", Repo.used_cell(gh, now) == "3 h 00 ago" and Repo.used_cell(az, now) == "never")
+	check("repos: an age from a clock set back is « now », never a negative figure", Repo.used_cell(gh, now - 3 * 3600.0 - 2.0) == "now" and Repo.key_cell(gh, now - 130.0)["text"] == "works · checked now")
+	check("repos: what needs a hand comes first, then by name", Repo.order([gh, other, az, broken]).map(func(r: Dictionary) -> String: return r["name"]) == ["zeta", "Client Portal", "acme-store", "tools"])
+	check("repos: the levels", Repo.level(gh) == "ok" and Repo.level(az) == "warn" and Repo.level(broken) == "bad" and Repo.level(stray) == "bad" and Repo.level(gone) == "warn" and Repo.mark("warn") == "!")
+	check("repos: the sentence above the lines", Repo.summary([gh, other, az, broken]) == "4 repositories: 2 connected · 1 waits for its key · 1 with a key that does not work" and Repo.summary([gh]) == "1 repository: 1 connected" and Repo.summary([]) == "No repository yet." and Repo.summary([az, az]).ends_with("2 wait for their keys"))
+	check("repos: the key in one line, and that an Azure DevOps key expires", Repo.key_line(gh, now) == "ed25519 · SHA256:abc · made 3 d 0 h ago" and Repo.key_line(az, now).begins_with("RSA 3072 · SHA256:def · made 40 s ago · Azure DevOps keys expire"))
+	check("repos: where to add the key, by host", Repo.add_key_help(gh)["button"] == "Open GitHub's Deploy keys page" and str(Repo.add_key_help(az)["then"]).contains("User settings (the icon beside your picture) › SSH public keys › New Key") and str(Repo.add_key_help(az)["then"]).contains("an account made for them") and Repo.add_key_help(other)["button"] == "")
+	check("repos: an address being typed says what it will be", Repo.address_hint("git@ssh.dev.azure.com:v3/acme/Portal/portal").begins_with("Azure DevOps: an RSA key") and Repo.address_hint("git@github.com:acme/shop.git").begins_with("GitHub: a deploy key") and Repo.address_hint("https://github.com/acme/shop").begins_with("That is the web address") and Repo.address_hint("  ") == "" and Repo.address_hint("git@git.example.org:a/b.git").begins_with("Another SSH git host"))
+	check("repos: the SSH address the engine proposes for a web one is taken, an example is not", Repo.proposed_address("use the SSH address, not https: git@ssh.dev.azure.com:v3/acme/My%20Project/portal. The key works over SSH") == "git@ssh.dev.azure.com:v3/acme/My%20Project/portal" and Repo.proposed_address("use the SSH address, not https: git@github.com:owner/repo.git (Azure DevOps: git@ssh.dev.azure.com:v3/organization/project/repository). The key works over SSH") == "" and Repo.proposed_address("no such folder") == "")
+	var wide: Dictionary = Repo.fit(1600.0)
+	var narrow: Dictionary = Repo.fit(950.0)
+	check("repos: a wide window shows every column", wide["shown"] == ["host", "key", "opens", "folder", "sessions", "used"] and wide["name"] == 320.0)
+	check("repos: a narrow one lets columns go, the host last", narrow["shown"] == ["host", "key", "folder"] and Repo.fit(600.0)["shown"] == ["key", "folder"] and narrow["name"] >= Repo.NAME_MIN)
+	var bar := Repo.button([gh, az, broken])
+	check("repos: the bar's button is marked when a repository needs a hand, and says which", bar["level"] == "bad" and bar["mark"] == "✗" and str(bar["tip"]).contains("✗ zeta: does not work") and str(bar["tip"]).contains("! Client Portal: waits to be added"))
+	check("repos: all well, the bar's button has no mark", Repo.button([gh])["mark"] == "" and Repo.button([])["level"] == "ok")

@@ -71,7 +71,7 @@
         <a href="#brain">The Second Brain</a>
         <a href="#mcp">Agent Manager's MCP server</a>
         <a href="#orchestrator">The orchestrator</a>
-        <a href="#repos">Repositories and deploy keys</a>
+        <a href="#repos">Repositories and their keys</a>
         <a href="#remote-control">Remote Control</a>
         <a href="#sandboxes">Cloud sandboxes and costs</a>
         <p class="group">Reference</p>
@@ -451,20 +451,48 @@
             tokens, read from the agents' own logs (UTC day, no money amount). Once it is spent, it cannot start sessions.</li>
         </ul>
 
-        <h2 id="repos">Repositories and deploy keys</h2>
-        <p><b>⎇ Repos</b>: add a repository's SSH address (<code>git@github.com:owner/repo.git</code>) and its folder
-          (your own clone, or Agent Manager clones it in its data folder). Agent Manager makes an <b>ed25519 deploy key
-          for that repository only</b> and shows its public half: copy it, open GitHub's Deploy keys page, paste it, tick
-          <b>Allow write access</b>, then <b>Check</b>.</p>
-        <p>Sessions on that repository use that key only, through <code>GIT_SSH_COMMAND</code> with
+        <h2 id="repos">Repositories and their keys</h2>
+        <p><b>⎇ Repos</b> lists the connected repositories, one per line, with what you need to know at a glance:
+          <b>Host</b> (GitHub, Azure DevOps, or the host's name), <b>Key</b> (it works, and when that was last checked;
+          it waits to be added; it does not work), <b>The key opens</b>, <b>Folder</b> (yours or Agent Manager's copy, its
+          branch, <i>↑</i> commits not pushed, <i>↓</i> commits behind, files changed), <b>Sessions</b> running on it and
+          <b>Last used</b>. The repositories that need a hand come first, already unfolded. Click a name or its arrow
+          to unfold a line: the public key and <b>Copy the public key</b>, where to add it, the key's kind and age,
+          <b>Check</b>, <b>Rotate the key</b>, <b>Disconnect</b>, and the folder. <b>New session</b> starts a session on
+          that repository. In a narrow window some columns leave, the host last. The <b>⎇ Repos</b> button of the top
+          bar carries a <b>!</b> or a <b>✗</b> when a repository needs a hand.</p>
+        <p><b>+ Connect a repository</b> opens the form: give the repository's SSH address and its folder (your own
+          clone, or Agent Manager clones it in its data folder). As you type, the form says which host it is and what
+          its key will open. A web address (<code>https://…</code>) is answered with its SSH form, filled in for you.</p>
+        <ul>
+          <li><b>GitHub</b> (<code>git@github.com:owner/repo.git</code>): an ed25519 <b>deploy key for that repository
+            only</b>. Open GitHub's Deploy keys page from the line, paste the key, tick <b>Allow write access</b> so
+            agents can push their branch, then <b>Check</b>. A leaked key never opens your other repositories.</li>
+          <li><b>Azure DevOps</b> (<code>git@ssh.dev.azure.com:v3/organization/project/repository</code>, the address
+            under <i>Clone › SSH</i>): Azure DevOps accepts RSA keys only and has no key per repository. Agent Manager
+            makes an RSA key; you add it to your profile (<i>User settings</i>, the icon beside your picture, then
+            <i>SSH public keys › New Key</i>), then <b>Check</b>. <b>That key opens everything your account reaches
+            there</b>, and the line says so. To keep agents to chosen repositories, add the key to an Azure DevOps
+            account made for them, which reaches only those. Azure DevOps keys expire: it warns you by e-mail seven
+            days before; <b>Rotate the key</b> then. Not tried yet against a real Azure DevOps repository.</li>
+          <li><b>Another SSH git host</b>: an ed25519 key; what it opens is that host's rule.</li>
+        </ul>
+        <p>Opening the page reads each folder again and checks again the keys that were checked more than ten minutes
+          ago; each line says <i>checking…</i>, then how old its answer is. <b>Check all</b> does it at once. A check
+          is one SSH connection to the repository's host with that repository's key (<code>git ls-remote</code>):
+          nothing is changed there, and nothing is checked while the page is closed. A repository still waiting for
+          its key is not checked until you press <b>Check</b>. The folder is read from the disk: nothing is
+          fetched.</p>
+        <p>Sessions on a repository use its key only, through <code>GIT_SSH_COMMAND</code> with
           <code>IdentitiesOnly=yes</code> and a known_hosts of their own: nothing goes into your <code>~/.ssh</code> or the
           repository's git config, and the agent is told how git authenticates. A session opened in the repository's
           folder, a subfolder or a worktree gets the key too.</p>
         <ul>
-          <li><b>Rotate the key</b>: a new key replaces the old one; add the new one on GitHub and delete the old one
-            there (its fingerprint is shown).</li>
-          <li><b>Disconnect</b>: the key is deleted here; delete the deploy key on GitHub too.</li>
-          <li>The private key (<code>keys/&lt;id&gt;/id_ed25519</code>, 0600) is never printed, logged or sent.</li>
+          <li><b>Rotate the key</b>: a new key of the same kind replaces the old one; add the new one on the host and
+            delete the old one there (its fingerprint is shown).</li>
+          <li><b>Disconnect</b>: the key is deleted here; delete it on the host too.</li>
+          <li>The private key (<code>keys/&lt;id&gt;/id_ed25519</code> or <code>id_rsa</code>, 0600) is never printed,
+            logged or sent.</li>
         </ul>
         <div class="note">To check access, use <code>git ls-remote origin</code> in the session. A bare
           <code>ssh -T git@github.com</code> ignores the session's key and shows your own account.</div>

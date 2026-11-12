@@ -74,7 +74,10 @@ def make_handler(sessions: Sessions, token: str):
                     b = self._body()
                     return self._reply(201, sessions.repos.add(str(b.get("url", "")), str(b.get("local_path", "")), str(b.get("name", ""))))
                 if parts == ["repos", "refresh"] and method == "POST":  # the slow facts, read aside: answers at once
-                    return self._reply(200, sessions.repos.refresh(bool(self._body().get("keys", False))))
+                    b = self._body()
+                    if b.get("force"):   # « Check all »: whatever their age
+                        return self._reply(200, sessions.repos.refresh(True, key_age=-1.0, folder_age=-1.0))
+                    return self._reply(200, sessions.repos.refresh(bool(b.get("keys", False))))
                 if parts == ["repos", "copy", "inspect"] and method == "POST":  # before /repos/<id>/<action>
                     return self._reply(200, sessions.repos.inspect_copy(str(self._body().get("path", ""))))
                 if parts == ["repos", "copy", "remove"] and method == "POST":

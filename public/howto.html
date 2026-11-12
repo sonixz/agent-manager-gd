@@ -76,7 +76,7 @@
         </a>
         <a class="guide-card" href="#connect-repo">
           <img src="assets/howto/connect-repo/04.webp" width="1280" height="800" loading="lazy" alt="">
-          <span><b>Connect a repository (SSH deploy key)</b><span>Give a GitHub repository its own SSH key, made and checked by Agent Manager, so sessions push without your own keys.</span><small>5 min · 4 steps</small></span>
+          <span><b>Connect a repository (its own SSH key)</b><span>Give a GitHub or Azure DevOps repository an SSH key made and checked by Agent Manager, so sessions push without your own keys.</span><small>5 min · 4 steps</small></span>
         </a>
         <a class="guide-card" href="#voice">
           <img src="assets/howto/voice/04.webp" width="1280" height="800" loading="lazy" alt="">
@@ -111,7 +111,7 @@
         <a href="#review">Review a diff and send comments</a>
         <a href="#history">Resume, fork and find any conversation</a>
         <p class="group">Git</p>
-        <a href="#connect-repo">Connect a repository (SSH deploy key)</a>
+        <a href="#connect-repo">Connect a repository (its own SSH key)</a>
         <p class="group">Voice</p>
         <a href="#voice">Talk to your agents</a>
         <p class="group">Agents</p>
@@ -283,29 +283,29 @@
 
       <article class="guide" id="connect-repo">
         <p class="guide-meta"><span>Git</span><span>5 min</span><span>4 steps</span><span class="badge" title="Only the app matters in this guide">App only</span></p>
-        <h2>Connect a repository (SSH deploy key)</h2>
-        <p class="goal">Give a GitHub repository its own SSH key, made and checked by Agent Manager, so sessions push without your own keys.</p>
-        <div class="note"><b>You need</b><ul><li>A GitHub repository you can administer (to add a deploy key)</li></ul></div>
+        <h2>Connect a repository (its own SSH key)</h2>
+        <p class="goal">Give a GitHub or Azure DevOps repository an SSH key made and checked by Agent Manager, so sessions push without your own keys.</p>
+        <div class="note"><b>You need</b><ul><li>A repository you can administer on GitHub, or an Azure DevOps account that reaches it</li></ul></div>
         <ol class="steps">
           <li>
-            <div class="step-text"><p class="do">Click <b>⎇ Repos</b> at the top.</p><p class="see">Connected repositories, and a form: the repository's SSH address, and whether to use your own clone or let Agent Manager clone it.</p></div>
-            <figure class="shot"><img src="assets/howto/connect-repo/01.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (SSH deploy key), step 1 of 4: Connected repositories, and a form: the repository&#x27;s SSH address, and whether to use your own clone or let Agent Manager clone it."></figure>
+            <div class="step-text"><p class="do">Click <b>⎇ Repos</b> at the top.</p><p class="see">The connected repositories, one per line, and a form: the repository's SSH address, and whether to use your own clone or let Agent Manager clone it. Once you have a repository, <b>+ Connect a repository</b> opens the form.</p></div>
+            <figure class="shot"><img src="assets/howto/connect-repo/01.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (its own SSH key), step 1 of 4: The connected repositories, one per line, and a form: the repository&#x27;s SSH address, and whether to use your own clone or let Agent Manager clone it. Once you have a repository, + Connect a repository opens the form."></figure>
           </li>
           <li>
-            <div class="step-text"><p class="do">Paste the address (<code>git@github.com:owner/repo.git</code>), choose your folder, and click <b>+ Add the repository</b>.</p><p class="see">Agent Manager makes a deploy key for this repository alone. Its public half is shown with a button to copy it, and the link to the repository's Deploy keys page on GitHub.</p></div>
-            <figure class="shot"><img src="assets/howto/connect-repo/02.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (SSH deploy key), step 2 of 4: Agent Manager makes a deploy key for this repository alone. Its public half is shown with a button to copy it, and the link to the repository&#x27;s Deploy keys page on GitHub."></figure>
+            <div class="step-text"><p class="do">Paste the address (<code>git@github.com:owner/repo.git</code>), choose your folder, and click <b>+ Add the repository</b>.</p><p class="see">The form says which host it is and what the key will open. Agent Manager makes a key for this repository. For Azure DevOps the address is the one under <i>Clone › SSH</i> (<code>git@ssh.dev.azure.com:v3/organization/project/repository</code>).</p></div>
+            <figure class="shot"><img src="assets/howto/connect-repo/02.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (its own SSH key), step 2 of 4: The form says which host it is and what the key will open. Agent Manager makes a key for this repository. For Azure DevOps the address is the one under Clone › SSH (git@ssh.dev.azure.com:v3/organization/project/repository)."></figure>
           </li>
           <li>
-            <div class="step-text"><p class="do">On GitHub, add the key (tick <i>Allow write access</i> if sessions should push), then click <b>Check</b>.</p><p class="see">The card says <i>connected</i> and <i>origin ✓</i>: the key reads and writes. It shows the key's fingerprint, the folder, and buttons to copy the key again, rotate it or disconnect.</p></div>
-            <figure class="shot"><img src="assets/howto/connect-repo/03.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (SSH deploy key), step 3 of 4: The card says connected and origin ✓: the key reads and writes. It shows the key&#x27;s fingerprint, the folder, and buttons to copy the key again, rotate it or disconnect."></figure>
+            <div class="step-text"><p class="do">On GitHub, add the key (tick <i>Allow write access</i> if sessions should push), then click <b>Check</b>.</p><p class="see">Unfold the line (its name or its arrow): the public key with a button to copy it, the link to the repository's Deploy keys page, <b>Check</b>, <b>Rotate the key</b>, <b>Disconnect</b>. Once checked, the line says <i>works</i> and when. On Azure DevOps the key goes on your profile (<i>User settings › SSH public keys</i>) and opens everything your account reaches: the line says <i>your whole account</i>.</p></div>
+            <figure class="shot"><img src="assets/howto/connect-repo/03.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (its own SSH key), step 3 of 4: Unfold the line (its name or its arrow): the public key with a button to copy it, the link to the repository&#x27;s Deploy keys page, Check, Rotate the key, Disconnect. Once checked, the line says works and when. On Azure DevOps the key goes on your profile (User settings › SSH public keys) and opens everything your account reaches: the line says your whole account."></figure>
           </li>
           <li>
-            <div class="step-text"><p class="do">Start a session on it: in New session, pick it under <b>Repository</b>.</p><p class="see">The session's git uses this key only, through <code>GIT_SSH_COMMAND</code>. Nothing is written in your <code>~/.ssh</code>, and the agent is told how git authenticates here.</p></div>
-            <figure class="shot"><img src="assets/howto/connect-repo/04.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (SSH deploy key), step 4 of 4: The session&#x27;s git uses this key only, through GIT_SSH_COMMAND. Nothing is written in your ~/.ssh, and the agent is told how git authenticates here."></figure>
+            <div class="step-text"><p class="do">Start a session on it: <b>New session</b> on its line, or in New session pick it under <b>Repository</b>.</p><p class="see">The session's git uses this key only, through <code>GIT_SSH_COMMAND</code>. Nothing is written in your <code>~/.ssh</code>, and the agent is told how git authenticates here.</p></div>
+            <figure class="shot"><img src="assets/howto/connect-repo/04.webp" width="1280" height="800" loading="lazy" alt="Connect a repository (its own SSH key), step 4 of 4: The session&#x27;s git uses this key only, through GIT_SSH_COMMAND. Nothing is written in your ~/.ssh, and the agent is told how git authenticates here."></figure>
           </li>
         </ol>
-        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>Check says write is refused.</b> On GitHub, the deploy key needs <i>Allow write access</i>.</li><li><b><code>ssh -T git@github.com</code> shows another account.</b> That command ignores the session's key. Check with <code>git ls-remote origin</code> instead.</li></ul></details>
-        <p class="guide-next">More in the Docs: <a href="docs.html#repos">Repositories and deploy keys</a></p>
+        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>Check says write is refused.</b> On GitHub, the deploy key needs <i>Allow write access</i>.</li><li><b>On Azure DevOps the key does not work.</b> It must be on your profile (<i>User settings › SSH public keys</i>), SSH must be allowed for the organization, and the key must not have expired: the line says which.</li><li><b><code>ssh -T git@github.com</code> shows another account.</b> That command ignores the session's key. Check with <code>git ls-remote origin</code> instead.</li></ul></details>
+        <p class="guide-next">More in the Docs: <a href="docs.html#repos">Repositories and their keys</a></p>
       </article>
 
       <article class="guide" id="voice">

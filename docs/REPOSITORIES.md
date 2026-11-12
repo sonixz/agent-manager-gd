@@ -1,7 +1,22 @@
-# Connected repositories and deploy keys
+# Connected repositories and their keys
 
-Agent Manager GD launches agents on repositories **you** create (GitHub, GitLab, any SSH git host). Each connected
-repository gets its own SSH **deploy key**: a key that opens that repository only.
+Agent Manager GD launches agents on repositories **you** create (GitHub, Azure DevOps, or another SSH git host).
+Each connected repository gets its own SSH key. What that key opens depends on the host, and the Repos page says it
+on every line:
+
+- **GitHub**: a **deploy key**, which opens that repository only.
+- **Azure DevOps**: there is no key per repository. The key goes on your profile and **opens everything your
+  account reaches there**. To keep agents to chosen repositories, add it to an account made for them.
+- **Another host**: an ed25519 key; what it opens is that host's rule.
+
+## The page
+
+**⎇ Repos** shows one repository per line: its host, whether its key works and when that was last checked, what
+the key opens, the folder (yours or Agent Manager's copy, its branch, commits not pushed, files changed), the
+sessions running on it, and when it was last used. The repositories that need a hand come first, unfolded. A click
+on a name or its arrow unfolds the rest: the public key, where to add it, Check, Rotate the key, Disconnect, the
+folder. Opening the page reads the folders again and checks again the keys checked more than ten minutes ago;
+**Check all** does it at once. Nothing is checked while the page is closed.
 
 ## Connect a repository
 
@@ -12,7 +27,22 @@ repository gets its own SSH **deploy key**: a key that opens that repository onl
 3. Agent Manager makes an ed25519 key for that repository and shows its **public** key. **Copy the public key**, then
    **Open GitHub's Deploy keys page** (or *Settings → Deploy keys → Add deploy key* on the repository): paste it, give it
    a title, tick **Allow write access** (agents push their branch with it), save.
-4. Back in Agent Manager: **Check**. « connected » means the key reaches the repository.
+4. Back in Agent Manager: **Check**. The line then says the key works, and when that was checked.
+
+## Azure DevOps
+
+1. On the repository's page: **Clone › SSH**, and copy the address
+   (`git@ssh.dev.azure.com:v3/organization/project/repository`). A web address pasted in the form is answered with
+   this SSH form.
+2. In Agent Manager: **⎇ Repos → + Connect a repository**. Agent Manager makes an **RSA** key: the only kind Azure
+   DevOps accepts.
+3. **Copy the public key**, **Open Azure DevOps**, then *User settings* (the icon beside your picture) → *SSH public
+   keys* → *New Key*: paste it, save.
+4. Back in Agent Manager: **Check**.
+
+Azure DevOps keys expire, and it warns you by e-mail seven days before: **Rotate the key** then, and add the new one.
+SSH must be allowed for the organization. This path was built from Microsoft's documentation and its server's own
+answer about the keys it accepts; it has not been tried against a real Azure DevOps repository yet.
 
 ## Work on it
 
@@ -24,8 +54,8 @@ you tick « In its own git branch »), and every git command in that session use
 
 | What | Where |
 |---|---|
-| Private key | `~/.local/share/agent-manager-gd/keys/<id>/id_ed25519` (mode 0600, readable by you only) |
-| Public key | same folder, `id_ed25519.pub` (safe to share) |
+| Private key | `~/.local/share/agent-manager-gd/keys/<id>/id_ed25519`, or `id_rsa` for Azure DevOps (mode 0600, readable by you only) |
+| Public key | same folder, the same name with `.pub` (safe to share) |
 | Host keys seen | `~/.local/share/agent-manager-gd/keys/known_hosts` (accepted on first use) |
 | Records | the engine database (address, folder, fingerprint, dates, sessions) — never the private key |
 
@@ -42,5 +72,6 @@ The private key is never printed, logged, sent anywhere or written into a reposi
 
 - « the key is not on the repository yet »: the public key was not added (or not saved) as a deploy key.
 - Pushing fails while Check works: « Allow write access » was not ticked.
-- `https://` addresses are refused: deploy keys work over SSH; use the `git@…` address.
+- `https://` addresses are refused: the keys work over SSH. The refusal gives the `git@…` address where it can be worked out, and the form fills it in.
+- Azure DevOps, « the key is not on your Azure DevOps profile yet »: add it under *User settings → SSH public keys*, and see that SSH is allowed for the organization.
 - A deploy key can be used by one repository only on GitHub: each repository needs its own (that is the point).

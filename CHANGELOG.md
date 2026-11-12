@@ -5,6 +5,29 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Repositories, a line each, and Azure DevOps · Loop 37
+- The **⎇ Repos** page shows one repository per line: its host, whether its key works and when that was last
+  checked, what the key opens, the folder (yours or Agent Manager's copy, its branch, commits not pushed, files
+  changed), the sessions running on it, and when it was last used. The repositories that need a hand come first and
+  are unfolded. A click on a name or its arrow unfolds the rest: the public key, where to add it, **Check**,
+  **Rotate the key**, **Disconnect**, the folder. In a narrow window some columns leave, the host last.
+- **Azure DevOps** repositories can be connected: `git@ssh.dev.azure.com:v3/organization/project/repository`
+  (names with spaces too). Agent Manager makes the RSA key Azure DevOps asks for, says where to add it (User
+  settings › SSH public keys) and explains a key that does not work in Azure's own terms (not on the profile,
+  expired, repository not known). Azure DevOps has no key per repository: **the key opens everything your account
+  reaches**, and the line says so. Not tried yet against a real Azure DevOps repository.
+- The form says, as you type, which host an address names and what its key will open. A web address
+  (`https://…`) is answered with its SSH form, filled in for you.
+- Opening the page reads each folder again and checks again the keys checked more than ten minutes ago; each line
+  says *checking…*, then how old its answer is. **Check all** does it at once. Nothing is checked while the page is
+  closed, and a repository still waiting for its key is left alone until you press **Check**.
+- The page no longer waits on git: listing the repositories ran two git commands each (about a second for four
+  repositories on a Windows disk); it now takes a few milliseconds, and the folders are read aside.
+- The **⎇ Repos** button of the top bar carries a **!** or a **✗** when a repository needs a hand; its tooltip says
+  which.
+- Corrected on the website: it said a check tells read and write access. A check tells that the key reaches the
+  repository; whether it may push is known at the first push.
+
 ### The setup check reads from the ground up, and its engine room · Loop 36 (first steps)
 - The themes moved from the ◐ menu into the **View ▾** panel: seven chips, each drawn in its own colours. Click one
   and the window changes at once; the panel stays open, so you can try them one after the other. ◐ keeps the

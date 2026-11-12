@@ -13,8 +13,12 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
 - **The local engine** listens on 127.0.0.1 only and answers only with its token (a file readable by your user only).
 - **Your keys** (OpenAI, Fly.io, Anthropic) are encrypted with Windows DPAPI for your user on Windows; on Linux they are
   files readable by your user only (0600). They are never shown again and never written to a log.
-- **Repository deploy keys**: each connected repository gets its own key, which opens that repository only; your
-  personal SSH key is never used or read.
+- **Repository keys**: each connected repository gets its own key; your personal SSH key is never used or read.
+  On GitHub it is a deploy key, which opens that repository only. Azure DevOps has no key per repository: the key
+  goes on your profile and opens everything your account reaches there, and the repository's line says so; to keep
+  agents to chosen repositories, add it to an account made for them. A key is checked by one SSH connection to the
+  repository's host with that key (`git ls-remote`), when you open the Repos page, on « Check all » or on
+  « Check »; never while the page is closed.
 - **Agents' logins**: agent CLIs run with their own login; Agent Manager never reads, copies or relays those tokens.
 - **Second Brain keys**: one per session, at the « propose » level (read, search, propose; the Brain's archivist files
   proposals with your rules); removing a session revokes its key.

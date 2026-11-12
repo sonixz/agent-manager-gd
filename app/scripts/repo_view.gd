@@ -1,0 +1,243 @@
+extends RefCounted
+## The Repos page, its words and its order: what each column of a repository's line says, which lines come first,
+## the sentence above them, what the top bar's button says. Nothing here draws or asks anything, so the headless
+## cases (tools_setup_check.gd) check every line. The page itself is in main.gd.
+##
+## Loaded with preload, not by a class name (see setup_probe.gd).
+
+const HostView := preload("res://scripts/host_view.gd")
+
+## The columns after the name, with their width. In a narrow window they leave in the order of `GIVE_UP`: the host
+## last, because it is what tells a GitHub repository from an Azure DevOps one.
+const COLUMNS := [["host", "Host", 116.0], ["key", "Key", 220.0], ["opens", "The key opens", 168.0], ["folder", "Folder", 250.0],
+	["sessions", "Sessions", 92.0], ["used", "Last used", 96.0]]
+const GIVE_UP := ["used", "sessions", "opens", "host"]
+const NAME_MIN := 170.0
+const FIXED := 26.0 + 118.0 + 40.0   # the mark, « New session », the arrow
+
+const ADDRESS_HINT := "git@github.com:owner/repo.git   ·   Azure DevOps: git@ssh.dev.azure.com:v3/organization/project/repository"
+
+
+static func host_label(r: Dictionary) -> String:
+	var kind := str(r.get("host_kind", ""))
+	if kind == "github":
+		return "GitHub"
+	if kind == "azure":
+		return "Azure DevOps"
+	return str(r.get("host", ""))
+
+
+## What an address typed in the form will be, said before it is added: the host it names and what its key will open.
+static func address_hint(text: String) -> String:
+	var t := text.strip_edges().to_lower()
+	if t == "":
+		return ""
+	if t.begins_with("http://") or t.begins_with("https://"):
+		return "That is the web address: the SSH one is needed (Clone › SSH on the repository's page). Add it and it is worked out for you where it can be."
+	if t.contains("ssh.dev.azure.com") or t.contains("vs-ssh.visualstudio.com"):
+		return "Azure DevOps: an RSA key is made for it. It goes on your profile (User settings › SSH public keys) and opens everything your account reaches there, not this repository alone."
+	if t.contains("github.com"):
+		return "GitHub: a deploy key is made for this repository only. Tick « Allow write access » when you add it, so agents can push their branch."
+	return "Another SSH git host: an ed25519 key is made for it; what it opens is that host's rule."
+
+
+## The SSH address the engine proposes in its refusal of a web address, or "".
+static func proposed_address(error: String) -> String:
+	var at := error.find("not https: ")
+	if at < 0:
+		return ""
+	var rest := error.substr(at + 11)
+	var end := rest.find(". The key")
+	rest = rest.substr(0, end) if end >= 0 else rest
+	rest = rest.get_slice(" (", 0).strip_edges()
+	return rest if rest.begins_with("git@") and not rest.contains("owner/repo") else ""
+
+
+## ok, warn or bad: what sorts the lines and marks them.
+static func level(r: Dictionary) -> String:
+	var f: Dictionary = r.get("folder", {})
+	if str(r.get("status", "")) == "failed" or str(f.get("origin_state", "")) == "other":
+		return "bad"
+	if str(r.get("status", "")) != "connected" or str(f.get("origin_state", "")) == "missing" or (bool(f.get("read", false)) and str(f.get("path", "")) != "" and not bool(f.get("exists", true))):
+		return "warn"
+	return "ok"
+
+
+static func mark(lv: String) -> String:
+	return {"ok": "●", "warn": "!", "bad": "✗"}.get(lv, "●")
+
+
+## The key's state and how old that knowledge is.
+static func key_cell(r: Dictionary, now: float) -> Dictionary:
+	var st := str(r.get("status", ""))
+	if r.get("busy", []).has("key"):
+		return {"text": "checking…", "level": "ok" if st == "connected" else "warn"}
+	if st == "connected":
+		var at := float(r.get("checked_at", 0.0))
+		return {"text": "works" + ((" · checked " + HostView.ago(now - at)) if at > 0.0 else ""), "level": "ok"}
+	if st == "failed":
+		return {"text": "does not work", "level": "bad"}
+	return {"text": "waits to be added", "level": "warn"}
+
+
+## What the key opens on its host: the difference between GitHub and Azure DevOps, said on every line.
+static func opens_cell(r: Dictionary) -> String:
+	var scope := str(r.get("key_scope", ""))
+	if scope == "repository":
+		return "this repository only"
+	if scope == "account":
+		return "your whole account"
+	return "as its host decides"
+
+
+## Whose folder it is, its branch and what waits in it.
+static func folder_cell(r: Dictionary) -> Dictionary:
+	var f: Dictionary = r.get("folder", {})
+	if str(f.get("path", "")) == "":
+		return {"text": "cloned on first use", "level": "ok"}
+	var who := "its copy" if bool(f.get("managed", false)) else "yours"
+	if not bool(f.get("read", false)):
+		return {"text": who + (" · reading…" if bool(f.get("git", false)) else ""), "level": "ok"}
+	if not bool(f.get("exists", false)):
+		return {"text": "the folder is gone", "level": "warn"}
+	if not bool(f.get("git", false)):
+		return {"text": who + " · empty, cloned on first use", "level": "ok"}
+	var o := str(f.get("origin_state", ""))
+	if o == "other":
+		return {"text": who + " · another repository's folder", "level": "bad"}
+	if o == "missing":
+		return {"text": who + " · no remote yet", "level": "warn"}
+	var bits := [who, str(f.get("branch", "")) if str(f.get("branch", "")) != "" else "no branch"]
+	var move := ""
+	if int(f.get("ahead", 0)) > 0:
+		move += "↑%d" % int(f["ahead"])
+	if int(f.get("behind", 0)) > 0:
+		move += (" " if move != "" else "") + "↓%d" % int(f["behind"])
+	if move != "":
+		bits.append(move)
+	if int(f.get("changed", 0)) > 0:
+		bits.append("%d changed" % int(f["changed"]))
+	return {"text": " · ".join(bits), "level": "ok"}
+
+
+## The same, in a sentence, for the tooltip: the arrows are said in words.
+static func folder_tip(r: Dictionary) -> String:
+	var f: Dictionary = r.get("folder", {})
+	if not bool(f.get("read", false)) or not bool(f.get("git", false)):
+		return str(f.get("path", ""))
+	var out := str(f.get("path", ""))
+	if int(f.get("ahead", 0)) > 0:
+		out += "\n%d commit%s not pushed" % [int(f["ahead"]), "" if int(f["ahead"]) == 1 else "s"]
+	if int(f.get("behind", 0)) > 0:
+		out += "\n%d commit%s behind what was last fetched" % [int(f["behind"]), "" if int(f["behind"]) == 1 else "s"]
+	if int(f.get("changed", 0)) > 0:
+		out += "\n%d file%s changed or new, not committed" % [int(f["changed"]), "" if int(f["changed"]) == 1 else "s"]
+	if str(f.get("upstream", "")) == "" and str(f.get("branch", "")) != "":
+		out += "\nThis branch follows no remote branch."
+	return out + "\nRead from the disk: nothing is fetched."
+
+
+## How many of its sessions run now. `states` is the app's own list: session id -> its state.
+static func sessions_cell(r: Dictionary, states: Dictionary) -> String:
+	var running := 0
+	var open := 0
+	for s in r.get("sessions", []):
+		if int(s.get("archived", 0)) == 1:
+			continue
+		open += 1
+		if str(states.get(str(s["id"]), "")) == "running":
+			running += 1
+	if running > 0:
+		return "%d running" % running
+	return "–" if open == 0 else "%d, none running" % open
+
+
+static func used_cell(r: Dictionary, now: float) -> String:
+	var at := float(r.get("last_used", 0.0))
+	return "never" if at <= 0.0 else HostView.ago(now - at)
+
+
+## The key in one line, for the unfolded part: its kind, its print, its age; and that Azure DevOps keys expire.
+static func key_line(r: Dictionary, now: float) -> String:
+	var kind := "RSA 3072" if str(r.get("key_type", "")) == "rsa" else "ed25519"
+	var made := float(r.get("key_made", 0.0))
+	var out := "%s · %s" % [kind, str(r.get("fingerprint", ""))]
+	if made > 0.0:
+		out += " · made " + HostView.ago(now - made)
+	if str(r.get("host_kind", "")) == "azure":
+		out += " · Azure DevOps keys expire: it warns you by e-mail seven days before"
+	return out
+
+
+## Where to add the public key, by host: the button's words and what to do once there.
+static func add_key_help(r: Dictionary) -> Dictionary:
+	var kind := str(r.get("host_kind", ""))
+	if kind == "github":
+		return {"button": "Open GitHub's Deploy keys page", "then": "Paste the key, tick « Allow write access » so agents can push their branch, then Check."}
+	if kind == "azure":
+		return {"button": "Open Azure DevOps", "then": "There: User settings (the icon beside your picture) › SSH public keys › New Key. Paste the key, then Check. It opens everything your account reaches: to keep agents to chosen repositories, add it to an account made for them."}
+	return {"button": "", "then": "Add the key on the repository's host, where it keeps SSH keys, then Check."}
+
+
+## The lines in their order: what needs a hand first, then by name.
+static func order(repos: Array) -> Array:
+	var out := repos.duplicate()
+	var rank := {"bad": 0, "warn": 1, "ok": 2}
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ra: int = rank[level(a)]
+		var rb: int = rank[level(b)]
+		return ra < rb if ra != rb else str(a.get("name", "")).naturalnocasecmp_to(str(b.get("name", ""))) < 0)
+	return out
+
+
+## One sentence above the lines.
+static func summary(repos: Array) -> String:
+	if repos.is_empty():
+		return "No repository yet."
+	var n := {"connected": 0, "waiting": 0, "failed": 0}
+	for r in repos:
+		var st := str(r.get("status", "waiting"))
+		n[st if n.has(st) else "waiting"] += 1
+	var bits := []
+	if n["connected"] > 0:
+		bits.append("%d connected" % n["connected"])
+	if n["waiting"] > 0:
+		bits.append("1 waits for its key" if n["waiting"] == 1 else "%d wait for their keys" % n["waiting"])
+	if n["failed"] > 0:
+		bits.append("%d with a key that does not work" % n["failed"])
+	return "%d repositor%s: %s" % [repos.size(), "y" if repos.size() == 1 else "ies", " · ".join(bits)]
+
+
+## Which columns fit in `width`, and the room left for the name. The ones that leave say so in the line's tooltip.
+static func fit(width: float) -> Dictionary:
+	var shown := []
+	for c in COLUMNS:
+		shown.append(str(c[0]))
+	var need := func() -> float:
+		var w := FIXED + NAME_MIN
+		for c in COLUMNS:
+			if shown.has(str(c[0])):
+				w += float(c[2])
+		return w
+	for id in GIVE_UP:
+		if need.call() <= width:
+			break
+		shown.erase(id)
+	return {"shown": shown, "name": maxf(NAME_MIN, minf(320.0, width - (need.call() - NAME_MIN)))}
+
+
+## The top bar's « Repos » button: a mark when a repository needs a hand, and which ones in its tooltip.
+static func button(repos: Array) -> Dictionary:
+	var worst := "ok"
+	var why := []
+	for r in order(repos):
+		var lv := level(r)
+		if lv == "ok":
+			continue
+		if lv == "bad" or worst == "ok":
+			worst = lv if worst != "bad" else worst
+		why.append("%s %s: %s" % [mark(lv), str(r.get("name", "")), str(key_cell(r, 0.0)["text"]) if str(r.get("status", "")) != "connected" else str(folder_cell(r)["text"])])
+	var tip := "Connected repositories and their keys. " + summary(repos)
+	for w in why:
+		tip += "\n" + str(w)
+	return {"level": worst, "mark": "" if worst == "ok" else mark(worst), "tip": tip}

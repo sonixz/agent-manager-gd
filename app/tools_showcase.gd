@@ -4,6 +4,7 @@ extends SceneTree
 ## SHOW_STEP = measure | hero | … ; screenshots go to SHOW_OUT as webp.
 
 const HostView := preload("res://scripts/host_view.gd")
+const RepoView := preload("res://scripts/repo_view.gd")
 var out := OS.get_environment("SHOW_OUT")
 var report: Array[String] = []
 var main: Control
@@ -931,15 +932,80 @@ func _run() -> void:
 			await wait(4.0)
 			await main.refresh()
 			await shot("agents")
-		"repos":
+		"repos":  # the Repos page as lines (2026-11-12): GitHub and Azure DevOps side by side, what needs a hand first and unfolded, the slow facts read aside, the form that says what an address will be
+			var remotes := OS.get_environment("SHOWCASE_REMOTES")
+			OS.execute("git", ["clone", "-q", "--bare", remotes.path_join("acme-store.git"), remotes.path_join("client-portal")])  # the stand-in ssh serves the fictional Azure DevOps repository from it
+			var ids := {}
 			for p in ["acme-store", "orbit-api"]:
 				var r: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/%s.git" % p, "local_path": code.path_join(p)})
 				await main.engine.call_api("POST", "/repos/%s/check" % r["id"], {})
-			await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/pixel-forge.git", "local_path": code.path_join("pixel-forge")})
+				ids[p] = str(r["id"])
+			var az: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@ssh.dev.azure.com:v3/acme/Client%20Portal/client-portal", "local_path": ""})
+			await main.engine.call_api("POST", "/repos/%s/check" % az["id"], {})
+			var az_new: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@ssh.dev.azure.com:v3/acme/Back%20Office/billing-api", "local_path": ""})
+			var gh_new: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/pixel-forge.git", "local_path": code.path_join("pixel-forge")})
+			report.append("repos: Azure DevOps: key « %s… », opens « %s », its page %s | checked through the stand-in: %s" % [str(az["public_key"]).left(7), az["key_scope"], az["key_page"], (await main.engine.call_api("GET", "/repos"))["repos"].filter(func(x: Dictionary) -> bool: return x["id"] == az["id"])[0]["status"]])
 			await main.refresh()
+			var asked_at := Time.get_ticks_msec()
+			var listed: Dictionary = await main.engine.call_api("GET", "/repos")
+			report.append("repos: the list of %d answered in %d ms" % [listed["repos"].size(), Time.get_ticks_msec() - asked_at])
+			main.repos_open[str(gh_new["id"])] = false  # one of the two that wait is folded by hand, for the picture's length
 			main.set_view("repos")
-			await wait(2.5)
+			for i in 60:  # the folders are read aside: the lines follow
+				await wait(0.25)
+				if not main.repos_cache.is_empty() and main.repos_cache.all(func(x: Dictionary) -> bool: return (x["busy"] as Array).is_empty()):
+					break
+			await wait(1.3)
+			var now := Time.get_unix_time_from_system()
+			var lines := []
+			for x in RepoView.order(main.repos_cache):
+				lines.append("%s %s | %s | %s | %s | %s" % [RepoView.mark(RepoView.level(x)), x["name"], RepoView.host_label(x), RepoView.key_cell(x, now)["text"].get_slice(" · ", 0), RepoView.opens_cell(x), RepoView.folder_cell(x)["text"]])
+			report.append("repos: %s" % main.repos_summary.text)
+			for l in lines:
+				report.append("repos:   " + l)
+			var head: Array = main.repos_list.get_child(0).get_children().filter(func(n: Node) -> bool: return n is Label).map(func(n: Node) -> String: return (n as Label).text)
+			var unfolded := []
+			for c in main.repos_list.get_children():
+				if str(c.name).begins_with("Repo_") and c.find_children("*", "LineEdit", true, false).size() > 0:
+					unfolded.append(main.repos_cache.filter(func(x: Dictionary) -> bool: return "Repo_" + str(x["id"]) == str(c.name))[0]["name"])
+			report.append("repos: columns: %s | unfolded: %s | the form is folded away: %s | the bar: %s" % [", ".join(head), ", ".join(unfolded), not main.repos_form.visible, main.view_buttons["repos"].text])
+			report.append("repos: the Azure DevOps line says where the key goes: « %s »" % _setup_text("SSH public keys › New Key").left(90))
 			await shot("repos")
+			# a line is folded and unfolded by its name
+			var name_btn: Button = null
+			for b in main.repos_list.find_children("*", "Button", true, false):
+				if (b as Button).text == "acme-store":
+					name_btn = b
+			name_btn.pressed.emit()
+			await wait(0.4)
+			report.append("repos: a click on « acme-store »: unfolded: %s | its public key is shown: %s" % [main.repos_open.get(ids["acme-store"], false), main.repos_list.find_child("Repo_" + ids["acme-store"], true, false).find_children("*", "LineEdit", true, false).size() == 1])
+			await shot("repos-open")
+			# the form: an address being typed says what it will be; a web address is answered with its SSH form
+			_find_button(main.content, "+ Connect a repository").pressed.emit()
+			await wait(0.3)
+			var address: LineEdit = main.content.find_child("RepoAddress", true, false)
+			var hint: Label = main.content.find_child("RepoHint", true, false)
+			address.text = "git@ssh.dev.azure.com:v3/acme/Design/handbook"
+			address.text_changed.emit(address.text)
+			await wait(0.2)
+			report.append("repos: an Azure DevOps address typed: « %s »" % hint.text.left(110))
+			await shot("repos-form")
+			address.text = "https://dev.azure.com/acme/Design/_git/handbook"
+			address.text_changed.emit(address.text)
+			for o in main.content.find_children("*", "OptionButton", true, false):
+				(o as OptionButton).select(1)
+				(o as OptionButton).item_selected.emit(1)
+			_find_button(main.content, "+ Add the repository").pressed.emit()
+			await wait(0.8)
+			report.append("repos: a web address given: nothing added (%d repositories) | the field now holds « %s »" % [main.repos_cache.size(), address.text])
+			_find_button(main.content, "Check all").pressed.emit()
+			await wait(0.3)
+			var checking: int = main.repos_cache.filter(func(x: Dictionary) -> bool: return (x["busy"] as Array).has("key")).size()
+			for i in 60:
+				await wait(0.25)
+				if main.repos_cache.all(func(x: Dictionary) -> bool: return (x["busy"] as Array).is_empty()):
+					break
+			report.append("repos: « Check all »: %d keys being checked at once (the two that wait are left alone) | afterwards: %s" % [checking, main.repos_summary.text])
 		"brain-keys":
 			# the Keys tab: the keys this computer keeps, then the Second Brain keys, one per agent session
 			main.set_view("keys")
@@ -1154,8 +1220,9 @@ func _run() -> void:
 			var r: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/acme-store.git", "local_path": code.path_join("acme-store")})
 			await main.engine.call_api("POST", "/repos/%s/check" % r["id"], {})
 			await main.refresh()
+			main.repos_open[str(r["id"])] = true  # the step tells to unfold the line: the picture shows it unfolded
 			main.set_view("repos")
-			await wait(2.5)
+			await wait(3.0)
 			await hshot(g, 3)
 			main.set_view("focus")
 			main.select(made["Checkout flow"])

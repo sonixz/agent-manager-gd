@@ -142,28 +142,34 @@ guide(
     [("History", "docs.html#history"), ("Worktrees", "docs.html#worktrees")])
 
 guide(
-    "connect-repo", "Connect a repository (SSH deploy key)", "Git", 5,
-    "Give a GitHub repository its own SSH key, made and checked by Agent Manager, so sessions push without your own "
-    "keys.",
-    ["A GitHub repository you can administer (to add a deploy key)"],
+    "connect-repo", "Connect a repository (its own SSH key)", "Git", 5,
+    "Give a GitHub or Azure DevOps repository an SSH key made and checked by Agent Manager, so sessions push without "
+    "your own keys.",
+    ["A repository you can administer on GitHub, or an Azure DevOps account that reaches it"],
     [("Click <b>⎇ Repos</b> at the top.",
-      "Connected repositories, and a form: the repository's SSH address, and whether to use your own clone or let "
-      "Agent Manager clone it."),
+      "The connected repositories, one per line, and a form: the repository's SSH address, and whether to use your "
+      "own clone or let Agent Manager clone it. Once you have a repository, <b>+ Connect a repository</b> opens the "
+      "form."),
      ("Paste the address (<code>git@github.com:owner/repo.git</code>), choose your folder, and click "
       "<b>+ Add the repository</b>.",
-      "Agent Manager makes a deploy key for this repository alone. Its public half is shown with a button to copy it, "
-      "and the link to the repository's Deploy keys page on GitHub."),
+      "The form says which host it is and what the key will open. Agent Manager makes a key for this repository. "
+      "For Azure DevOps the address is the one under <i>Clone › SSH</i> "
+      "(<code>git@ssh.dev.azure.com:v3/organization/project/repository</code>)."),
      ("On GitHub, add the key (tick <i>Allow write access</i> if sessions should push), then click <b>Check</b>.",
-      "The card says <i>connected</i> and <i>origin ✓</i>: the key reads and writes. It shows the key's "
-      "fingerprint, the folder, and buttons to copy the key again, rotate it or disconnect."),
-     ("Start a session on it: in New session, pick it under <b>Repository</b>.",
+      "Unfold the line (its name or its arrow): the public key with a button to copy it, the link to the "
+      "repository's Deploy keys page, <b>Check</b>, <b>Rotate the key</b>, <b>Disconnect</b>. Once checked, the line "
+      "says <i>works</i> and when. On Azure DevOps the key goes on your profile (<i>User settings › SSH public "
+      "keys</i>) and opens everything your account reaches: the line says <i>your whole account</i>."),
+     ("Start a session on it: <b>New session</b> on its line, or in New session pick it under <b>Repository</b>.",
       "The session's git uses this key only, through <code>GIT_SSH_COMMAND</code>. Nothing is written in your "
       "<code>~/.ssh</code>, and the agent is told how git authenticates here."),
      ],
     [("Check says write is refused.", "On GitHub, the deploy key needs <i>Allow write access</i>."),
+     ("On Azure DevOps the key does not work.", "It must be on your profile (<i>User settings › SSH public keys</i>), "
+      "SSH must be allowed for the organization, and the key must not have expired: the line says which."),
      ("<code>ssh -T git@github.com</code> shows another account.", "That command ignores the session's key. Check "
       "with <code>git ls-remote origin</code> instead.")],
-    [("Repositories and deploy keys", "docs.html#repos")], real=False)
+    [("Repositories and their keys", "docs.html#repos")], real=False)
 
 guide(
     "voice", "Talk to your agents", "Voice", 4,

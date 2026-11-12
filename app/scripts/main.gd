@@ -7,6 +7,7 @@ const SETTINGS := "user://settings.cfg"
 const SetupProbe := preload("res://scripts/setup_probe.gd")  # by its path: a new class name is unknown until Godot scans the project again
 const HostView := preload("res://scripts/host_view.gd")
 const HostDash := preload("res://scripts/host_dash.gd")
+const RepoView := preload("res://scripts/repo_view.gd")
 const ACT_KEYS := ["working", "approval", "waiting", "done", "idle", "exited", "missing"]
 
 var engine: EngineClient
@@ -158,6 +159,11 @@ var sbx_box: VBoxContainer
 var f_where: OptionButton
 var repos_list: VBoxContainer
 var repos_cache: Array = []
+var repos_summary: Label       # the sentence above the lines
+var repos_form: Control        # the form to connect one: folded away once there is a repository
+var repos_form_open := false
+var repos_open := {}           # a repository -> its line is unfolded (asked for; the ones that need a hand unfold by themselves)
+var repos_ticks := 0
 var f_repo: OptionButton
 var confirm_dialog: ConfirmationDialog
 var confirm_done: Callable
@@ -2177,7 +2183,8 @@ func _label_managers(compact: bool) -> void:
 		if m[0] == "setup":
 			b.text = str(ground.get("short" if compact else "text", ground_name()))
 		else:
-			b.text = str(m[2] if compact else m[1])
+			var mark := str(RepoView.button(repos_cache)["mark"]) if m[0] == "repos" else ""
+			b.text = (mark + " " if mark != "" else "") + str(m[2] if compact else m[1])
 
 
 ## Every 30 seconds, the engine is asked how the ground is doing, for the bar's button. On the ground's own page
@@ -2187,6 +2194,11 @@ func _ground_poll() -> void:
 		var r := await engine.call_api("GET", "/host")
 		if not r.has("error"):
 			setup_host = r
+	if engine.connected and view != "repos":  # the list runs no git command (7 ms): what is known, not a new check
+		var rp := await engine.call_api("GET", "/repos")
+		if not rp.has("error"):
+			repos_cache = rp["repos"]
+			_render_repos_button()
 	_render_ground_button()
 
 
@@ -2286,7 +2298,7 @@ func _layout_view() -> void:
 			_load_review()
 		"repos":
 			content.add_child(_repos_view())
-			_load_repos()
+			_repos_opened()
 		"keys":
 			content.add_child(_keys_view())
 			_load_keys()
@@ -4065,22 +4077,38 @@ func _key_card(k: Dictionary) -> Control:
 
 
 # ------------------------------------------------------------------ repositories (Loop 9)
+## The Repos page (rebuilt for its lines, 2026-11-12): one line per repository with its state in columns, the ones
+## that need a hand first and unfolded; the rest of a repository (its public key, where to add it, Check, Rotate,
+## Disconnect, its folder) one click away. The words and the order are in scripts/repo_view.gd.
 func _repos_view() -> Control:
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 12)
+	v.add_theme_constant_override("separation", 10)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 12)
+	v.add_child(top)
 	var title := Label.new()
 	title.text = "Connected repositories"
 	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_font_override("font", AmTheme.ui_font(650))
-	v.add_child(title)
-	var intro := _muted("Create the repository yourself (GitHub or any SSH git host), add its SSH address here: Agent Manager makes a deploy key for it only. Add that key on the repository (tick « Allow write access » so agents can push their branch), then Check.")
-	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	v.add_child(intro)
+	top.add_child(title)
+	repos_summary = _muted("")
+	repos_summary.size_flags_horizontal = SIZE_EXPAND_FILL
+	top.add_child(repos_summary)
+	top.add_child(_small("Check all", _repos_check_all, "Checks again, now, every key that was added on its host, and reads every folder again"))
+	top.add_child(_small("+ Connect a repository", func() -> void:
+		repos_form_open = not repos_form_open
+		repos_form.visible = repos_form_open or repos_cache.is_empty()))
+	repos_form = VBoxContainer.new()
+	repos_form.add_theme_constant_override("separation", 8)
+	repos_form.visible = repos_form_open or repos_cache.is_empty()
+	v.add_child(repos_form)
+	repos_form.add_child(_wrap("Create the repository on its host, then give its SSH address here: Agent Manager makes a key for it and shows where to add it. On GitHub it is a deploy key, for that repository only. On Azure DevOps a key goes on your profile and opens everything your account reaches."))
 	var form := HBoxContainer.new()
 	form.add_theme_constant_override("separation", 8)
-	v.add_child(form)
+	repos_form.add_child(form)
 	var url := LineEdit.new()
-	url.placeholder_text = "git@github.com:owner/repo.git"
+	url.name = "RepoAddress"
+	url.placeholder_text = RepoView.ADDRESS_HINT
 	url.size_flags_horizontal = SIZE_EXPAND_FILL
 	form.add_child(url)
 	var where := OptionButton.new()
@@ -4088,9 +4116,16 @@ func _repos_view() -> Control:
 	where.add_item("Clone it for me")
 	where.tooltip_text = "Your own clone is used as it is (no second copy); otherwise Agent Manager clones it in its data folder"
 	form.add_child(where)
+	var hint := _wrap("")  # what the address typed will be: the host it names, the key it gets, what that key opens
+	hint.name = "RepoHint"
+	hint.visible = false
+	repos_form.add_child(hint)
+	url.text_changed.connect(func(t: String) -> void:
+		hint.text = RepoView.address_hint(t)
+		hint.visible = hint.text != "")
 	var form2 := HBoxContainer.new()
 	form2.add_theme_constant_override("separation", 8)
-	v.add_child(form2)
+	repos_form.add_child(form2)
 	var path := LineEdit.new()
 	path.placeholder_text = "your folder: C:\\git-2026\\my-repo (its top folder)"
 	path.size_flags_horizontal = SIZE_EXPAND_FILL
@@ -4110,10 +4145,18 @@ func _repos_view() -> Control:
 			return
 		var r := await engine.call_api("POST", "/repos", {"url": url.text.strip_edges(), "local_path": path.text.strip_edges() if own else ""})
 		if r.has("error"):
-			_toast(str(r["error"]))
+			var proposed := RepoView.proposed_address(str(r["error"]))
+			if proposed != "":  # a web address was given: its SSH form is put in its place, for the owner to confirm
+				url.text = proposed
+				url.text_changed.emit(proposed)
+				_toast("That was the web address. Its SSH address is filled in: press « + Add the repository » again.")
+			else:
+				_toast(str(r["error"]))
 			return
 		url.text = ""
 		path.text = ""
+		hint.visible = false
+		repos_form_open = false
 		await _load_repos())
 	form2.add_child(add)
 	var scroll := ScrollContainer.new()
@@ -4122,22 +4165,260 @@ func _repos_view() -> Control:
 	v.add_child(scroll)
 	repos_list = VBoxContainer.new()
 	repos_list.size_flags_horizontal = SIZE_EXPAND_FILL
-	repos_list.add_theme_constant_override("separation", 10)
+	repos_list.add_theme_constant_override("separation", 6)
 	scroll.add_child(repos_list)
+	var tick := Timer.new()  # lives with the page: while a key is checked or a folder read, the lines follow
+	tick.wait_time = 1.0
+	tick.autostart = true
+	tick.timeout.connect(_repos_tick)
+	v.add_child(tick)
+	if not repos_cache.is_empty():
+		_render_repos.call_deferred()  # what was known is shown at once; the engine's answer follows
 	return v
+
+
+## The page was opened: the engine is asked to read again what is old (the folders; the keys checked more than ten
+## minutes ago), aside, and the lines are shown with what is known meanwhile. Nothing is checked in the background:
+## only here, and on « Check all ».
+func _repos_opened() -> void:
+	await engine.call_api("POST", "/repos/refresh", {"keys": true})
+	await _load_repos()
+
+
+func _repos_check_all() -> void:
+	await engine.call_api("POST", "/repos/refresh", {"keys": true, "force": true})
+	await _load_repos()
+	_toast("Checking every key that was added, and reading every folder…")
+
+
+func _repos_tick() -> void:
+	if view != "repos":
+		return
+	repos_ticks += 1
+	if repos_cache.any(func(r: Dictionary) -> bool: return not (r.get("busy", []) as Array).is_empty()):
+		await _load_repos()  # something is being read: the line that says « checking… » gets its answer
+	elif repos_ticks % 30 == 0:
+		await engine.call_api("POST", "/repos/refresh", {"keys": false})  # the folders, every half minute while one looks
+		await _load_repos()
+	elif repos_ticks % 10 == 0:
+		_render_repos()  # the ages move on
 
 
 func _load_repos() -> void:
 	var r := await engine.call_api("GET", "/repos")
-	if r.has("error") or repos_list == null or not is_instance_valid(repos_list):
+	if r.has("error"):
 		return
 	repos_cache = r["repos"]
+	_render_repos_button()
+	_render_repos()
+
+
+func _render_repos() -> void:
+	if repos_list == null or not is_instance_valid(repos_list):
+		return
 	for c in repos_list.get_children():
+		repos_list.remove_child(c)  # out of the page now: a line made in the same breath keeps its own name
 		c.queue_free()
-	for repo in repos_cache:
-		repos_list.add_child(_repo_card(repo))
+	repos_summary.text = RepoView.summary(repos_cache)
+	repos_form.visible = repos_form_open or repos_cache.is_empty()
 	if repos_cache.is_empty():
-		repos_list.add_child(_muted("No repository yet."))
+		return
+	var fit: Dictionary = RepoView.fit(repos_list.size.x if repos_list.size.x > 100.0 else content.size.x - 20.0)
+	var states := {}
+	for x in sessions:
+		states[str(x["id"])] = str(x.get("state", ""))
+	var now := Time.get_unix_time_from_system()
+	repos_list.add_child(_repo_head(fit))
+	for repo in RepoView.order(repos_cache):
+		repos_list.add_child(_repo_line(repo, fit, states, now))
+
+
+func _repo_cell(text: String, width: float, tip := "") -> Label:
+	var l := Label.new()
+	l.text = text
+	l.custom_minimum_size.x = width
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.add_theme_font_size_override("font_size", 13)
+	l.tooltip_text = tip if tip != "" else text
+	l.mouse_filter = Control.MOUSE_FILTER_STOP  # so the whole of a cut text is read where the pointer rests
+	return l
+
+
+func _repo_head(fit: Dictionary) -> Control:
+	var row := HBoxContainer.new()
+	row.name = "RepoHead"
+	row.add_theme_constant_override("separation", 0)
+	var pad := Control.new()  # the line's frame, its mark, and the name's own margin: the titles stand over their columns
+	pad.custom_minimum_size.x = 7.0 + 26.0 + 9.0
+	row.add_child(pad)
+	var titles := [["Repository", float(fit["name"]) - 9.0]]
+	for c in RepoView.COLUMNS:
+		if fit["shown"].has(c[0]):
+			titles.append([str(c[1]), float(c[2])])
+	for t in titles:
+		var l := _repo_cell(str(t[0]), float(t[1]))
+		l.add_theme_font_size_override("font_size", 11)
+		l.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+		row.add_child(l)
+	return row
+
+
+## One repository: its line, and under it, when unfolded, everything else about it.
+func _repo_line(r: Dictionary, fit: Dictionary, states: Dictionary, now: float) -> Control:
+	var rid := str(r["id"])
+	var lv: String = RepoView.level(r)
+	var tint: Color = {"ok": AmTheme.col("MINT"), "warn": AmTheme.col("WARN"), "bad": AmTheme.col("ERROR")}[lv]
+	var open: bool = repos_open.get(rid, lv != "ok")  # a line that needs a hand is unfolded unless it was folded by hand
+	var box := VBoxContainer.new()
+	box.name = "Repo_" + rid
+	box.add_theme_constant_override("separation", 0)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 8, Color(tint, 0.5) if lv != "ok" else AmTheme.col("BORDER"), 1, 6))
+	box.add_child(panel)
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 8)
+	panel.add_child(inner)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 0)
+	inner.add_child(row)
+	var mark := Label.new()
+	mark.text = RepoView.mark(lv)
+	mark.custom_minimum_size.x = 26.0
+	mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mark.add_theme_color_override("font_color", tint)
+	row.add_child(mark)
+	var toggle := func() -> void:
+		repos_open[rid] = not open
+		_render_repos()
+	var name := Button.new()  # the name unfolds the line, as the arrow does
+	name.text = str(r["name"])
+	name.flat = true
+	name.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name.clip_text = true
+	name.custom_minimum_size.x = float(fit["name"])
+	name.add_theme_font_override("font", AmTheme.ui_font(650))
+	name.tooltip_text = str(r["url"])
+	name.pressed.connect(toggle)
+	row.add_child(name)
+	var key: Dictionary = RepoView.key_cell(r, now)
+	var folder: Dictionary = RepoView.folder_cell(r)
+	var cells := {"host": [RepoView.host_label(r), "ok", str(r.get("host", ""))],
+		"key": [str(key["text"]), str(key["level"]), str(r.get("message", ""))],
+		"opens": [RepoView.opens_cell(r), "ok", "What the key Agent Manager made for it opens on %s." % RepoView.host_label(r)],
+		"folder": [str(folder["text"]), str(folder["level"]), RepoView.folder_tip(r)],
+		"sessions": [RepoView.sessions_cell(r, states), "ok", ""],
+		"used": [RepoView.used_cell(r, now), "ok", "The last time a session used this repository's key."]}
+	for c in RepoView.COLUMNS:
+		if not fit["shown"].has(c[0]):
+			continue
+		var cell: Array = cells[c[0]]
+		var l := _repo_cell(str(cell[0]), float(c[2]), str(cell[2]))
+		if cell[1] == "warn":
+			l.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		elif cell[1] == "bad":
+			l.add_theme_color_override("font_color", AmTheme.col("ERROR"))
+		elif c[0] in ["sessions", "used", "host"] or (c[0] == "opens" and str(r.get("key_scope", "")) != "account"):
+			l.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+		row.add_child(l)
+	var spring := Control.new()
+	spring.size_flags_horizontal = SIZE_EXPAND_FILL
+	row.add_child(spring)
+	row.add_child(_small("New session", func() -> void:
+		await _open_new()
+		for i in f_repo.item_count:
+			if str(f_repo.get_item_metadata(i)) == rid:
+				f_repo.select(i)
+				f_repo.item_selected.emit(i)
+		f_name.text = str(r["name"]), "A new session on this repository, with its key"))
+	var arrow := _small("▾" if open else "▸", toggle, "Its public key, where to add it, Check, Rotate, Disconnect, its folder")
+	arrow.custom_minimum_size.x = 34.0
+	row.add_child(arrow)
+	if open:
+		inner.add_child(_repo_details(r, tint, now))
+	return box
+
+
+## What a line unfolds: why the key does not work when it does not, the public key and where to add it, the key's
+## kind and age, the actions, the folder, the sessions.
+func _repo_details(r: Dictionary, tint: Color, now: float) -> Control:
+	var rid := str(r["id"])
+	var wrap := MarginContainer.new()
+	wrap.add_theme_constant_override("margin_left", 26)
+	wrap.add_theme_constant_override("margin_bottom", 4)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	wrap.add_child(v)
+	if str(r["message"]) != "":
+		var m := _wrap(str(r["message"]))
+		m.add_theme_color_override("font_color", tint)
+		m.add_theme_font_size_override("font_size", 12)
+		v.add_child(m)
+	var pub := str(r["public_key"])
+	var keyrow := HBoxContainer.new()
+	keyrow.add_theme_constant_override("separation", 6)
+	v.add_child(keyrow)
+	var key := LineEdit.new()
+	key.text = pub
+	key.editable = false
+	key.size_flags_horizontal = SIZE_EXPAND_FILL
+	key.add_theme_font_override("font", font)
+	key.add_theme_font_size_override("font_size", 11)
+	key.tooltip_text = "The PUBLIC key: safe to copy. The private key never leaves Agent Manager's data folder."
+	keyrow.add_child(key)
+	var help: Dictionary = RepoView.add_key_help(r)
+	keyrow.add_child(_small("Copy the public key", func() -> void:
+		DisplayServer.clipboard_set(pub)
+		_toast("Public key copied. " + str(help["then"]).get_slice(".", 0) + ".")))
+	if str(help["button"]) != "" and str(r.get("key_page", "")) != "":
+		var page := str(r["key_page"])
+		keyrow.add_child(_small(str(help["button"]), func() -> void: OS.shell_open(page), page))
+	var then := _wrap(str(help["then"]))
+	then.add_theme_font_size_override("font_size", 12)
+	v.add_child(then)
+	var about := _wrap("Key: %s   ·   %s   ·   added %s" % [RepoView.key_line(r, now), str(r["url"]), _date(float(r["created"]))])
+	about.add_theme_font_size_override("font_size", 12)
+	v.add_child(about)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	v.add_child(row)
+	row.add_child(_small("Check", func() -> void:
+		var c := await engine.call_api("POST", "/repos/%s/check" % rid, {})
+		_toast("%s: %s" % [r["name"], c.get("status", c.get("error", ""))])
+		await _load_repos(), "Tries this key on its host now (git ls-remote): nothing is changed there"))
+	row.add_child(_small("Rotate the key", func() -> void:
+		_confirm("Make a new key for %s? The old one stops being used here; delete it on %s." % [r["name"], RepoView.host_label(r)], func() -> void:
+			await engine.call_api("POST", "/repos/%s/rotate" % rid, {})
+			await _load_repos())))
+	row.add_child(_small("Disconnect", func() -> void:
+		_confirm("Disconnect %s? Its key is deleted here (delete it on %s too). Its sessions stay in History." % [r["name"], RepoView.host_label(r)], func() -> void:
+			var d := await engine.call_api("POST", "/repos/%s/disconnect" % rid, {})
+			_toast(str(d.get("reminder", d.get("error", ""))))
+			repos_open.erase(rid)
+			await _load_repos())))
+	v.add_child(_repo_folder_row(r))
+	var sess: Array = r.get("sessions", [])
+	if not sess.is_empty():
+		var l := _wrap("Sessions on it: " + ", ".join(sess.map(func(x: Dictionary) -> String: return str(x["name"]) + (" (archived)" if int(x["archived"]) == 1 else ""))))
+		l.add_theme_font_size_override("font_size", 12)
+		v.add_child(l)
+	return wrap
+
+
+## The top bar's « Repos » button carries a mark when a repository needs a hand; its tooltip says which.
+func _render_repos_button() -> void:
+	if not view_buttons.has("repos"):
+		return
+	var b: Dictionary = RepoView.button(repos_cache)
+	var btn: Button = view_buttons["repos"]
+	btn.tooltip_text = str(b["tip"])
+	var tint: Variant = {"warn": AmTheme.col("WARN"), "bad": AmTheme.col("ERROR")}.get(b["level"])
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		if tint == null:
+			btn.remove_theme_color_override(c)
+		else:
+			btn.add_theme_color_override(c, tint)
+	_fit_header()
 
 
 ## Where the repository lives on this computer: the owner's own clone or Agent Manager's copy, its origin, and
@@ -4206,87 +4487,6 @@ func _offer_remove_copy(copy: String) -> void:
 	_confirm("Remove Agent Manager's old copy?\n%s\n\n%s" % [copy, what], func() -> void:
 		var d := await engine.call_api("POST", "/repos/copy/remove", {"path": copy, "confirmed": true})
 		_toast(str(d["error"]) if d.has("error") else "Old copy removed"))
-
-
-func _repo_card(r: Dictionary) -> Control:
-	var rid := str(r["id"])
-	var st := str(r["status"])
-	var col: Color = {"connected": AmTheme.col("MINT"), "failed": AmTheme.col("ERROR")}.get(st, AmTheme.col("WARN"))
-	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, Color(col, 0.55), 1, 14))
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 6)
-	card.add_child(v)
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 10)
-	v.add_child(top)
-	var n := Label.new()
-	n.text = "⎇ " + str(r["name"])
-	n.add_theme_font_size_override("font_size", 16)
-	n.add_theme_font_override("font", AmTheme.ui_font(650))
-	top.add_child(n)
-	var chip := Label.new()
-	chip.text = {"connected": "● connected", "failed": "● the key does not work", "waiting": "● waiting for the key on the repository"}.get(st, st)
-	chip.add_theme_color_override("font_color", col)
-	chip.add_theme_font_size_override("font_size", 12)
-	chip.size_flags_horizontal = SIZE_EXPAND_FILL
-	top.add_child(chip)
-	top.add_child(_small("New session on it", func() -> void:
-		await _open_new()
-		for i in f_repo.item_count:
-			if str(f_repo.get_item_metadata(i)) == rid:
-				f_repo.select(i)
-				f_repo.item_selected.emit(i)
-		f_name.text = str(r["name"])))
-	var meta := _muted("%s   ·   key %s   ·   added %s%s" % [r["url"], r["fingerprint"], _date(float(r["created"])), ("   ·   last used " + _date(float(r["last_used"]))) if float(r["last_used"]) > 0 else ""])
-	v.add_child(_repo_folder_row(r))
-	meta.add_theme_font_size_override("font_size", 12)
-	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	v.add_child(meta)
-	if str(r["message"]) != "":
-		var m := Label.new()
-		m.text = str(r["message"])
-		m.add_theme_color_override("font_color", col)
-		m.add_theme_font_size_override("font_size", 12)
-		m.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		v.add_child(m)
-	var key := LineEdit.new()
-	key.text = str(r["public_key"])
-	key.editable = false
-	key.add_theme_font_override("font", font)
-	key.add_theme_font_size_override("font_size", 11)
-	key.tooltip_text = "The PUBLIC key: safe to copy. The private key never leaves Agent Manager's data folder."
-	v.add_child(key)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	v.add_child(row)
-	var pub := str(r["public_key"])
-	row.add_child(_small("Copy the public key", func() -> void:
-		DisplayServer.clipboard_set(pub)
-		_toast("Public key copied: add it as a deploy key on the repository")))
-	if str(r["deploy_keys_page"]) != "":
-		var page := str(r["deploy_keys_page"])
-		row.add_child(_small("Open GitHub's Deploy keys page", func() -> void: OS.shell_open(page)))
-	row.add_child(_small("Check", func() -> void:
-		var c := await engine.call_api("POST", "/repos/%s/check" % rid, {})
-		_toast("%s: %s" % [r["name"], c.get("status", c.get("error", ""))])
-		await _load_repos()))
-	row.add_child(_small("Rotate the key", func() -> void:
-		_confirm("Make a new key for %s? The old one stops being used here; delete it on the repository." % r["name"], func() -> void:
-			await engine.call_api("POST", "/repos/%s/rotate" % rid, {})
-			await _load_repos())))
-	row.add_child(_small("Disconnect", func() -> void:
-		_confirm("Disconnect %s? Its key is deleted here (delete it on the repository too). Its sessions stay in History." % r["name"], func() -> void:
-			var d := await engine.call_api("POST", "/repos/%s/disconnect" % rid, {})
-			_toast(str(d.get("reminder", d.get("error", ""))))
-			await _load_repos())))
-	var sess: Array = r.get("sessions", [])
-	if not sess.is_empty():
-		var l := _muted("Sessions on it: " + ", ".join(sess.map(func(x): return str(x["name"]) + (" (archived)" if int(x["archived"]) == 1 else ""))))
-		l.add_theme_font_size_override("font_size", 12)
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		v.add_child(l)
-	return card
 
 
 func _confirm(text: String, done: Callable) -> void:
