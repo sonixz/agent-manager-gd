@@ -98,7 +98,17 @@ var last_spoken := ""
 var voice_overlay: PanelContainer
 var voice_label: Label
 var voice_meter: ProgressBar
-var voice_kept := {}            # a recording that could not be written down, kept to be sent again: speech is never lost
+var voice_kept: Array = []      # pieces of a recording that could not be written down, kept to be tried again: speech is never lost
+var voice_text: TextEdit        # the dictation box: what was said, put together; Enter sends all of it
+var voice_live: Label           # the phrase being heard or written
+var voice_hint: Label
+var earlier_menu: PopupMenu
+var take := {}                  # the dictation being heard or written: mode, texts (one per piece), pending, ended, failed, cost
+var earlier: Array = []         # what was sent or emptied before, newest first (kept on this computer)
+var send_when_written := false  # Enter was pressed while the last words were still being written
+var draft_cost := 0.0           # what the writing of the box's text cost so far (shown in its title)
+const DRAFT_FILE := "user://dictation-draft.txt"
+const EARLIER_FILE := "user://dictation-earlier.json"
 const VOICE_MAX_SECONDS := 300  # a key release that got lost (the window lost the focus) must not record for ever
 var keys_list: VBoxContainer
 var usage_box: VBoxContainer
@@ -566,7 +576,7 @@ func _restyle() -> void:
 	# Coloured once when the window was built, these kept the theme the app had started with: the voice panel (F8, F9)
 	# stayed neon on the green theme, and three dialog texts kept the old text colour.
 	if voice_overlay:
-		voice_overlay.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL_2"), 14, AmTheme.col("MINT"), 1, 14))
+		_style_voice_box()
 	if read_text:
 		read_text.add_theme_color_override("default_color", AmTheme.col("TEXT"))
 	if perm_info:
@@ -1852,6 +1862,8 @@ func short_path(p: String) -> String:
 
 
 func _render_header() -> void:
+	if voice_overlay and voice_overlay.visible and not dictation.recording:
+		_box_title()  # the box says for which session it is: it follows the selection
 	var s := _session(selected)
 	header_name.text = str(s.get("name", "Agent Manager GD"))
 	var meta := ""
@@ -2476,6 +2488,9 @@ func _open_finish(id: String) -> void:
 
 
 # ------------------------------------------------------------------ voice (Loop 10)
+## The dictation box (Loop 34): a small see-through panel at the bottom. While the key is held, what is said appears
+## in it phrase by phrase; on release it joins the text of the box, which is saved on this computer and can be
+## corrected. Nothing goes to an agent until the owner presses Enter there: then all of it is sent.
 func _build_voice_overlay(area: Control) -> void:
 	voice_overlay = PanelContainer.new()
 	voice_overlay.set_anchors_preset(PRESET_CENTER_BOTTOM)
@@ -2483,93 +2498,334 @@ func _build_voice_overlay(area: Control) -> void:
 	voice_overlay.grow_vertical = GROW_DIRECTION_BEGIN
 	voice_overlay.position.y = -40
 	voice_overlay.visible = false
-	voice_overlay.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL_2"), 14, AmTheme.col("MINT"), 1, 14))
 	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
 	voice_overlay.add_child(v)
-	voice_label = Label.new()
-	voice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	voice_label.add_theme_font_size_override("font_size", 15)
-	v.add_child(voice_label)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
+	v.add_child(top)
+	voice_label = Label.new()  # what the box is doing, and for which session
+	voice_label.add_theme_font_size_override("font_size", 13)
+	voice_label.size_flags_horizontal = SIZE_EXPAND_FILL
+	voice_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	voice_label.custom_minimum_size = Vector2(10, 0)
+	top.add_child(voice_label)
+	top.add_child(_small("Earlier", _draft_earlier, "What you sent or emptied before: bring one back into the box"))
+	top.add_child(_small("Empty", _draft_empty, "Empty the box; what it held goes to Earlier"))
+	top.add_child(_small("✕", _box_hide, "Hide the box; its text is kept (Esc)"))
 	voice_meter = ProgressBar.new()
-	voice_meter.custom_minimum_size = Vector2(360, 6)
+	voice_meter.custom_minimum_size = Vector2(720, 4)
 	voice_meter.show_percentage = false
 	voice_meter.max_value = 1.0
 	v.add_child(voice_meter)
+	voice_text = TextEdit.new()
+	voice_text.custom_minimum_size = Vector2(720, 104)
+	voice_text.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	voice_text.placeholder_text = "Hold %s and speak. What you say is put together here; Enter sends all of it to the session." % key_text("dictate")
+	voice_text.add_theme_font_size_override("font_size", 15)
+	voice_text.text_changed.connect(_draft_save)
+	voice_text.gui_input.connect(_box_keys)
+	v.add_child(voice_text)
+	voice_live = Label.new()  # the phrase being heard or written, not in the text yet
+	voice_live.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	voice_live.custom_minimum_size = Vector2(720, 0)
+	voice_live.add_theme_font_size_override("font_size", 14)
+	voice_live.visible = false
+	v.add_child(voice_live)
+	var foot := HBoxContainer.new()
+	v.add_child(foot)
+	voice_hint = Label.new()
+	voice_hint.text = "Enter sends it all  ·  Shift+Enter a new line  ·  Esc hides  ·  %s adds more" % key_text("dictate")
+	voice_hint.add_theme_font_size_override("font_size", 12)
+	voice_hint.size_flags_horizontal = SIZE_EXPAND_FILL
+	foot.add_child(voice_hint)
+	foot.add_child(_small("Send", _draft_send, "Send all of it to the selected session (Enter)"))
 	area.add_child(voice_overlay)
+	earlier_menu = PopupMenu.new()
+	earlier_menu.index_pressed.connect(func(i: int) -> void: _draft_add(str(earlier[i]["text"])))
+	add_child(earlier_menu)
+	_style_voice_box()
+	_draft_load()
+	dictation.piece.connect(_on_piece)
 	dictation.level.connect(func(x: float) -> void:
 		voice_meter.value = lerpf(voice_meter.value, x * 3.0, 0.4)
-		# how long it has been listening, so a long dictation shows it is still heard; and never for ever
-		var s := (Time.get_ticks_msec() - dictation.started_ms) / 1000
-		voice_meter.tooltip_text = "%d:%02d" % [s / 60, s % 60]
-		if voice_label.text.begins_with("🎙"):
-			voice_label.text = voice_label.text.get_slice("   ·   ", 0) + "   ·   %d:%02d" % [s / 60, s % 60]
-		if s >= VOICE_MAX_SECONDS and dictation.recording:
-			_toast("Stopped listening after %d minutes: it is being written down" % (VOICE_MAX_SECONDS / 60))
+		_box_title()
+		if dictation.recording and (Time.get_ticks_msec() - dictation.started_ms) / 1000 >= VOICE_MAX_SECONDS:
+			_toast("Stopped listening after %d minutes" % (VOICE_MAX_SECONDS / 60))
 			_voice_stop())
 
 
+## A little see-through, so the terminal behind it is still there. Coloured again at every theme change.
+func _style_voice_box() -> void:
+	var st := AmTheme.box(Color(AmTheme.col("PANEL_2"), 0.66), 14, Color(AmTheme.col("MINT"), 0.7), 1, 12)
+	st.shadow_color = Color(0, 0, 0, 0.30 if not AmTheme.is_light() else 0.12)
+	st.shadow_size = 14
+	voice_overlay.add_theme_stylebox_override("panel", st)
+	var field := AmTheme.box(Color(AmTheme.col("BG"), 0.30), 8, Color(AmTheme.col("BORDER"), 0.5), 1, 8)
+	for state in ["normal", "focus", "read_only"]:
+		voice_text.add_theme_stylebox_override(state, field)
+	voice_text.add_theme_color_override("font_color", AmTheme.col("TEXT"))
+	voice_text.add_theme_color_override("font_placeholder_color", AmTheme.col("FAINT"))
+	voice_text.add_theme_color_override("background_color", Color(0, 0, 0, 0))
+	voice_label.add_theme_color_override("font_color", AmTheme.col("MUTED"))
+	voice_live.add_theme_color_override("font_color", AmTheme.col("INFO"))
+	voice_hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+
+
+## The line at the top of the box: listening (for whom, since when), writing, or how much text waits.
+func _box_title() -> void:
+	var to := str(_session(selected).get("name", ""))
+	var command := str(take.get("mode", "")) == "command"
+	if dictation.recording:
+		var s := (Time.get_ticks_msec() - dictation.started_ms) / 1000
+		var what := "a command (« approve … », « go to … », « who is waiting? »)" if command else (("« %s »" % to) if to != "" else "the box")
+		voice_label.text = "●  Listening for %s   ·   %d:%02d   ·   release %s" % [what, s / 60, s % 60, key_text("command" if command else "dictate")]
+	elif int(take.get("pending", 0)) > 0:
+		voice_label.text = "Writing it down…" + ("   ·   it is sent as soon as it is written" if send_when_written else "")
+	else:
+		var words := voice_text.text.split(" ", false).size() if voice_text.text.strip_edges() != "" else 0
+		voice_label.text = "Dictation%s   ·   %d word%s%s" % [(" for « %s »" % to) if to != "" else "", words, "" if words == 1 else "s", ("   ·   ≈ $%.4f" % draft_cost) if draft_cost > 0.0 and words > 0 else ""]
+
+
+func _box_show(keys: bool) -> void:
+	voice_overlay.visible = true
+	voice_overlay.reset_size()
+	_box_title()
+	if keys:
+		voice_text.grab_focus()
+
+
+func _box_hide() -> void:
+	voice_overlay.visible = false
+	if terms.has(selected) and is_instance_valid(terms[selected]):
+		terms[selected].grab_focus()
+
+
+## Enter sends it all, Shift+Enter is a new line, Esc hides the box (its text is kept).
+func _box_keys(e: InputEvent) -> void:
+	if not (e is InputEventKey and e.pressed):
+		return
+	if e.keycode in [KEY_ENTER, KEY_KP_ENTER]:
+		voice_text.accept_event()
+		if e.shift_pressed:
+			voice_text.insert_text_at_caret("\n")
+			_draft_save()
+		elif not e.echo:
+			_draft_send()
+	elif e.keycode == KEY_ESCAPE:
+		voice_text.accept_event()
+		_box_hide()
+
+
 func _voice_start() -> void:
-	if dictation.recording or (voice_mode == "dictate" and (selected == "" or not terms.has(selected))):
+	if dictation.recording:
 		return
 	if not dictation.available():
 		_toast("No microphone found")
 		return
+	take = {"mode": voice_mode, "texts": [], "pending": 0, "ended": false, "failed": [], "cost": 0.0}
 	dictation.start()
-	if voice_mode == "command":
-		voice_label.text = "🎙  A command…  (« approve Themes », « go to Docs », « who is waiting? »)  release %s" % key_text("command")
-	else:
-		voice_label.text = "🎙  Listening to you for « %s »…  release %s to write it" % [_session(selected).get("name", ""), key_text("dictate")]
-	voice_overlay.visible = true
-	voice_overlay.reset_size()
+	voice_live.text = "…"
+	voice_live.visible = true
+	_box_show(false)  # shown without taking the keyboard: the key is still held
 
 
 func _voice_stop() -> void:
 	if not dictation.recording:
 		return
-	var rec := dictation.stop()
-	if float(rec["seconds"]) < 0.4:
-		voice_overlay.visible = false
-		return
-	await _write_down({"wav": rec["wav"], "seconds": rec["seconds"], "target": selected, "mode": voice_mode})
+	var t := take
+	dictation.stop()  # what is left comes as the last piece
+	t["ended"] = true
+	_take_show(t)
+	_box_title()
+	if int(t["pending"]) == 0:
+		await _take_done(t)
 
 
-## Sends a recording to be written down, then uses the text. The longer the speech, the longer it takes: the call
-## waits as long as the engine itself may (it gives the transcription 90 s). Before, it gave up after 10 s, so a long
-## dictation was thrown away while it was still being written. A recording that fails is kept, to be sent again.
-func _write_down(rec: Dictionary) -> void:
-	var secs := float(rec["seconds"])
-	voice_label.text = "Writing it down…" + ("   (%d s of speech: a moment)" % int(secs) if secs > 15.0 else "")
-	voice_overlay.visible = true
-	voice_overlay.reset_size()
-	var r := await engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(rec["wav"]), "seconds": secs}, true, 150.0)
-	voice_overlay.visible = false
+## A piece of the recording, cut at a pause. It is written down at once, with the words said just before, and shown
+## under the text while the owner still speaks. The pieces of one dictation may come back in any order.
+func _on_piece(i: int, wav: PackedByteArray, seconds: float) -> void:
+	var t := take
+	var texts: Array = t["texts"]
+	while texts.size() <= i:
+		texts.append(null)  # null: being written
+	t["pending"] = int(t["pending"]) + 1
+	_take_show(t)
+	var before := (voice_text.text + " " + _take_text(t)).strip_edges().right(300)
+	var r := await engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(wav), "seconds": seconds, "context": before}, true, 150.0)
+	t["pending"] = int(t["pending"]) - 1
 	if r.has("error"):
-		voice_kept = rec
-		var why := str(r["error"])
+		texts[i] = ""
+		(t["failed"] as Array).append({"wav": wav, "seconds": seconds})
+		t["error"] = str(r["error"])
+	else:
+		texts[i] = str(r.get("text", "")).strip_edges()
+		t["cost"] = float(t["cost"]) + float(r.get("cost_usd", 0))
+	_take_show(t)
+	_box_title()
+	if t["ended"] and int(t["pending"]) == 0:
+		await _take_done(t)
+
+
+func _take_text(t: Dictionary) -> String:
+	return " ".join((t["texts"] as Array).filter(func(x): return x is String and x != ""))
+
+
+func _take_show(t: Dictionary) -> void:
+	if not is_same(t, take):
+		return
+	var writing := dictation.recording or int(t["pending"]) > 0
+	voice_live.text = (_take_text(t) + (" …" if writing else "")).strip_edges()
+	voice_live.visible = voice_live.text != ""
+	voice_overlay.reset_size()
+
+
+## The key is released and every piece is written. A command runs; anything else joins the text of the box. Nothing
+## goes to the agent here: the owner reads, corrects, adds more, and Enter sends it all.
+func _take_done(t: Dictionary) -> void:
+	var said := _take_text(t).strip_edges()
+	if is_same(t, take):
+		voice_live.text = ""
+		voice_live.visible = false
+	var failed: Array = t["failed"]
+	if not failed.is_empty():  # never lost: kept to be written down again
+		voice_kept.append_array(failed)
+		var why := str(t.get("error", "it could not be written down"))
 		status_label.text = "Voice: " + why
-		_toast("%s. Your recording is kept: %s › Send my last recording again" % [why, key_text("palette")])
+		_toast("%s. That part of the recording is kept: %s › Send my last recording again" % [why, key_text("palette")])
 		if why.contains("Keys"):
 			set_view("keys")
-		return
-	voice_kept = {}
-	if str(rec["mode"]) == "command":
-		await run_voice_command(str(r.get("text", "")))
-	else:
-		on_transcribed(str(rec["target"]), str(r.get("text", "")), float(r.get("cost_usd", 0)))
-
-
-## The dictated text goes into the session's prompt as a paste: never with Enter. The owner reads, then sends.
-func on_transcribed(id: String, text: String, cost: float) -> void:
-	if text.strip_edges() == "":
+	elif said == "" and not (t["texts"] as Array).is_empty():
 		_toast("Nothing was heard in that recording")
+	if said != "":
+		draft_cost += float(t["cost"])
+		if str(t["mode"]) == "command":
+			await run_voice_command(said)
+		else:
+			_draft_add(said)
+	_box_title()
+	if dictation.recording or int(take.get("pending", 0)) > 0:
 		return
-	if not terms.has(id):  # its terminal closed meanwhile: the words are not lost
-		DisplayServer.clipboard_set(text.strip_edges())
-		_toast("That session's terminal is closed: what you said is in the clipboard")
+	if voice_text.text.strip_edges() == "":
+		_box_hide()
+	elif send_when_written:
+		send_when_written = false
+		await _draft_send()
+
+
+## The pieces that could not be written down are tried again, in order; what comes back joins the box.
+func _resend_kept() -> void:
+	var kept := voice_kept
+	voice_kept = []
+	_box_show(false)
+	voice_label.text = "Writing it down…"
+	for k in kept:
+		var r := await engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(k["wav"]), "seconds": k["seconds"], "context": voice_text.text.right(300)}, true, 150.0)
+		if r.has("error"):
+			voice_kept.append(k)
+			status_label.text = "Voice: " + str(r["error"])
+		elif str(r.get("text", "")).strip_edges() != "":
+			_draft_add(str(r["text"]).strip_edges())
+	if not voice_kept.is_empty():
+		_toast("%s. It is still kept: try again later" % status_label.text)
+	_box_title()
+
+
+## What was said joins the text of the box, which takes the keyboard: Enter sends, typing corrects.
+func _draft_add(text: String) -> void:
+	var cur := voice_text.text
+	voice_text.text = cur + ("" if cur == "" or cur.ends_with("\n") or cur.ends_with(" ") else " ") + text.strip_edges()
+	_draft_save()
+	_box_show(true)
+	var last := voice_text.get_line_count() - 1
+	voice_text.set_caret_line(last)
+	voice_text.set_caret_column(voice_text.get_line(last).length())
+
+
+## Enter in the box: all of it goes to the selected session. To an agent it is sent: the owner has read it here and
+## pressed Enter. Into a shell it is only written: a spoken line never runs as a command by itself.
+func _draft_send() -> void:
+	var text := voice_text.text.strip_edges()
+	if text == "":
 		return
-	terms[id].paste_text(text.strip_edges())
-	terms[id].grab_focus()
-	_toast("Dictated into %s: read it, then Enter%s" % [_session(id).get("name", ""), ("   (≈ $%.4f)" % cost) if cost > 0 else ""])
+	if dictation.recording or int(take.get("pending", 0)) > 0:
+		send_when_written = true  # the last words are still being written: sent as soon as they are there
+		_box_title()
+		return
+	var id := selected
+	var s := _session(id)
+	if id == "" or s.is_empty() or str(s.get("state", "")) != "running":
+		_toast("Select a running session first: your text stays in the box")
+		return
+	var shell := str(s.get("tool", "")) == "shell"
+	var open: bool = terms.has(id) and is_instance_valid(terms[id]) and terms[id].is_running()
+	if open:
+		terms[id].paste_text(text)
+		if not shell:
+			await get_tree().create_timer(0.25).timeout  # the agent's prompt takes the paste in, then Enter
+			var r := await engine.call_api("POST", "/sessions/%s/keys" % id, {"keys": ["Enter"]})
+			if r.has("error"):
+				_toast("It is in %s's prompt, but Enter did not go: press it there" % s["name"])
+	elif shell:
+		_toast("Open that shell first: your text stays in the box")
+		return
+	else:
+		var r := await engine.call_api("POST", "/sessions/%s/send" % id, {"text": text.replace("\n", " ")})
+		if r.has("error"):
+			_toast("%s: your text stays in the box" % r["error"])
+			return
+	_earlier_push(text, str(s.get("name", "")))
+	voice_text.text = ""
+	draft_cost = 0.0
+	_draft_save()
+	_box_hide()
+	_toast(("Written into %s: read it, then Enter there" if shell else "Sent to %s") % s["name"])
+
+
+func _draft_empty() -> void:
+	if voice_text.text.strip_edges() != "":
+		_earlier_push(voice_text.text.strip_edges(), "")
+	voice_text.text = ""
+	draft_cost = 0.0
+	_draft_save()
+	voice_text.grab_focus()
+
+
+## What was sent or emptied before, newest first: choosing one brings it back into the box.
+func _draft_earlier() -> void:
+	if earlier.is_empty():
+		_toast("Nothing earlier yet: what you send or empty is kept here")
+		return
+	earlier_menu.clear()
+	for e in earlier:
+		var line := str(e["text"]).replace("\n", " ")
+		earlier_menu.add_item((("→ %s:  " % e["to"]) if str(e.get("to", "")) != "" else "emptied:  ") + line.left(70) + ("…" if line.length() > 70 else ""))
+	earlier_menu.popup(Rect2i(Vector2i(get_global_mouse_position()), Vector2i.ZERO))
+
+
+func _earlier_push(text: String, to: String) -> void:
+	earlier.push_front({"text": text, "to": to, "at": Time.get_unix_time_from_system()})
+	earlier = earlier.slice(0, 20)
+	var f := FileAccess.open(EARLIER_FILE, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(earlier))
+
+
+## The text of the box lives in a file on this computer: closing the app, or a crash, never loses what was said.
+func _draft_save() -> void:
+	var f := FileAccess.open(DRAFT_FILE, FileAccess.WRITE)
+	if f:
+		f.store_string(voice_text.text)
+	_box_title()
+
+
+func _draft_load() -> void:
+	if FileAccess.file_exists(DRAFT_FILE):
+		voice_text.text = FileAccess.get_file_as_string(DRAFT_FILE)
+	if FileAccess.file_exists(EARLIER_FILE):
+		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(EARLIER_FILE))
+		if d is Array:
+			earlier = d
 
 
 # ------------------------------------------------------------------ voice commands and spoken status (Loop 11)
@@ -2601,11 +2857,8 @@ func run_voice_command(text: String) -> void:
 			await _open_new()
 			f_name.text = str(c.get("name", "")).capitalize()
 		_:
-			# not a command: what you said is for the agent, written into the active session like a dictation
-			if selected != "" and terms.has(selected) and text.strip_edges() != "":
-				on_transcribed(selected, text, 0.0)
-			else:
-				_toast("Heard « %s »: %s (select a session to write it there)" % [text, c.get("reason", "not a command")])
+			# not a command: what you said is dictation, it joins the text of the box
+			_draft_add(text)
 
 
 func _speak(text: String, force := false) -> void:
@@ -3799,7 +4052,7 @@ func open_palette() -> void:
 	items.append({"label": "Agent permissions", "hint": "every agent: level, file access, Claude Code's sandbox, git rights", "run": set_view.bind("permissions")})
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
 	items.append({"label": "Sandboxes", "hint": "cloud sandboxes: manager, connections, costs", "run": set_view.bind("sandboxes")})
-	items.append({"label": "Dictate (hold %s)" % key_text("dictate"), "hint": "speak into the active session; you press Enter", "run": func() -> void: _toast("Hold %s and speak, release to write it into the prompt" % key_text("dictate"))})
+	items.append({"label": "Dictate (hold %s)" % key_text("dictate"), "hint": "what you say is put together in the box; Enter there sends it all", "run": func() -> void: _toast("Hold %s and speak. Release, read it in the box, then Enter sends it all" % key_text("dictate"))})
 	items.append({"label": "Voice command (hold %s)" % key_text("command"), "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold %s and say a command" % key_text("command"))})
 	items.append({"label": "Shortcuts", "hint": "change the keyboard shortcuts", "run": set_view.bind("shortcuts")})
 	items.append({"label": "Connect other tools (MCP)", "hint": "Agent Manager's MCP for Claude Code, Codex, any MCP client", "run": set_view.bind("connect")})
@@ -3811,8 +4064,9 @@ func open_palette() -> void:
 	for v in [["focus", "Focus view", "Ctrl+Shift+F"], ["grid", "Grid view", "Ctrl+Shift+G"], ["board", "Board view", "Ctrl+Shift+B"]]:
 		items.append({"label": v[1], "hint": v[2], "run": set_view.bind(v[0])})
 	items.append({"label": "List: tiles" if density == "line" else "List: one session per line", "hint": "the session list on the left", "run": set_list.bind("tile" if density == "line" else "line")})
+	items.append({"label": "Dictation box", "hint": "what you dictated, put together; Enter sends all of it", "run": func() -> void: _box_show(true)})
 	if not voice_kept.is_empty():
-		items.append({"label": "Send my last recording again", "hint": "%d s of speech that could not be written down" % int(voice_kept.get("seconds", 0)), "run": func() -> void: _write_down(voice_kept)})
+		items.append({"label": "Send my last recording again", "hint": "%d piece%s that could not be written down" % [voice_kept.size(), "" if voice_kept.size() == 1 else "s"], "run": _resend_kept})
 	for t in AmTheme.THEMES:
 		items.append({"label": "Theme: " + AmTheme.LABELS[t], "hint": "", "run": set_theme_name.bind(t)})
 	if selected != "":

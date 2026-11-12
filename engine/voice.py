@@ -30,12 +30,26 @@ def _multipart(fields: dict, file_bytes: bytes) -> tuple[bytes, str]:
     return b"".join(parts), b
 
 
-def transcribe(wav: bytes, key: str, seconds: float, language: str = "") -> dict:
+PROMPT = "Dictée pour un agent de code. Ponctuation et accents français. Noms de fichiers et de commandes exacts."
+_fake_turn = 0
+
+
+def prompt_for(context: str) -> str:
+    """What the model is told with the audio. A dictation comes in pieces, cut at each pause: the words said just
+    before go with each piece, so a sentence that spans two pieces keeps its spelling, its names and its punctuation."""
+    said = " ".join((context or "").split())[-300:]
+    return PROMPT + (" Ce qui vient d'être dit juste avant, à ne pas répéter : « " + said + " »" if said else "")
+
+
+def transcribe(wav: bytes, key: str, seconds: float, language: str = "", context: str = "") -> dict:
     fake = os.environ.get("AGMGD_VOICE_FAKE")
     if fake:
         import time
+        global _fake_turn
         time.sleep(float(os.environ.get("AGMGD_VOICE_FAKE_DELAY") or 0))  # checks: a long dictation takes a while to write down
-        return {"text": fake, "model": "fake", "cost_usd": 0.0}
+        said = [p.strip() for p in fake.split("|")]  # checks: « a | b | c » gives one phrase per piece, in turn
+        _fake_turn += 1
+        return {"text": said[(_fake_turn - 1) % len(said)], "model": "fake", "cost_usd": 0.0}
     if not key:
         raise ValueError("no OpenAI key yet: paste one in Keys to use the voice")
     if len(wav) > MAX_BYTES or len(wav) < 1000:
@@ -44,8 +58,7 @@ def transcribe(wav: bytes, key: str, seconds: float, language: str = "") -> dict
     last = ""
     denied: list[str] = []
     for model in models:
-        fields = {"model": model, "response_format": "json",
-                  "prompt": "Dictée pour un agent de code. Ponctuation et accents français. Noms de fichiers et de commandes exacts."}
+        fields = {"model": model, "response_format": "json", "prompt": prompt_for(context)}
         if language:
             fields["languages[]" if model == "gpt-transcribe" else "language"] = language
         body, boundary = _multipart(fields, wav)

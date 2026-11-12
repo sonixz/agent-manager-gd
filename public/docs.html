@@ -292,22 +292,27 @@
 
         <h2 id="voice">Voice</h2>
         <ul>
-          <li><b>Dictation</b>: hold <kbd>F8</kbd> and speak; on release, the text is written into the active session's
-            prompt like a paste, never with <kbd>Enter</kbd>: you read it and send it. Transcription by OpenAI with your
-            own key (about $0.003 a minute, shown).</li>
+          <li><b>Dictation</b>: hold <kbd>F8</kbd> and speak. A small see-through box opens at the bottom: what you say
+            is written in it phrase by phrase, a moment after each pause. When you release the key the text stays in the
+            box: read it, correct it, hold <kbd>F8</kbd> again to add more. <b><kbd>Enter</kbd> sends all of it</b> to
+            the selected session; <kbd>Shift</kbd>+<kbd>Enter</kbd> is a new line, <kbd>Esc</kbd> hides the box and
+            keeps its text. Nothing goes to an agent before your Enter. Into a shell it is only written at the prompt: a
+            spoken line never runs by itself. Transcription by OpenAI with your own key (about $0.003 a minute, shown
+            in the box).</li>
           <li><b>Commands</b>: hold <kbd>F9</kbd> and say <i>approve …</i>, <i>refuse …</i>, <i>go to …</i>, <i>grid view</i>,
             <i>who is waiting?</i>, <i>wrap up …</i>, <i>new session …</i>, in English or French. Understood by plain
-            rules, no model. Approving, refusing and wrapping up always ask first. What is not a command is dictation for
-            the active session.</li>
+            rules, no model. Approving, refusing and wrapping up always ask first. What is not a command is dictation: it
+            joins the text of the box.</li>
           <li><b>Small sounds, no voice</b>: a soft short blip when an agent waits for you, an even quieter tick when
             one finishes; <b>♪</b> at the top right mutes them. The voice only answers when you ask « who waits for me? ».</li>
         </ul>
         <p>If your OpenAI project does not allow a transcription model, Agent Manager tries the next one
           (gpt-4o-transcribe, gpt-4o-mini-transcribe, whisper-1…) and says what to allow in the project's limits.</p>
-        <p><b>Long dictations</b>: the panel shows how long it has been listening; the longer you speak, the longer the
-          writing takes, and Agent Manager waits for it. What you said is never lost: if it cannot be written down, the
-          recording is kept and <b>Ctrl+K › Send my last recording again</b> sends it once more; if the session's
-          terminal closed meanwhile, the text goes to the clipboard. Listening stops by itself after 5 minutes.</p>
+        <p><b>What you say is never lost</b>: the box's text is saved on your computer and is still there after you
+          close the app; <b>Earlier</b> brings back what you sent or emptied (the last twenty). A long dictation is
+          written down piece by piece, so it never waits for one long transcription. A piece that cannot be written
+          down is kept: <b>Ctrl+K › Send my last recording again</b>. The box shows how long it has been listening, and
+          listening stops by itself after 5 minutes. <b>Ctrl+K › Dictation box</b> opens the box at any time.</p>
 
         <h2 id="usage">Usage</h2>
         <p><b>◐ › Usage</b>: tokens per session, per day and per tool, read from the agents' own logs on this computer

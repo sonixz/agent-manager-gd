@@ -80,7 +80,7 @@
         </a>
         <a class="guide-card" href="#voice">
           <img src="assets/howto/voice/04.webp" width="1280" height="800" loading="lazy" alt="">
-          <span><b>Talk to your agents</b><span>Dictate into a terminal with F8, and drive the app with F9: approve, go to a session, ask who waits.</span><small>4 min · 4 steps</small></span>
+          <span><b>Talk to your agents</b><span>Dictate with F8 into a box you send with Enter, and drive the app with F9: approve, go to a session, ask who waits.</span><small>4 min · 4 steps</small></span>
         </a>
         <a class="guide-card" href="#agents">
           <img src="assets/howto/agents/03.webp" width="1280" height="800" loading="lazy" alt="">
@@ -311,7 +311,7 @@
       <article class="guide" id="voice">
         <p class="guide-meta"><span>Voice</span><span>4 min</span><span>4 steps</span><span class="badge" title="Only the app matters in this guide">App only</span></p>
         <h2>Talk to your agents</h2>
-        <p class="goal">Dictate into a terminal with F8, and drive the app with F9: approve, go to a session, ask who waits.</p>
+        <p class="goal">Dictate with F8 into a box you send with Enter, and drive the app with F9: approve, go to a session, ask who waits.</p>
         <div class="note"><b>You need</b><ul><li>An OpenAI key in <b>◐ › Keys</b>, for the transcription (<a href="docs.html#keys">Keys</a>)</li></ul></div>
         <ol class="steps">
           <li>
@@ -319,8 +319,8 @@
             <figure class="shot"><img src="assets/howto/voice/01.webp" width="1280" height="800" loading="lazy" alt="Talk to your agents, step 1 of 4: On Windows it is encrypted for your Windows user (DPAPI); on Linux, the file is readable by you only. It is never shown again, never written to a log. Your Second Brain keys are listed below it."></figure>
           </li>
           <li>
-            <div class="step-text"><p class="do">In a session, hold <kbd>F8</kbd> and speak. Release it when you are done.</p><p class="see">A listening overlay with a level meter. On release, what you said is written into the terminal, as if you had typed it: read it, then press <kbd>Enter</kbd>.</p></div>
-            <figure class="shot"><img src="assets/howto/voice/02.webp" width="1280" height="800" loading="lazy" alt="Talk to your agents, step 2 of 4: A listening overlay with a level meter. On release, what you said is written into the terminal, as if you had typed it: read it, then press Enter."></figure>
+            <div class="step-text"><p class="do">In a session, hold <kbd>F8</kbd> and speak. Release it when you are done.</p><p class="see">A small box at the bottom shows what you say, phrase by phrase. On release the text stays in the box: read it, correct it, hold <kbd>F8</kbd> again to add more, then press <kbd>Enter</kbd>: all of it goes to the session. Nothing is sent before your Enter.</p></div>
+            <figure class="shot"><img src="assets/howto/voice/02.webp" width="1280" height="800" loading="lazy" alt="Talk to your agents, step 2 of 4: A small box at the bottom shows what you say, phrase by phrase. On release the text stays in the box: read it, correct it, hold F8 again to add more, then press Enter: all of it goes to the session. Nothing is sent before your Enter."></figure>
           </li>
           <li>
             <div class="step-text"><p class="do">Hold <kbd>F9</kbd> and give a command: <span class="say">approve Flaky tests</span>.</p><p class="see">Agent Manager asks before acting, with what it heard: « Approve “Flaky tests”? ». Other commands: <i>go to …</i>, <i>grid view</i>, <i>who is waiting</i>, <i>wrap up …</i>, <i>new session …</i>.</p></div>
@@ -331,7 +331,7 @@
             <figure class="shot"><img src="assets/howto/voice/04.webp" width="1280" height="800" loading="lazy" alt="Talk to your agents, step 4 of 4: The OK goes to that agent, and it carries on. A soft sound tells you when an agent waits for you; ♪ at the top right mutes it."></figure>
           </li>
         </ol>
-        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>Nothing is written after F8.</b> Check the key in <b>◐ › Keys</b>, and that the microphone is allowed for Agent Manager. The toast says what went wrong.</li><li><b>F9 typed my words into the terminal.</b> When what you say is not a command, it is dictation: it goes to the active session.</li></ul></details>
+        <details class="trouble" open><summary>If it does not work</summary><ul><li><b>Nothing is written after F8.</b> Check the key in <b>◐ › Keys</b>, and that the microphone is allowed for Agent Manager. The toast says what went wrong.</li><li><b>F9 put my words in the box.</b> When what you say is not a command, it is dictation: it joins the text of the box, and <kbd>Enter</kbd> sends it.</li><li><b>I closed the box.</b> Its text is kept. <b>Ctrl+K › Dictation box</b> opens it again; <b>Earlier</b> brings back what you sent or emptied.</li></ul></details>
         <p class="guide-next">More in the Docs: <a href="docs.html#voice">Voice</a> · <a href="docs.html#keys">Keys</a></p>
       </article>
 

@@ -91,6 +91,39 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class VoicePiecesTest(unittest.TestCase):
+    """Loop 34: a dictation comes in pieces, cut at each pause; each piece is written down with what was said before."""
+
+    def test_a_piece_goes_out_with_the_words_said_just_before(self):
+        import io
+        from unittest import mock
+        from engine import voice
+        self.assertEqual(voice.prompt_for(""), voice.PROMPT)
+        told = voice.prompt_for("Ajoute une carte cadeau.\n   Elle ne prend jamais plus que son solde.")
+        self.assertTrue(told.startswith(voice.PROMPT))
+        self.assertIn("« Ajoute une carte cadeau. Elle ne prend jamais plus que son solde. »", told)
+        self.assertLess(len(voice.prompt_for("mot " * 2000)), len(voice.PROMPT) + 400)  # the last words only
+        sent = {}
+
+        def answer(req, timeout=0):
+            sent["body"] = req.data
+            return io.BytesIO(json.dumps({"text": "  et écris les tests avant le code. "}).encode())
+        with mock.patch("urllib.request.urlopen", answer), mock.patch.object(voice, "allowed_models", lambda k: ["gpt-transcribe"]), \
+                mock.patch.dict(os.environ, clear=False) as env:
+            env.pop("AGMGD_VOICE_FAKE", None)
+            out = voice.transcribe(b"\0" * 4000, "sk-test-not-real", 2.0, "", "Ajoute une carte cadeau.")
+        self.assertEqual(out["text"], "et écris les tests avant le code.")
+        self.assertIn("Ajoute une carte cadeau.".encode(), sent["body"])
+        self.assertNotIn(b"sk-test-not-real", sent["body"])  # the key travels in a header, never in the form
+
+    def test_the_fake_voice_of_the_checks_gives_one_phrase_per_piece(self):
+        from unittest import mock
+        from engine import voice
+        with mock.patch.dict(os.environ, {"AGMGD_VOICE_FAKE": "un | deux | trois"}), mock.patch.object(voice, "_fake_turn", 0):
+            said = [voice.transcribe(b"", "", 1.0)["text"] for _ in range(4)]
+        self.assertEqual(said, ["un", "deux", "trois", "un"])
+
+
 class VoiceErrorsTest(unittest.TestCase):
     def test_a_model_not_allowed_in_the_project_is_explained(self):
         import io

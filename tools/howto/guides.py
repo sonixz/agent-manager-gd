@@ -167,14 +167,15 @@ guide(
 
 guide(
     "voice", "Talk to your agents", "Voice", 4,
-    "Dictate into a terminal with F8, and drive the app with F9: approve, go to a session, ask who waits.",
+    "Dictate with F8 into a box you send with Enter, and drive the app with F9: approve, go to a session, ask who waits.",
     ["An OpenAI key in <b>◐ › Keys</b>, for the transcription (<a href=\"docs.html#keys\">Keys</a>)"],
     [("Open <b>◐ › Keys</b> and paste your OpenAI key.",
       "On Windows it is encrypted for your Windows user (DPAPI); on Linux, the file is readable by you only. It is "
       "never shown again, never written to a log. Your Second Brain keys are listed below it."),
      ("In a session, hold <kbd>F8</kbd> and speak. Release it when you are done.",
-      "A listening overlay with a level meter. On release, what you said is written into the terminal, as if you had "
-      "typed it: read it, then press <kbd>Enter</kbd>."),
+      "A small box at the bottom shows what you say, phrase by phrase. On release the text stays in the box: read "
+      "it, correct it, hold <kbd>F8</kbd> again to add more, then press <kbd>Enter</kbd>: all of it goes to the "
+      "session. Nothing is sent before your Enter."),
      ("Hold <kbd>F9</kbd> and give a command: <span class=\"say\">approve Flaky tests</span>.",
       "Agent Manager asks before acting, with what it heard: « Approve “Flaky tests”? ». Other commands: <i>go to "
       "…</i>, <i>grid view</i>, <i>who is waiting</i>, <i>wrap up …</i>, <i>new session …</i>."),
@@ -184,8 +185,10 @@ guide(
      ],
     [("Nothing is written after F8.", "Check the key in <b>◐ › Keys</b>, and that the microphone is allowed for "
       "Agent Manager. The toast says what went wrong."),
-     ("F9 typed my words into the terminal.", "When what you say is not a command, it is dictation: it goes to the "
-      "active session.")],
+     ("F9 put my words in the box.", "When what you say is not a command, it is dictation: it joins the text of "
+      "the box, and <kbd>Enter</kbd> sends it."),
+     ("I closed the box.", "Its text is kept. <b>Ctrl+K › Dictation box</b> opens it again; <b>Earlier</b> brings "
+      "back what you sent or emptied.")],
     [("Voice", "docs.html#voice"), ("Keys", "docs.html#keys")], real=False)
 
 guide(

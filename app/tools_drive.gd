@@ -464,10 +464,9 @@ func _run() -> void:
 			main.select(sid)
 			await wait(1.5)
 			# what F8 does, with a synthetic recording (no microphone on the virtual display)
-			main.voice_label.text = "🎙  Listening to you for « Cart refactor »…  release F8 to write it"
+			main._box_show(false)
+			main.voice_label.text = "●  Listening for « Cart refactor »   ·   0:03   ·   release F8"
 			main.voice_meter.value = 0.6
-			main.voice_overlay.visible = true
-			main.voice_overlay.reset_size()
 			await wait(0.5)
 			await shot("32-listening")
 			main.voice_overlay.visible = false
@@ -478,7 +477,7 @@ func _run() -> void:
 			var wav := Dictation.to_wav(frames, 44100.0)
 			report.append("wav bytes: %d (16 kHz mono, 1 s)" % wav.size())
 			var r: Dictionary = await main.engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(wav), "seconds": 1.0})
-			main.on_transcribed(sid, str(r.get("text", r.get("error", ""))), float(r.get("cost_usd", 0)))
+			main._draft_add(str(r.get("text", r.get("error", ""))))
 			await wait(1.5)
 			await shot("33-dictated")
 			var screen: String = main.terms[sid].get_screen_text()

@@ -259,43 +259,71 @@ func _run() -> void:
 			await wait(0.4)
 			await main.set_theme_name("forest")
 			await wait(0.6)
-			main.voice_label.text = "🎙  A command…  (« approve Themes », « go to Docs », « who is waiting? »)  release F9"
+			_hold("command")
 			main.voice_meter.value = 0.62
-			main.voice_overlay.visible = true
-			main.voice_overlay.reset_size()
 			await wait(0.6)
 			var box: StyleBoxFlat = main.voice_overlay.get_theme_stylebox("panel")
-			report.append("voice-theme: theme %s | the panel's border is the theme's own: %s | its background too: %s" % [
-				AmTheme.current, box.border_color.is_equal_approx(AmTheme.col("MINT")), box.bg_color.is_equal_approx(AmTheme.col("PANEL_2"))])
+			report.append("voice-theme: theme %s | the box's border is the theme's own: %s | its background too: %s" % [
+				AmTheme.current, Color(box.border_color, 1.0).is_equal_approx(AmTheme.col("MINT")), Color(box.bg_color, 1.0).is_equal_approx(AmTheme.col("PANEL_2"))])
 			await shot("voice-theme")
+			main.dictation.recording = false
+			main.voice_live.visible = false
 			main.voice_overlay.visible = false
-		"voice-long":  # a check: a long dictation, slow to write down, must reach the terminal (run with AGMGD_VOICE_FAKE=<text> AGMGD_VOICE_FAKE_DELAY=<s>)
+		"voice-box":  # Loop 34: the dictation box, from the first word to Enter. Run with AGMGD_VOICE_FAKE="one | two | three | four" (a small delay shows it writing)
 			main.select(made["Test runner"])
 			await wait(2.5)
 			await main.engine.call_api("POST", "/sessions/%s/send" % made["Test runner"], {"text": "clear"})
-			await wait(0.8)
-			var tone := PackedVector2Array()  # forty seconds of a quiet tone stand for forty seconds of speech
-			tone.resize(int(AudioServer.get_mix_rate()) * 40)
-			for i in tone.size():
-				var v := 0.1 * sin(i * 0.05)
-				tone[i] = Vector2(v, v)
-			main.voice_mode = "dictate"
-			main.dictation.frames = tone
-			main.dictation.recording = true
-			main.dictation.started_ms = Time.get_ticks_msec() - 40000
-			var began := Time.get_ticks_msec()
+			main.select(made["Checkout flow"])
+			await wait(2.0)
+			_hold("dictate")
+			await _say(2.5)
+			await _say(3.0)
+			await wait(1.5)
+			await _say(1.8, 0.0)  # the third phrase is still being said
+			report.append("voice-box, while speaking: %d pieces given, under the text: « %s »" % [main.dictation.pieces, main.voice_live.text])
+			await shot("voice-box-listening")
+			await _say(0.6)
 			await main._voice_stop()
-			var took := (Time.get_ticks_msec() - began) / 1000.0
-			await wait(1.0)
+			await wait(2.5)
+			var held: String = main.voice_text.text
+			report.append("voice-box, key released: the box holds « %s » | it has the keyboard: %s | saved on disk: %s | sent to the agent: no" % [
+				held, main.voice_text.has_focus(), FileAccess.get_file_as_string(main.DRAFT_FILE) == held])
+			await shot("voice-box-ready")
+			_hold("dictate")  # a second dictation adds to the first
+			await _say(2.2)
+			await main._voice_stop()
+			await wait(2.0)
+			report.append("voice-box, a second dictation: the box holds « %s »" % main.voice_text.text)
+			var all: String = main.voice_text.text
+			main.select(made["Test runner"])  # into a shell: written, never run
+			await wait(1.5)
+			await main._draft_send()
+			await wait(1.5)
 			var seen: Dictionary = await main.engine.call_api("GET", "/sessions/%s/preview?lines=14" % made["Test runner"])
-			var said := OS.get_environment("AGMGD_VOICE_FAKE")
-			report.append("voice-long: 40 s of speech, written down after %.0f s | it reached the terminal: %s | kept for another try: %s | status line: « %s »" % [
-				took, said != "" and str(seen.get("text", "")).contains(said.left(30)), not main.voice_kept.is_empty(), main.status_label.text])
+			report.append("voice-box, Enter with a shell selected: its prompt holds the text: %s | the box is empty and hidden: %s | kept in Earlier: %s" % [
+				str(seen.get("text", "")).replace("\n", "").contains(all.left(40)), main.voice_text.text == "" and not main.voice_overlay.visible, main.earlier.size()])
+			await shot("voice-box-sent")
+			main._draft_add(all)  # to an agent: sent
+			main.select(made["Checkout flow"])
+			await wait(1.5)
+			await main._draft_send()
+			await wait(1.0)
+			report.append("voice-box, Enter with an agent selected: the box is empty and hidden: %s | kept in Earlier: %s | status line: « %s »" % [
+				main.voice_text.text == "" and not main.voice_overlay.visible, main.earlier.size(), main.status_label.text])
+		"voice-long":  # a check: a long dictation whose writing is slow (AGMGD_VOICE_FAKE="a | b | c" AGMGD_VOICE_FAKE_DELAY=<s>): every phrase must arrive, in order
+			main.select(made["Checkout flow"])
+			await wait(2.5)
+			var began := Time.get_ticks_msec()
+			_hold("dictate")
+			for i in 6:
+				await _say(6.0)
+			await main._voice_stop()
+			while int(main.take.get("pending", 0)) > 0 and Time.get_ticks_msec() - began < 120000:
+				await wait(0.5)
+			await wait(1.0)
+			report.append("voice-long: 6 phrases, 40 s of speech, all written after %.0f s | the box holds « %s » | kept for another try: %d" % [
+				(Time.get_ticks_msec() - began) / 1000.0, main.voice_text.text, main.voice_kept.size()])
 			await shot("voice-long")
-			# the same request with the 10 s the app used to give it: what the owner got for a long dictation
-			began = Time.get_ticks_msec()
-			var old: Dictionary = await main.engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(Dictation.to_wav(tone, AudioServer.get_mix_rate())), "seconds": 40.0}, true, 10.0)
-			report.append("voice-long, with the old limit of 10 s: after %.0f s the app got « %s »" % [(Time.get_ticks_msec() - began) / 1000.0, str(old.get("error", old.get("text", "")))])
 		"sandbox-open":  # a check: « Deploy + agentic coding session » from the Sandboxes tab must end on the new session, opened
 			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
 			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
@@ -465,12 +493,14 @@ func _run() -> void:
 		"voice":
 			main.select(made["Checkout flow"])
 			await wait(2.5)
-			main.voice_label.text = "🎙  Listening to you for « Checkout flow »…  release F8 to write it"
+			_hold("dictate")
+			main.take["texts"] = ["Add a gift card to the checkout, redeemed at payment."]
+			main._take_show(main.take)
 			main.voice_meter.value = 0.62
-			main.voice_overlay.visible = true
-			main.voice_overlay.reset_size()
 			await wait(0.6)
 			await shot("voice")
+			main.dictation.recording = false
+			main.voice_live.visible = false
 			main.voice_overlay.visible = false
 			await main.run_voice_command("approve Flaky tests")
 			await wait(0.8)
@@ -674,12 +704,14 @@ func _run() -> void:
 			main.set_view("focus")
 			main.select(made["Checkout flow"])
 			await wait(2.5)
-			main.voice_label.text = "🎙  Listening to you for « Checkout flow »…  release F8 to write it"
+			_hold("dictate")
+			main.take["texts"] = ["Add a gift card to the checkout, redeemed at payment."]
+			main._take_show(main.take)
 			main.voice_meter.value = 0.58
-			main.voice_overlay.visible = true
-			main.voice_overlay.reset_size()
 			await wait(0.6)
 			await hshot(g, 2)
+			main.dictation.recording = false
+			main.voice_live.visible = false
 			main.voice_overlay.visible = false
 			await main.run_voice_command("approve Flaky tests")
 			await wait(0.8)
@@ -808,6 +840,40 @@ func _run() -> void:
 	f.close()
 	print("\n".join(report))
 	quit()
+
+
+## The voice key goes down, as far as the app can tell: there is no microphone on the virtual display.
+func _hold(mode: String) -> void:
+	main.voice_mode = mode
+	main.take = {"mode": mode, "texts": [], "pending": 0, "ended": false, "failed": [], "cost": 0.0}
+	var d: Dictation = main.dictation
+	d.frames = PackedVector2Array()
+	d.pieces = 0
+	d._heard = false
+	d._ever = false
+	d._quiet = 0.0
+	d.recording = true
+	d.started_ms = Time.get_ticks_msec()
+	main.voice_live.text = "…"
+	main.voice_live.visible = true
+	main._box_show(false)
+
+
+## Someone speaks for `seconds`, then pauses: a tone loud enough to count as speech, then quiet, given to the
+## dictation in 20 ms chunks as the microphone would. A pause of 0 leaves the phrase unfinished.
+func _say(seconds: float, pause := 0.9) -> void:
+	var rate := AudioServer.get_mix_rate()
+	for part in [[seconds, 0.2], [pause, 0.0]]:
+		var left := int(rate * float(part[0]))
+		while left > 0:
+			var chunk := PackedVector2Array()
+			chunk.resize(mini(int(rate / 50), left))
+			for i in chunk.size():
+				var v := float(part[1]) * sin(i * 0.2)
+				chunk[i] = Vector2(v, v)
+			main.dictation.feed(chunk)
+			left -= chunk.size()
+		await process_frame
 
 
 func _ms(t0: int) -> float:

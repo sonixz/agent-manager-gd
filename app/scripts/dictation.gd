@@ -1,16 +1,28 @@
 class_name Dictation
 extends Node
-## Hold-to-talk recording: the microphone on a silent bus with a capture effect; on release, the audio becomes a
-## 16 kHz mono 16-bit WAV for the engine's transcription. Nothing is recorded while the key is not held.
+## Hold-to-talk recording: the microphone on a silent bus with a capture effect. The recording is given in pieces, cut
+## at each pause, as 16 kHz mono 16-bit WAV for the engine's transcription: the text can follow the voice, phrase by
+## phrase, and a long dictation is never one long recording. Nothing is recorded while the key is not held.
 
 signal level(value: float)
+signal piece(index: int, wav: PackedByteArray, seconds: float)
+
+const SPEECH := 0.03     # louder than this, someone speaks
+const QUIET := 0.02      # quieter than this for PAUSE seconds, after speech: a pause, where a piece ends
+const PAUSE := 0.7
+const MIN_PIECE := 1.2   # seconds: a piece is never shorter (a breath is not a pause)
+const MAX_PIECE := 30.0  # seconds: a piece is never longer, pause or not
 
 var bus := -1
 var capture: AudioEffectCapture
 var player: AudioStreamPlayer
 var recording := false
-var frames := PackedVector2Array()
+var frames := PackedVector2Array()  # the piece being recorded
 var started_ms := 0
+var pieces := 0          # pieces given so far in this recording
+var _heard := false      # speech in the piece being recorded
+var _ever := false       # speech anywhere in this recording; when never, the levels tell nothing and everything is given
+var _quiet := 0.0        # seconds of quiet at the end of the piece being recorded
 
 
 func _ready() -> void:
@@ -32,6 +44,10 @@ func available() -> bool:
 
 func start() -> void:
 	frames = PackedVector2Array()
+	pieces = 0
+	_heard = false
+	_ever = false
+	_quiet = 0.0
 	capture.clear_buffer()
 	if player.stream == null:
 		player.stream = AudioStreamMicrophone.new()
@@ -45,22 +61,51 @@ func _process(_d: float) -> void:
 		return
 	var n := capture.get_frames_available()
 	if n > 0:
-		var chunk := capture.get_buffer(n)
-		frames.append_array(chunk)
-		var peak := 0.0
-		for i in range(0, chunk.size(), 32):
-			peak = maxf(peak, absf(chunk[i].x))
-		level.emit(peak)
+		feed(capture.get_buffer(n))
 
 
-func stop() -> Dictionary:
+## What the microphone gave since the last frame. A pause after speech ends the piece, which is given at once.
+func feed(chunk: PackedVector2Array) -> void:
+	frames.append_array(chunk)
+	var peak := 0.0
+	for i in range(0, chunk.size(), 32):
+		peak = maxf(peak, absf(chunk[i].x))
+	level.emit(peak)
+	var rate := AudioServer.get_mix_rate()
+	if peak > SPEECH:
+		_heard = true
+		_ever = true
+		_quiet = 0.0
+	elif peak < QUIET:
+		_quiet += chunk.size() / rate
+	var length := frames.size() / rate
+	if (_heard and _quiet >= PAUSE and length >= MIN_PIECE) or length >= MAX_PIECE:
+		_give()
+
+
+func _give() -> void:
+	var rate := AudioServer.get_mix_rate()
+	var seconds := frames.size() / rate
+	var wav := to_wav(frames, rate)
+	frames = PackedVector2Array()
+	_heard = false
+	_quiet = 0.0
+	pieces += 1
+	piece.emit(pieces - 1, wav, seconds)
+
+
+## The key is released: what is left is the last piece. Returns how many pieces this recording gave in all (0: a
+## tap). A silent tail is not given, unless no speech was ever told apart (a very quiet microphone: all of it goes).
+func stop() -> int:
 	recording = false
 	player.stop()
 	var n := capture.get_frames_available()
 	if n > 0:
 		frames.append_array(capture.get_buffer(n))
-	var seconds := (Time.get_ticks_msec() - started_ms) / 1000.0
-	return {"wav": to_wav(frames, AudioServer.get_mix_rate()), "seconds": seconds}
+	if frames.size() / AudioServer.get_mix_rate() >= 0.4 and (_heard or not _ever):
+		_give()
+	frames = PackedVector2Array()
+	return pieces
 
 
 ## Stereo float frames at the mix rate -> WAV bytes, 16 kHz, mono, 16-bit (what transcription needs, small).

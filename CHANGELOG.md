@@ -5,6 +5,15 @@ Newest first.
 
 ## Unreleased: alpha
 
+### The dictation box · Loop 34
+- Hold F8 and speak: a small see-through box at the bottom shows what you say, phrase by phrase, a moment after each
+  pause. On release the text stays in the box: read it, correct it, hold F8 again to add more. Enter sends all of it
+  to the selected session; nothing goes to an agent before your Enter. Into a shell it is only written at the prompt.
+- The box's text is saved on your computer and survives closing the app; Earlier brings back what you sent or emptied.
+- F9 uses the same box: a command runs (it still asks first), anything else joins the text.
+- A dictation is written down piece by piece, cut at each pause, each piece with the words said just before: a long
+  one never waits for one long transcription.
+
 ### Faster · Loop 33
 - Picking a session, changing view and the 2-second refresh no longer stutter. Measured with twenty sessions on the
   test display: opening a session again 80 ms → 8 ms, for the first time 216 ms → 51 ms, the Board 140 ms → 61 ms, a
