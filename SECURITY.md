@@ -29,8 +29,12 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   another session.
 - **What it reads of your system** (Setup check, Engine room): Windows' version and whether virtualization is on,
   WSL's version and distributions, the size and drive of a distribution's disk file, the lines of your `.wslconfig`
-  that set limits, memory and disk figures. All of it stays in the window: none is stored or sent. It changes none
-  of it. Two actions exist there, each on your click only. **Install …** installs python3, tmux, git or
+  that set limits, memory and disk figures. None of it is sent anywhere, and what Windows tells stays in the window.
+  One thing is kept on your disk: every 30 seconds the engine writes down the memory in use, how busy the
+  processors are and what each running session weighs (its name, its memory, its share of a processor), for seven
+  days, in `data/host_history.sqlite3` in the engine's data folder. Older readings are deleted; deleting the file
+  loses the curves and nothing else; `AGMGD_HOST_SAMPLE=0` stops the readings. The app changes nothing of your
+  system by itself. Two actions exist there, each on your click only. **Install …** installs python3, tmux, git or
   openssh-client, and nothing else, with the distribution's own package manager: the command is shown first and
   runs in a terminal you see, as the distribution's root inside WSL (no Windows administrator) or through `sudo` on
   Linux. **Restart WSL…** runs WSL's own `wsl --shutdown` after you typed « restart ».

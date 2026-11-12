@@ -111,7 +111,26 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, voice_commands.parse(str(self._body().get("text", "")), sessions.list()))
                 if parts == ["host"] and method == "GET":  # the engine room: memory, disk, what each session weighs
                     from . import host
-                    return self._reply(200, host.report(sessions.store.all(), sessions.tmux.sessions()))
+                    rep = host.report(sessions.store.all(), sessions.tmux.sessions())
+                    watch = getattr(sessions, "host_watch", None)
+                    last = watch.last if watch else {}
+                    # the processor shares come from the last two readings: one look cannot tell them
+                    rep["cpu"] = last.get("cpu")
+                    rep["engine"] = last.get("engine", {})
+                    for x in rep["sessions"]:
+                        x["cpu"] = last.get("sessions", {}).get(str(x["id"]))
+                    rep["history"] = watch.about() if watch else {}
+                    return self._reply(200, rep)
+                if parts == ["host", "history"] and method == "GET":  # the same, over time (Loop 36, the dashboard)
+                    watch = getattr(sessions, "host_watch", None)
+                    if watch is None:
+                        return self._reply(200, {"off": True})
+                    q = parse_qs(url.query)
+                    try:
+                        seconds, points = int(q.get("seconds", ["3600"])[0]), int(q.get("points", ["60"])[0])
+                    except ValueError:
+                        return self._reply(400, {"error": "seconds and points are whole numbers"})
+                    return self._reply(200, watch.series(seconds, max(1, min(points, 600))))
                 if parts == ["usage"] and method == "GET":
                     from . import usage
                     return self._reply(200, usage.report(sessions.store.history()))
