@@ -21,9 +21,9 @@ Newest first.
 - Two sandboxes that listen on the same port each get their own address on this computer: the first keeps the
   number, the second takes the next free one, and each keeps its own afterwards.
 - **Open a SOCKS proxy**: one address on this computer through which a program set on it reaches everything inside
-  the sandbox.
-- **Let the sandbox reach a port of this computer…**: a rule, for one port and one sandbox. Without a rule a sandbox
-  reaches nothing of this computer but its way back to the Second Brain. The rule has its wire, with what is asked
+  the cloud sandbox.
+- **Let the sandbox reach a port of this computer…**: a rule, for one port and one cloud sandbox. Without a rule a
+  cloud sandbox reaches nothing of this computer but its way back to the Second Brain. The rule has its wire, with what is asked
   and answered, and stays until you close it.
 - Your sandboxes now come right under the inventory; the steps to make one and the costs follow.
 - The **☁ Sandboxes** tab opens on an **Inventory** that is always there: every sandbox made from this computer,
