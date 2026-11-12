@@ -30,7 +30,7 @@ for step in "${@:-hero}"; do
     SHOWCASE_SCENES="$REPO/tools/showcase/scenes" SHOWCASE_MAP="$ROOT/map" SHOWCASE_REMOTES="$ROOT/remote" \
     AGMGD_HOME="$ROOT/data" AGMGD_PORT=18791 AGMGD_TMUX_SOCKET=agmgd-showcase AGMGD_BRAIN_HOME="$ROOT/brain" AGMGD_BRAIN_REPO="$ROOT/brain-repo" AGMGD_KEYS_PLAIN=1 \
     AGMGD_DEMO_FLY="$ROOT/data/demo-fly.json" AGMGD_DEMO_FLY_DELAY="${AGMGD_DEMO_FLY_DELAY:-}" \
-    AGMGD_VOICE_FAKE="${AGMGD_VOICE_FAKE:-}" AGMGD_VOICE_FAKE_DELAY="${AGMGD_VOICE_FAKE_DELAY:-}" SHOW_STEP="$step" SHOW_OUT="$OUT" SHOW_HOWTO="${SHOW_HOWTO:-$REPO/public/assets/howto}" SHOW_REPORTS="$REPORTS" \
+    AGMGD_VOICE_FAKE="${AGMGD_VOICE_FAKE:-}" AGMGD_VOICE_FAKE_DELAY="${AGMGD_VOICE_FAKE_DELAY:-}" AGMGD_VOICE_FAKE_WHOLE="${AGMGD_VOICE_FAKE_WHOLE:-}" SHOW_STEP="$step" SHOW_OUT="$OUT" SHOW_HOWTO="${SHOW_HOWTO:-$REPO/public/assets/howto}" SHOW_REPORTS="$REPORTS" \
     godot --display-driver x11 --audio-driver Dummy --rendering-driver opengl3 --resolution "${SHOW_SIZE:-1920x1200}" --path app \
     --script res://tools_showcase.gd > "$ROOT/godot.log" 2>&1 || true   # a file, not a pipe: the engine outlives Godot
   grep -vE "^Godot Engine|^OpenGL|V-Sync|set_use_vsync|libspeechd|^$" "$ROOT/godot.log" || true

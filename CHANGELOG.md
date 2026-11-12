@@ -5,6 +5,15 @@ Newest first.
 
 ## Unreleased: alpha
 
+### What you do shows at once · Loop 35
+- Creating a group, folding one, moving a session or a group: the list changes at once, and the engine is told after.
+  Before, nothing moved until the engine had answered twice. Measured with twenty sessions on the test display: a
+  moved session was on screen after 250 ms, now after 10.
+- The list keeps every row that did not change, also when rows change place.
+- A dictation said in several pieces is written down once more, in one piece, when you release the key: that text
+  replaces what was shown while you spoke, which was written piece by piece and read badly. If the final writing
+  fails, the pieces stay.
+
 ### The dictation box · Loop 34
 - Hold F8 and speak: a small see-through box at the bottom shows what you say, phrase by phrase, a moment after each
   pause. On release the text stays in the box: read it, correct it, hold F8 again to add more. Enter sends all of it

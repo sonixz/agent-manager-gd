@@ -915,6 +915,7 @@ func _hold(mode: String) -> void:
 	main.take = {"mode": mode, "texts": [], "pending": 0, "ended": false, "failed": [], "cost": 0.0}
 	var d: Dictation = main.dictation
 	d.frames = PackedVector2Array()
+	d.whole = PackedByteArray()
 	d.pieces = 0
 	d._heard = false
 	d._ever = false
@@ -1028,7 +1029,7 @@ func _speed(ids: Array) -> void:
 	parts["header"] = _ms(t1) / 10.0
 	t1 = Time.get_ticks_usec()
 	for s in main.sessions:
-		main._card(s, "", 0).free()
+		main._card(s).free()
 	parts["session"] = _ms(t1) / maxf(1.0, n)
 	main.tree_sig = ""
 	await main.refresh()
@@ -1040,6 +1041,35 @@ func _speed(ids: Array) -> void:
 	parts["layout"] = _ms(t1)
 	report.append("      where it goes | a font %.2f | the queue %.1f | a group's header %.2f | one session %.2f | the header %.1f | laying out the view %.1f" % [
 		parts["font"], parts["queue"], parts["header"], parts["session"], parts["top"], parts["layout"]])
+	# the gestures on groups: how long until the list shows the change, and until the engine has confirmed it
+	var first: String = ids[0]
+	var home_group := str(main._session(first).get("grp", ""))
+	var other := "Pixel Forge" if home_group != "Pixel Forge" else "Orbit API"
+	var seen := []
+	var done := []
+	for target in [other, home_group, other, home_group]:
+		var t2 := Time.get_ticks_usec()
+		main.call("_move", first, target, 0)  # returns when it first waits: what is on screen then is what the owner sees at once
+		seen.append(_ms(t2) if str(main._session(first).get("grp", "")) == target else -1.0)
+		while str(main._session(first).get("grp", "")) != target or int(main.get("local_wait") if main.get("local_wait") != null else 0) > 0:
+			await process_frame
+		await process_frame
+		done.append(_ms(t2))
+	var gname := "Speed %d" % n
+	var t3 := Time.get_ticks_usec()
+	if main.has_method("_new_group"):
+		main.call("_new_group", gname)
+	else:
+		main.engine.call("call_api", "POST", "/groups", {"name": gname})
+	var g_seen := _ms(t3) if main.tree.any(func(g): return str(g["name"]) == gname) else -1.0
+	if not main.has_method("_new_group"):
+		await wait(0.3)
+		await main.refresh()
+	while not main.tree.any(func(g): return str(g["name"]) == gname):
+		await process_frame
+	var g_done := _ms(t3)
+	report.append("      groups | a session moved to another group: on screen after %s, confirmed after %.0f | a group created: on screen after %s, confirmed after %.0f" % [
+		("%.1f" % _med(seen)) if _med(seen) >= 0.0 else "the engine's answer", _med(done), ("%.1f" % g_seen) if g_seen >= 0.0 else "the engine's answer", g_done])
 
 
 func _find_button(root: Node, text: String) -> Button:

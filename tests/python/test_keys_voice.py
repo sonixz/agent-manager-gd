@@ -104,6 +104,9 @@ class VoicePiecesTest(unittest.TestCase):
         self.assertIn("« Ajoute une carte cadeau. Elle ne prend jamais plus que son solde. »", told)
         self.assertLess(len(voice.prompt_for("mot " * 2000)), len(voice.PROMPT) + 520)  # the last words only
         self.assertIn("pas de majuscule au début", told)  # a piece that goes on with the same sentence
+        once = voice.prompt_for("Ajoute une carte cadeau.", whole=True)  # the recording in one piece: no such hint
+        self.assertIn("« Ajoute une carte cadeau. »", once)
+        self.assertNotIn("majuscule", once)
         sent = {}
 
         def answer(req, timeout=0):
@@ -123,6 +126,8 @@ class VoicePiecesTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"AGMGD_VOICE_FAKE": "un | deux | trois"}), mock.patch.object(voice, "_fake_turn", 0):
             said = [voice.transcribe(b"", "", 1.0)["text"] for _ in range(4)]
         self.assertEqual(said, ["un", "deux", "trois", "un"])
+        with mock.patch.dict(os.environ, {"AGMGD_VOICE_FAKE": "un | deux", "AGMGD_VOICE_FAKE_WHOLE": "un, deux."}):
+            self.assertEqual(voice.transcribe(b"", "", 1.0, whole=True)["text"], "un, deux.")
 
 
 class VoiceErrorsTest(unittest.TestCase):

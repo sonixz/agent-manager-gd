@@ -26,6 +26,8 @@ var blip_done: AudioStreamPlayer
 var sound_btn: Button
 var cards := {}               # id -> SessionCard
 var rows: Array = []          # the list as drawn: [kind, key, signature, node], to draw again only what changed
+var local_wait := 0           # changes shown at once and not yet confirmed by the engine
+var local_stamp := 0          # grows at each change shown at once: an older answer from the engine is not drawn over it
 var queue_sig := ""           # « They wait for you » as drawn
 
 var side_box: VBoxContainer
@@ -388,9 +390,7 @@ func _build() -> void:
 	top.add_child(new_btn)
 	var grp_btn := Button.new()
 	grp_btn.text = "+ Group"
-	grp_btn.pressed.connect(func() -> void: _ask("New group", "", func(n: String) -> void:
-		await engine.call_api("POST", "/groups", {"name": n})
-		await refresh()))
+	grp_btn.pressed.connect(func() -> void: _ask("New group", "", _new_group))
 	top.add_child(grp_btn)
 	queue_box = VBoxContainer.new()
 	queue_box.add_theme_constant_override("separation", 6)
@@ -865,7 +865,12 @@ func _open_new(where := "", tool := "") -> void:
 
 # ------------------------------------------------------------------ data
 func refresh() -> void:
+	if local_wait > 0:  # a change shown at once is being told to the engine: its own refresh comes right after
+		return
+	var stamp := local_stamp
 	var r := await engine.call_api("GET", "/tree")
+	if local_wait > 0 or stamp != local_stamp:  # a change was shown meanwhile: this answer is older than the screen
+		return
 	if r.has("error"):
 		status_label.text = "Engine: " + str(r["error"])
 		return
@@ -1644,38 +1649,35 @@ func _render_list() -> void:
 		var i := 0
 		for s in in_group:
 			var id := str(s["id"])
-			want.append(["session", id, "%s|%s|%s|%d|%s|%s" % [JSON.stringify(s), id == selected, gname, i, look, SessionCard._ago(float(s.get("since", 0)))], s, i, gname])
+			want.append(["session", id, "%s|%s|%s|%s" % [JSON.stringify(s), id == selected, look, SessionCard._ago(float(s.get("since", 0)))], s])
 			i += 1
 		if gname != "" and in_group.is_empty():
 			want.append(["hint", gname, look])
 	list_box.add_theme_constant_override("separation", 2 if density == "line" else 6)
-	var same := want.size() == rows.size()
-	if same:
-		for k in want.size():
-			var node = rows[k][3]
-			if want[k][0] != rows[k][0] or want[k][1] != rows[k][1] or not is_instance_valid(node) or node.get_parent() != list_box:
-				same = false
-				break
-	if same:
-		for k in want.size():
-			if want[k][2] != rows[k][2]:
-				var old: Control = rows[k][3]
-				var node := _row(want[k])
-				list_box.add_child(node)
-				list_box.move_child(node, old.get_index())
-				old.visible = false  # gone from the layout at once; freed after this frame (it may be the row being clicked)
-				old.queue_free()
-				rows[k] = [want[k][0], want[k][1], want[k][2], node]
-	else:
-		for c in list_box.get_children():
-			c.visible = false
-			c.queue_free()
-		cards.clear()
-		rows.clear()
-		for w in want:
-			var node := _row(w)
+	# a row that is still wanted with the same content is kept, wherever it goes now; only the others are made
+	var have := {}
+	for r in rows:
+		if is_instance_valid(r[3]) and r[3].get_parent() == list_box:
+			have[str(r[0]) + ":" + str(r[1])] = r
+	var next: Array = []
+	for k in want.size():
+		var w: Array = want[k]
+		var key := str(w[0]) + ":" + str(w[1])
+		var node: Control
+		if have.has(key) and have[key][2] == w[2]:
+			node = have[key][3]
+			have.erase(key)
+		else:
+			node = _row(w)
 			list_box.add_child(node)
-			rows.append([w[0], w[1], w[2], node])
+		list_box.move_child(node, k)
+		next.append([w[0], w[1], w[2], node])
+	for r in have.values():  # no longer wanted, or replaced: out of the layout at once, freed after this frame (it may be the row being clicked)
+		r[3].visible = false
+		r[3].queue_free()
+		if r[0] == "session" and cards.get(r[1]) == r[3]:
+			cards.erase(r[1])
+	rows = next
 	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]
 
 
@@ -1684,7 +1686,7 @@ func _row(w: Array) -> Control:
 		"group":
 			return _group_header(w[3])
 		"session":
-			return _card(w[3], w[5], w[4])
+			return _card(w[3])
 	var hint := Label.new()
 	hint.text = "    drop a session here"
 	hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
@@ -1692,7 +1694,7 @@ func _row(w: Array) -> Control:
 	return hint
 
 
-func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
+func _card(s: Dictionary) -> SessionCard:
 	var id := str(s["id"])
 	var card := SessionCard.new()
 	card.setup(s, id == selected, activity_of(s), density == "line")
@@ -1709,9 +1711,21 @@ func _card(s: Dictionary, gname: String, index: int) -> SessionCard:
 			card.set_drag_preview(prev)
 			return {"type": "session", "id": id},
 		func(_at: Vector2, d: Variant) -> bool: return d is Dictionary and d.get("type") == "session" and d.get("id") != id,
-		func(at: Vector2, d: Variant) -> void: _move(str(d["id"]), gname, index + (1 if at.y > card.size.y / 2 else 0)))
+		func(at: Vector2, d: Variant) -> void:
+			var place := _place_of(id)  # where this row is now: it may have moved since it was made
+			_move(str(d["id"]), place[0], int(place[1]) + (1 if at.y > card.size.y / 2 else 0)))
 	cards[id] = card
 	return card
+
+
+## A session's group and its rank in it, as the list shows them now.
+func _place_of(id: String) -> Array:
+	for g in tree:
+		var in_group: Array = g["sessions"]
+		for i in in_group.size():
+			if str(in_group[i]["id"]) == id:
+				return [str(g["name"]), i]
+	return ["", 0]
 
 
 func _group_header(g: Dictionary) -> Button:
@@ -1728,8 +1742,9 @@ func _group_header(g: Dictionary) -> Button:
 	b.add_theme_font_override("font", AmTheme.ui_font(700))
 	b.tooltip_text = "Click to fold · drag to reorder · right click for more"
 	b.pressed.connect(func() -> void:
-		await engine.call_api("POST", "/groups/%s/fold" % gname.uri_encode(), {"folded": not bool(g["folded"])})
-		await refresh())
+		g["folded"] = not bool(g["folded"])  # folded on screen at once; the engine is told after
+		_show_now()
+		await _tell_engine("POST", "/groups/%s/fold" % gname.uri_encode(), {"folded": bool(g["folded"])}))
 	b.gui_input.connect(func(e: InputEvent) -> void:
 		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
 			menu_target = gname
@@ -2614,7 +2629,7 @@ func _box_title() -> void:
 		var what := "a command (« approve … », « go to … », « who is waiting? »)" if command else (("« %s »" % to) if to != "" else "the box")
 		voice_label.text = "●  Listening for %s   ·   %d:%02d   ·   release %s" % [what, s / 60, s % 60, key_text("command" if command else "dictate")]
 	elif int(take.get("pending", 0)) > 0:
-		voice_label.text = "Writing it down…" + ("   ·   it is sent as soon as it is written" if send_when_written else "")
+		voice_label.text = ("Writing it all down once more, in one piece…" if take.get("ended", false) and (take.get("texts", []) as Array).size() >= 2 else "Writing it down…") + ("   ·   it is sent as soon as it is written" if send_when_written else "")
 	else:
 		var words := voice_text.text.split(" ", false).size() if voice_text.text.strip_edges() != "" else 0
 		voice_label.text = "Dictation%s   ·   %d word%s%s" % [(" for « %s »" % to) if to != "" else "", words, "" if words == 1 else "s", ("   ·   ≈ $%.4f" % draft_cost) if draft_cost > 0.0 and words > 0 else ""]
@@ -2701,8 +2716,10 @@ func _voice_stop() -> void:
 	if not dictation.recording:
 		return
 	var t := take
-	dictation.stop()  # what is left comes as the last piece
+	var n := dictation.stop()  # what is left comes as the last piece
 	t["ended"] = true
+	if n >= 2:  # said in several pieces: the whole is written down once more, in one piece (a single piece is already the whole)
+		_write_whole(t, dictation.whole_wav())
 	_take_show(t)
 	_box_title()
 	if int(t["pending"]) == 0:
@@ -2734,6 +2751,25 @@ func _on_piece(i: int, wav: PackedByteArray, seconds: float) -> void:
 		await _take_done(t)
 
 
+## The whole recording, written down once more in one piece when the key is released. The pieces are what could be
+## shown while speaking, each one written without the rest of its sentence (the owner, 2026-11-11: « la transcription
+## en temps réel est vraiment pas terrible »); the whole, with every word in its sentence, is the text that is kept.
+## If it cannot be written, the pieces stay.
+func _write_whole(t: Dictionary, wav: PackedByteArray) -> void:
+	t["pending"] = int(t["pending"]) + 1
+	var secs := (wav.size() - 44) / 32000.0
+	var r := await engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(wav), "seconds": secs, "context": voice_text.text.right(300), "whole": true}, true, 150.0)
+	t["pending"] = int(t["pending"]) - 1
+	if r.has("error"):
+		status_label.text = "Voice: the final writing failed (%s); what was shown while you spoke is kept" % r["error"]
+	else:
+		t["whole"] = str(r.get("text", "")).strip_edges()
+		t["cost"] = float(t["cost"]) + float(r.get("cost_usd", 0))
+	_box_title()
+	if t["ended"] and int(t["pending"]) == 0:
+		await _take_done(t)
+
+
 ## The pieces of one dictation, put together. A piece is cut at a pause, not at the end of a sentence, and the
 ## writing ends each of them with a full stop: when the next piece goes on in lower case, that stop was only the pause.
 func _take_text(t: Dictionary) -> String:
@@ -2760,7 +2796,9 @@ func _take_show(t: Dictionary) -> void:
 ## The key is released and every piece is written. A command runs; anything else joins the text of the box. Nothing
 ## goes to the agent here: the owner reads, corrects, adds more, and Enter sends it all.
 func _take_done(t: Dictionary) -> void:
-	var said := _take_text(t).strip_edges()
+	var said := str(t.get("whole", "")).strip_edges()
+	if said == "":
+		said = _take_text(t).strip_edges()
 	if is_same(t, take):
 		voice_live.text = ""
 		voice_live.visible = false
@@ -4135,9 +4173,7 @@ func open_palette() -> void:
 	items.append({"label": "Connect other tools (MCP)", "hint": "Agent Manager's MCP for Claude Code, Codex, any MCP client", "run": set_view.bind("connect")})
 	items.append({"label": "Setup check", "hint": "python3, tmux, git, ssh, agents, flyctl: found or not", "run": set_view.bind("setup")})
 	items.append({"label": "New session", "hint": key_text("new"), "run": _open_new})
-	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", func(n: String) -> void:
-		await engine.call_api("POST", "/groups", {"name": n})
-		await refresh())})
+	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", _new_group)})
 	for v in [["focus", "Focus view", "Ctrl+Shift+F"], ["grid", "Grid view", "Ctrl+Shift+G"], ["board", "Board view", "Ctrl+Shift+B"]]:
 		items.append({"label": v[1], "hint": v[2], "run": set_view.bind(v[0])})
 	items.append({"label": "List: tiles" if density == "line" else "List: one session per line", "hint": "the session list on the left", "run": set_list.bind("tile" if density == "line" else "line")})
@@ -4289,8 +4325,9 @@ func _drop_on_group(gname: String, d: Dictionary) -> void:
 			if str(g["name"]) != "" and str(g["name"]) != str(d["name"]):
 				names.append(str(g["name"]))
 		names.insert(names.find(gname), str(d["name"]))
-		await engine.call_api("POST", "/groups/order", {"names": names})
-		await refresh()
+		tree.sort_custom(func(a, b): return names.find(str(a["name"])) < names.find(str(b["name"])))  # « no group » (not in names: -1) stays first
+		_show_now()
+		await _tell_engine("POST", "/groups/order", {"names": names})
 
 
 func _move(id: String, gname: String, index: int) -> void:
@@ -4301,7 +4338,59 @@ func _move(id: String, gname: String, index: int) -> void:
 				var at := (g["sessions"] as Array).map(func(x): return str(x["id"])).find(id)
 				if at >= 0 and at < index:
 					index -= 1
-	var r := await engine.call_api("POST", "/sessions/%s/move" % id, {"group": gname, "index": index})
+	# on screen at once: the session leaves its place and takes the new one; the engine is told after
+	var moved := {}
+	for g in tree:
+		var from: Array = g["sessions"]
+		for i in from.size():
+			if str(from[i]["id"]) == id:
+				moved = from[i]
+				from.remove_at(i)
+				break
+	if not moved.is_empty():
+		var target: Variant = null
+		for g in tree:
+			if str(g["name"]) == gname:
+				target = g
+		if target == null:
+			target = {"name": gname, "folded": false, "level": "", "access": "", "sessions": []}
+			tree.append(target)
+		moved["grp"] = gname
+		var into: Array = target["sessions"]
+		into.insert(clampi(index, 0, into.size()), moved)
+		_show_now()
+	await _tell_engine("POST", "/sessions/%s/move" % id, {"group": gname, "index": index})
+
+
+## A new group is in the list at once, empty; the engine is told after.
+func _new_group(n: String) -> void:
+	n = n.strip_edges()
+	if n == "":
+		return
+	if not tree.any(func(g): return str(g["name"]) == n):
+		tree.append({"name": n, "folded": false, "level": "", "access": "", "sessions": []})
+		_show_now()
+	await _tell_engine("POST", "/groups", {"name": n})
+
+
+## The list shows a change the owner just made, before the engine has answered: creating a group, folding one, moving
+## a session or a group took two calls to the engine before anything moved on screen (Loop 35).
+func _show_now() -> void:
+	local_stamp += 1
+	sessions = []
+	for g in tree:
+		sessions.append_array(g["sessions"])
+	tree_sig = ""
+	_render_list()
+	_render_header()
+
+
+## Tells the engine what was just shown. A refusal is said in the status line; the refresh that follows puts the list
+## back as it is in truth. While it waits, the 2-second refresh stays out of the way.
+func _tell_engine(method: String, path: String, body: Dictionary) -> void:
+	local_wait += 1
+	var r := await engine.call_api(method, path, body)
+	local_wait -= 1
 	if r.has("error"):
 		status_label.text = str(r["error"])
 	await refresh()

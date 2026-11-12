@@ -20,6 +20,7 @@ var recording := false
 var frames := PackedVector2Array()  # the piece being recorded
 var started_ms := 0
 var pieces := 0          # pieces given so far in this recording
+var whole := PackedByteArray()  # all of them end to end, as 16 kHz mono 16-bit samples: the recording in one piece
 var _heard := false      # speech in the piece being recorded
 var _ever := false       # speech anywhere in this recording; when never, the levels tell nothing and everything is given
 var _quiet := 0.0        # seconds of quiet at the end of the piece being recorded
@@ -44,6 +45,7 @@ func available() -> bool:
 
 func start() -> void:
 	frames = PackedVector2Array()
+	whole = PackedByteArray()
 	pieces = 0
 	_heard = false
 	_ever = false
@@ -87,6 +89,7 @@ func _give() -> void:
 	var rate := AudioServer.get_mix_rate()
 	var seconds := frames.size() / rate
 	var wav := to_wav(frames, rate)
+	whole.append_array(wav.slice(44))
 	frames = PackedVector2Array()
 	_heard = false
 	_quiet = 0.0
@@ -108,6 +111,11 @@ func stop() -> int:
 	return pieces
 
 
+## The whole recording so far as one WAV: written down once more in one piece, it gives the text that is kept.
+func whole_wav() -> PackedByteArray:
+	return wav_of(whole)
+
+
 ## Stereo float frames at the mix rate -> WAV bytes, 16 kHz, mono, 16-bit (what transcription needs, small).
 static func to_wav(src: PackedVector2Array, rate: float, out_rate := 16000) -> PackedByteArray:
 	var step := rate / out_rate
@@ -118,6 +126,11 @@ static func to_wav(src: PackedVector2Array, rate: float, out_rate := 16000) -> P
 		var f: Vector2 = src[mini(int(i * step), src.size() - 1)]
 		var v := clampf((f.x + f.y) * 0.5, -1.0, 1.0)
 		pcm.encode_s16(i * 2, int(v * 32767.0))
+	return wav_of(pcm, out_rate)
+
+
+## 16-bit mono samples with the WAV header in front.
+static func wav_of(pcm: PackedByteArray, out_rate := 16000) -> PackedByteArray:
 	var h := PackedByteArray()
 	h.resize(44)
 	h.encode_u32(0, 0x46464952)        # RIFF

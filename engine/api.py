@@ -105,7 +105,7 @@ def make_handler(sessions: Sessions, token: str):
                     wav = _b64.b64decode(str(b.get("audio_b64", "")) or b"")
                     key = "" if os.environ.get("AGMGD_VOICE_FAKE") else sessions.keys_store.get("openai")
                     return self._reply(200, voice.transcribe(wav, key, float(b.get("seconds", 0)), str(b.get("language", "")),
-                                                             str(b.get("context", ""))))
+                                                             str(b.get("context", "")), bool(b.get("whole", False))))
                 if parts == ["voice", "command"] and method == "POST":
                     from . import voice_commands
                     return self._reply(200, voice_commands.parse(str(self._body().get("text", "")), sessions.list()))

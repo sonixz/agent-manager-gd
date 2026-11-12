@@ -34,20 +34,27 @@ PROMPT = "Dictée pour un agent de code. Ponctuation et accents français. Noms 
 _fake_turn = 0
 
 
-def prompt_for(context: str) -> str:
+def prompt_for(context: str, whole: bool = False) -> str:
     """What the model is told with the audio. A dictation comes in pieces, cut at each pause: the words said just
-    before go with each piece, so a sentence that spans two pieces keeps its spelling, its names and its punctuation."""
+    before go with each piece, so a sentence that spans two pieces keeps its spelling, its names and its punctuation.
+    The recording written in one piece (whole) only gets what the box already held."""
     said = " ".join((context or "").split())[-300:]
-    return PROMPT + ((" Ce qui vient d'être dit juste avant, à ne pas répéter : « " + said + " ». Ce morceau peut continuer "
-                      "la même phrase : dans ce cas, pas de majuscule au début.") if said else "")
+    if not said:
+        return PROMPT
+    if whole:
+        return PROMPT + " Ce qui a été dit avant, à ne pas répéter : « " + said + " »"
+    return PROMPT + (" Ce qui vient d'être dit juste avant, à ne pas répéter : « " + said + " ». Ce morceau peut continuer "
+                     "la même phrase : dans ce cas, pas de majuscule au début.")
 
 
-def transcribe(wav: bytes, key: str, seconds: float, language: str = "", context: str = "") -> dict:
+def transcribe(wav: bytes, key: str, seconds: float, language: str = "", context: str = "", whole: bool = False) -> dict:
     fake = os.environ.get("AGMGD_VOICE_FAKE")
     if fake:
         import time
         global _fake_turn
         time.sleep(float(os.environ.get("AGMGD_VOICE_FAKE_DELAY") or 0))  # checks: a long dictation takes a while to write down
+        if whole and os.environ.get("AGMGD_VOICE_FAKE_WHOLE"):  # checks: the recording in one piece reads better than its pieces
+            return {"text": os.environ["AGMGD_VOICE_FAKE_WHOLE"], "model": "fake", "cost_usd": 0.0}
         said = [p.strip() for p in fake.split("|")]  # checks: « a | b | c » gives one phrase per piece, in turn
         _fake_turn += 1
         return {"text": said[(_fake_turn - 1) % len(said)], "model": "fake", "cost_usd": 0.0}
@@ -59,7 +66,7 @@ def transcribe(wav: bytes, key: str, seconds: float, language: str = "", context
     last = ""
     denied: list[str] = []
     for model in models:
-        fields = {"model": model, "response_format": "json", "prompt": prompt_for(context)}
+        fields = {"model": model, "response_format": "json", "prompt": prompt_for(context, whole)}
         if language:
             fields["languages[]" if model == "gpt-transcribe" else "language"] = language
         body, boundary = _multipart(fields, wav)
