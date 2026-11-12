@@ -1,0 +1,21 @@
+#windows 0
+build=26200
+virt_firmware=True
+hypervisor=True
+service=True
+#version 0
+WSL version: 2.6.3.0
+Kernel version: 6.6.87.2-1
+WSLg version: 1.0.71
+MSRDC version: 1.2.6353
+Direct3D version: 1.611.1-81528511
+DXCore version: 10.0.26100.1-240331-1435.ge-release
+Windows version: 10.0.26200.9974
+#names 0
+Ubuntu-24.04
+#table 0
+  NAME            STATE           VERSION
+* Ubuntu-24.04    Running         2
+#running 0
+Ubuntu-24.04
+#end 0

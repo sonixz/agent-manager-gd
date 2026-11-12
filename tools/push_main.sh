@@ -149,6 +149,10 @@ else
   if python3 -m unittest discover -s tests/python -t . >"$log" 2>&1; then ok "$(grep -E '^Ran ' "$log" | tail -1) · $(tail -1 "$log")"
   else bad "the engine tests are red"; tail -25 "$log" | sed 's/^/           /'; fi
   rm -f "$log"
+  # the setup check's reading (Windows, WSL, programs, engine) is checked in Godot, without a display
+  if ! command -v godot >/dev/null; then warn "godot is not here: the setup check's cases were not run"
+  elif out="$(godot --headless --path app --script res://tools_setup_check.gd 2>&1)"; then ok "the setup check's cases: $(tail -1 <<<"$out")"
+  else bad "the setup check's cases fail"; grep -E "^FAIL|passed" <<<"$out" | sed 's/^/           /'; fi
 fi
 
 step "6. Website checks (tools/site.sh --check)"

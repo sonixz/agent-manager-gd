@@ -4,6 +4,7 @@ extends Control
 ## Sessions live in tmux through the engine: closing the app leaves them running; reopening attaches again.
 
 const SETTINGS := "user://settings.cfg"
+const SetupProbe := preload("res://scripts/setup_probe.gd")  # by its path: a new class name is unknown until Godot scans the project again
 const ACT_KEYS := ["working", "approval", "waiting", "done", "idle", "exited", "missing"]
 
 var engine: EngineClient
@@ -92,6 +93,10 @@ const LEVELS := {  # Loop 24: [menu label, card badge, what it means]
 var f_document: CheckBox
 var f_browse: Button
 var folder_dialog: FileDialog
+var setup_probe = SetupProbe.new()
+var setup_facts := {}       # what the last reading of the ground gave (Setup check); {} before the first one
+var setup_thread: Thread    # the reading on its way: it takes seconds and never runs while a frame is drawn
+var setup_again := false    # a reading was asked while one was on its way
 var f_brief: CheckBox
 var dictation: Dictation
 var voice_mode := "dictate"     # F8 dictate, F9 command
@@ -248,6 +253,11 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and engine:
 		engine.stop_engine()  # the sessions stay in tmux
+
+
+func _exit_tree() -> void:
+	if setup_thread != null:
+		setup_thread.wait_to_finish()  # a thread must be joined before it is freed; at most the few seconds of a reading
 
 
 # ------------------------------------------------------------------ shortcuts
@@ -1965,6 +1975,8 @@ func set_view(v: String) -> void:
 				grid_ids.append(str(x["id"]))
 		for id in grid_ids:
 			await _ensure_terminal(id)
+	if v == "setup":
+		_setup_read()
 	content.modulate.a = 0.6  # the new view is there at once, a little soft, then sharp: it was 0.18 s from nothing, read as a delay
 	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]
 	_layout_view()
@@ -4271,7 +4283,7 @@ func open_palette() -> void:
 	items.append({"label": "Voice command (hold %s)" % key_text("command"), "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold %s and say a command" % key_text("command"))})
 	items.append({"label": "Shortcuts", "hint": "change the keyboard shortcuts", "run": set_view.bind("shortcuts")})
 	items.append({"label": "Connect other tools (MCP)", "hint": "Agent Manager's MCP for Claude Code, Codex, any MCP client", "run": set_view.bind("connect")})
-	items.append({"label": "Setup check", "hint": "python3, tmux, git, ssh, agents, flyctl: found or not", "run": set_view.bind("setup")})
+	items.append({"label": "Setup check", "hint": "what the app stands on, from the ground up: found or not", "run": set_view.bind("setup")})
 	items.append({"label": "New session", "hint": key_text("new"), "run": _open_new})
 	items.append({"label": "New group", "hint": "", "run": func() -> void: _ask("New group", "", _new_group)})
 	for v in [["focus", "Focus view", "Ctrl+Shift+F"], ["grid", "Grid view", "Ctrl+Shift+G"], ["board", "Board view", "Ctrl+Shift+B"]]:
@@ -4811,72 +4823,96 @@ func _wrap(t: String) -> Label:
 	return l
 
 
-## Read-only: runs engine/doctor.sh where tmux lives (WSL on Windows). Nothing is installed or downloaded.
-func setup_check() -> Dictionary:
-	var out := []
-	var argv := engine.host_command(["bash", "-l", engine.engine_root().path_join("engine/doctor.sh")])
-	var code := OS.execute(argv[0], argv.slice(1), out, true)
-	var found := {}
-	if code == 0:
-		for line in str(out[0] if out.size() else "").split("\n", false):
-			var kv := line.split("=", true, 1)
-			if kv.size() == 2:
-				var pv := kv[1].split("|")
-				found[kv[0]] = {"path": pv[0], "version": pv[1] if pv.size() > 1 else ""}
-	return {"code": code, "found": found}
+## The setup check (Loop 15), read from the ground up since Loop 36: Windows, WSL, the Linux distribution, the
+## programs, the engine, the agents (scripts/setup_probe.gd). It only looks. The reading is done in a thread: it
+## takes a few seconds, during which the window froze before.
+func _setup_read() -> void:
+	if setup_thread != null:
+		setup_again = true
+		return
+	var root := engine.engine_root()
+	var port := engine.port
+	setup_thread = Thread.new()
+	setup_thread.start(func() -> void:
+		var f: Dictionary = setup_probe.read(root, port)
+		_setup_done.call_deferred(f))
+	get_tree().create_timer(20.0).timeout.connect(func() -> void:
+		if setup_thread != null and view == "setup":
+			status_label.text = "Still reading: Windows or WSL is slow to answer.")
 
 
-const SETUP_ITEMS := [
-	["python3", true, "Runs the engine (3.10 or newer).", "sudo apt install python3"],
-	["tmux", true, "Keeps every session alive when the app closes.", "sudo apt install tmux"],
-	["git", true, "Branches per session, review, connected repositories.", "sudo apt install git"],
-	["ssh", true, "Connected repositories and cloud sandboxes.", "sudo apt install openssh-client"],
-	["claude", false, "Claude Code, your own install and login.", "see docs.anthropic.com (Claude Code)"],
-	["codex", false, "Codex CLI, your own install and login.", "see github.com/openai/codex"],
-	["flyctl", false, "Only for cloud sandboxes.", "the app asks before downloading it (pinned version, checksum checked)"],
-]
+func _setup_done(f: Dictionary) -> void:
+	setup_thread.wait_to_finish()
+	setup_thread = null
+	setup_facts = f
+	if setup_again:
+		setup_again = false
+		_setup_read()
+	if view == "setup":
+		_layout_view()
+
+
+## « Check again »: reads again, and starts the engine when the only thing missing is the engine itself.
+func _setup_check_again() -> void:
+	_setup_read()
+	_layout_view()
+	while setup_thread != null:
+		await get_tree().process_frame
+	if engine.connected:
+		return
+	for r in SetupProbe.ladder(setup_facts, false, setup_probe.on_windows):
+		if r["id"] == "engine" and r.get("start", false):
+			status_label.text = "Starting the engine…"
+			if await engine.connect_engine():
+				status_label.text = "Engine started."
+				await refresh()
+			else:
+				status_label.text = "The engine did not start."
+			_setup_read()
+			if view == "setup":
+				_layout_view()
 
 
 func _setup_rows() -> Array:
+	var rungs: Array = SetupProbe.ladder(setup_facts, engine.connected, setup_probe.on_windows)
 	var rows: Array = [_title("Setup check"),
-		_wrap("What Agent Manager GD needs%s. This check only looks: it installs and downloads nothing. Run the commands yourself in a terminal." % (" inside WSL" if engine.on_windows else ""))]
-	var r := setup_check()
-	if int(r["code"]) != 0:
-		var msg := "WSL does not answer. Install it once from an administrator PowerShell: wsl --install (Microsoft's own installer), then restart." if engine.on_windows else "bash did not run the check (exit %d)." % int(r["code"])
-		var er := _wrap(msg)
-		er.add_theme_color_override("font_color", AmTheme.col("ERROR"))
-		rows.append(er)
-		return rows
+		_wrap("What Agent Manager GD stands on, from the ground up%s. This check only looks: it installs and downloads nothing. Run the commands yourself in a terminal." % (": Windows, WSL, then what runs inside WSL" if setup_probe.on_windows else ""))]
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 18)
 	grid.add_theme_constant_override("v_separation", 8)
-	var missing_required := false
-	for it in SETUP_ITEMS:
-		var f: Dictionary = r["found"].get(it[0], {"path": "", "version": ""})
-		var ok := str(f["path"]) != ""
-		if it[0] == "python3" and ok and str(f["version"]) != "":
-			var v := str(f["version"]).split(".")
-			ok = int(v[0]) > 3 or (int(v[0]) == 3 and int(v[1]) >= 10)
-		missing_required = missing_required or (it[1] and not ok)
+	for r in rungs:
+		var state := str(r["state"])
+		var dim := state in ["wait", "after"]
 		var mark := Label.new()
-		mark.text = "✓" if ok else ("✗" if it[1] else "–")
-		mark.add_theme_color_override("font_color", AmTheme.col("MINT") if ok else (AmTheme.col("ERROR") if it[1] else AmTheme.col("FAINT")))
+		mark.text = {"ok": "✓", "no": "✗" if r["required"] else "–", "warn": "!", "wait": "…", "after": "·"}[state]
+		var tint: Color = AmTheme.col("FAINT")
+		if state == "ok":
+			tint = AmTheme.col("MINT")
+		elif state == "warn":
+			tint = AmTheme.col("WARN")
+		elif state == "no" and r["required"]:
+			tint = AmTheme.col("ERROR")
+		mark.add_theme_color_override("font_color", tint)
 		grid.add_child(mark)
 		var name := Label.new()
-		name.text = "%s %s" % [it[0], str(f["version"])]
+		name.text = str(r["name"])
 		name.add_theme_font_override("font", AmTheme.ui_font(650))
+		if dim:
+			name.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 		grid.add_child(name)
-		grid.add_child(_muted(("" if it[1] else "optional · ") + str(it[2])))
-		grid.add_child(_muted(str(f["path"]) if ok else str(it[3])))
+		var note := _wrap(("" if r["required"] else "optional · ") + str(r["note"]))
+		note.custom_minimum_size.x = 430  # a fixed width: the way out of a missing line stays beside its sentence, not across the window
+		if (state == "no" and r["required"]) or state == "warn":
+			note.add_theme_color_override("font_color", tint)  # what is wrong is said in the colour of its mark
+		grid.add_child(note)
+		var how := _wrap(str(r["how"]))
+		how.custom_minimum_size.x = 340
+		how.size_flags_horizontal = SIZE_EXPAND_FILL
+		grid.add_child(how)
 	rows.append(grid)
-	rows.append(_wrap("Everything needed is there." if not missing_required else "Install what is marked ✗, then press Check again."))
-	var again := _small("Check again", func() -> void:
-		_layout_view()
-		if not engine.connected and await engine.connect_engine():
-			status_label.text = "Engine started."
-			await refresh())
-	rows.append(again)
+	rows.append(_wrap(SetupProbe.verdict(rungs) + ("  Looking again…" if setup_thread != null and not setup_facts.is_empty() else "")))
+	rows.append(_small("Check again", _setup_check_again))
 	return rows
 
 

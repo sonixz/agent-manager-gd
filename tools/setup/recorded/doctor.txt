@@ -1,0 +1,10 @@
+python3=/usr/bin/python3|3.12
+tmux=/usr/bin/tmux|3.4
+git=/usr/bin/git|2.43.0
+ssh=/usr/bin/ssh|
+claude=/home/dev/.local/bin/claude|
+codex=/home/dev/.local/bin/codex|
+flyctl=/home/dev/.local/opt/flyctl/flyctl|v0.5.5
+distro=Ubuntu-24.04|Ubuntu 24.04.4 LTS
+engine-process=4242|
+engine-port=open|

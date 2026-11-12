@@ -9,10 +9,12 @@ Agent Manager GD is a Godot app (the window) and a small Python engine that runs
 | The window | the release build (`AgentManagerGD.exe`) | Godot 4.7 on `app/` (a Linux release build needs Godot's Linux export template, not installed yet) |
 | The engine | inside WSL: `python3` 3.10+, `tmux`, `git`, `ssh` | the same, directly |
 | Agents (optional) | Claude Code and Codex installed and logged in **inside WSL**, as you use them today | the same |
-| Cloud sandboxes (optional) | flyctl: the app asks before downloading it (pinned version, checksum checked) and a Fly.io token pasted in Keys | the same |
+| Cloud sandboxes (optional) | flyctl, installed by you (the app looks in `~/.local/opt/flyctl` and on your PATH; it does not download it) and a Fly.io token pasted in Keys | the same |
 
 Nothing is installed or downloaded silently. The **Setup check** (◐ → Setup check…, and on its own at the first
-launch if the engine cannot start) only looks and tells you the command to run.
+launch if the engine cannot start) reads what the app stands on, from the ground up: on Windows, Windows itself
+(its version, virtualization), WSL and its Linux distribution; then the programs, the engine, the agents. It only
+looks, and tells you the command to run at the first thing that is missing.
 
 ## Windows, step by step
 
@@ -24,8 +26,10 @@ launch if the engine cannot start) only looks and tells you the command to run.
    - Adds *Agent Manager GD* to the Start menu.
    - Options: `-Target <folder>` to install elsewhere, `-NoShortcut` to skip the shortcut.
 3. Start it. If WSL is missing, the Setup check says so: WSL itself is Microsoft's (`wsl --install`, once, in an
-   administrator PowerShell); everything else installs inside WSL with your own package manager
-   (`sudo apt install python3 tmux git openssh-client`).
+   administrator PowerShell, then a restart); a Linux distribution comes next (`wsl --install -d Ubuntu-24.04`);
+   everything else installs inside WSL with your own package manager
+   (`sudo apt install python3 tmux git openssh-client`). The check stops at the first thing that is missing and
+   says which.
 
 The release folder holds the app, the terminal libraries (VtTerminal and libghostty-vt), and `engine/` — the app
 starts that engine through `wsl.exe` from its own folder.

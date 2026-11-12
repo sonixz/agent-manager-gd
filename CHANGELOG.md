@@ -5,6 +5,22 @@ Newest first.
 
 ## Unreleased: alpha
 
+### The setup check reads from the ground up · Loop 36 (first step)
+- On Windows, the Setup check now starts with Windows itself (its version, virtualization), then WSL, then the Linux
+  distribution, before the programs, the engine and the agents. It stops at the first thing that is missing and
+  says what to run; the lines under it are marked « · ».
+- When the engine does not answer, it says why: not running (« Check again » starts it), starting or stuck, another
+  program on its port, or running inside WSL where Windows cannot reach it. Before, the app only said « engine
+  unreachable ».
+- The window no longer freezes while the check reads: the reading takes about three seconds on Windows and is done
+  aside. On the test display the page opens in 7 ms while a three-second reading goes on.
+- WSL's own command is never run where WSL is not installed: Windows keeps a stand-in there that offers to install
+  it, and a check that only looks must not start that.
+- Corrected: the app, the install guide and the Docs said that the app downloads flyctl itself (pinned version,
+  checksum checked). It never did: it looks for a flyctl you installed. The sentence is gone until it is true.
+- Not tried: a Windows without WSL, without a distribution, or in another language. Those cases are checked against
+  outputs written by hand from the documentation; only « everything is there » was read on a real Windows.
+
 ### What you do shows at once · Loop 35
 - Creating a group, folding one, moving a session or a group: the list changes at once, and the engine is told after.
   Before, nothing moved until the engine had answered twice. Measured with twenty sessions on the test display: a

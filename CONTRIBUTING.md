@@ -19,6 +19,15 @@ python3 -m unittest discover -s tests/python -t .
 They need tmux; a fake Claude Code and Codex stand in for the real ones. Keep them green, and add a test with each
 engine change.
 
+The setup check's reading (Windows, WSL, the programs, the engine) has its own checks, which need Godot but no
+display and no engine:
+
+```bash
+godot --headless --path app --script res://tools_setup_check.gd
+```
+
+Two of its inputs were recorded on a real computer; the others are written by hand (`tools/setup/recorded/README.md`).
+
 ## Screenshots and the website
 
 `public/` is the website (home, How-to, Docs). Screenshots come from the real app on a private virtual display (Xvfb),

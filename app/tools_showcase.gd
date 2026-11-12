@@ -490,6 +490,61 @@ func _run() -> void:
 			await main.refresh()
 			report.append("sandbox-open, 15 s later: the session is « %s »" % str(main._session(sid).get("state", "?")))
 			await shot("sandbox-open-later")
+		"setup":  # Loop 36: the setup check read from the ground up. A check and its pictures: the Windows ladder from recorded outputs (there is no Windows on this display), read slowly on purpose; then WSL missing; then the engine down and started again
+			var rec := ProjectSettings.globalize_path("res://").path_join("../tools/setup/recorded")
+			var win := FileAccess.get_file_as_string(rec.path_join("windows-en.txt"))
+			var doc := FileAccess.get_file_as_string(rec.path_join("doctor.txt"))
+			main.setup_probe.on_windows = true
+			main.setup_probe.runner = func(a: Array) -> Dictionary:
+				OS.delay_msec(3000 if str(a[0]) == "powershell.exe" else 400)  # as slow as the real ones
+				return {"code": 0, "out": win if str(a[0]) == "powershell.exe" else doc}
+			var began := Time.get_ticks_msec()
+			main.set_view("setup")
+			var open_ms := Time.get_ticks_msec() - began
+			var worst := 0
+			var drawn := 0
+			var before := Time.get_ticks_msec()
+			var pictured := false
+			while main.setup_thread != null:
+				await process_frame
+				var now := Time.get_ticks_msec()
+				worst = maxi(worst, now - before)
+				before = now
+				drawn += 1
+				if not pictured and now - began > 600:
+					pictured = true
+					report.append("setup: while reading: %s" % _setup_marks())
+					await shot("setup-reading")
+					before = Time.get_ticks_msec()
+			report.append("setup: the page opened in %d ms; the reading took %.1f s, during which %d frames were drawn, the longest in %d ms" % [open_ms, (Time.get_ticks_msec() - began) / 1000.0, drawn, worst])
+			await wait(0.2)
+			report.append("setup: everything there: %s | « %s »" % [_setup_marks(), _setup_last()])
+			await shot("setup")
+			# WSL is not installed: Windows answers, and nothing is asked of WSL
+			var asked := []
+			main.setup_probe.runner = func(a: Array) -> Dictionary:
+				asked.append(str(a[0]))
+				return {"code": 0, "out": "#windows 0\nbuild=26100\nvirt_firmware=True\nhypervisor=False\nservice=False\n#end 0\n"}
+			main.engine.connected = false
+			await main._setup_check_again()
+			await wait(0.2)
+			report.append("setup: WSL missing: %s | asked: %s | « %s »" % [_setup_marks(), ", ".join(asked), _setup_text("wsl --install")])
+			await shot("setup-no-wsl")
+			# the engine is down (its process is gone, its port closed): « Check again » starts it
+			main.setup_probe.runner = func(a: Array) -> Dictionary:
+				var here: bool = main.engine.connected
+				return {"code": 0, "out": win if str(a[0]) == "powershell.exe" else (doc if here else doc.replace("engine-process=4242|", "engine-process=|").replace("engine-port=open|", "engine-port=|"))}
+			main._setup_read()
+			while main.setup_thread != null:
+				await process_frame
+			await wait(0.2)
+			report.append("setup: engine down: %s | « %s »" % [_setup_marks(), _setup_text("not running")])
+			await shot("setup-engine-down")
+			await main._setup_check_again()
+			while main.setup_thread != null:
+				await process_frame
+			await wait(0.3)
+			report.append("setup: after « Check again »: %s | status line: « %s » | engine answers: %s" % [_setup_marks(), main.status_label.text, main.engine.connected])
 		"speed":  # Loop 33: how long the common gestures take with 6, 12 and 20 sessions (numbers in the report, no picture)
 			var ids: Array = made.values()
 			await _speed(ids)
@@ -1165,6 +1220,27 @@ func _speed(ids: Array) -> void:
 	report.append("      groups | a group folded or opened by a click: on screen after %s" % (("%.1f" % _med(folds)) if folds.min() >= 0.0 else "the engine's answer"))
 	report.append("      groups | a session moved to another group: on screen after %s, confirmed after %.0f | a group created: on screen after %s, confirmed after %.0f" % [
 		("%.1f" % _med(seen)) if _med(seen) >= 0.0 else "the engine's answer", _med(done), ("%.1f" % g_seen) if g_seen >= 0.0 else "the engine's answer", g_done])
+
+
+## The setup check as it is on screen: the marks of its lines in order, its last sentence, a line that holds a word.
+func _setup_marks() -> String:
+	var o := ""
+	for g in main.content.find_children("*", "GridContainer", true, false):
+		for i in range(0, g.get_child_count(), 4):
+			o += (g.get_child(i) as Label).text
+	return o
+
+
+func _setup_last() -> String:
+	var labels: Array = main.content.find_children("*", "Label", true, false)
+	return (labels[labels.size() - 1] as Label).text if labels.size() > 0 else ""
+
+
+func _setup_text(part: String) -> String:
+	for l in main.content.find_children("*", "Label", true, false):
+		if (l as Label).text.contains(part):
+			return (l as Label).text
+	return ""
 
 
 func _find_button(root: Node, text: String) -> Button:
