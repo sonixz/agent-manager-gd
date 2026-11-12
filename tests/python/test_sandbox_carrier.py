@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.request
 from types import SimpleNamespace
 
@@ -326,6 +327,49 @@ class MoreTest(CarrierTest):
         self.assertEqual(self.carrier.describe("sb1")["ports"], [])    # and nothing was left half open here
         with self.assertRaises(ValueError):
             self.carrier.open_back("sb1", self.inside, 8765)           # never over the way back to the Second Brain
+
+
+class WayBackTest(CarrierTest):
+    """The way back to the Second Brain: carried by the lasting connection so an agent keeps the Brain when its
+    terminal is closed, and narrowed to the Brain's route and the health."""
+
+    def setUp(self):
+        super().setUp()
+        from engine.sandbox_carrier import free_port
+        self.carrier.engine_port = self.inside            # the web server stands for the engine here
+        self.carrier.brain_port = free_port()              # where the sandbox would find it (8765 there)
+
+    def ask(self, path):
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.carrier.brain_port}{path}", timeout=10) as r:
+                return r.status
+        except urllib.error.HTTPError as e:
+            return e.code
+
+    def test_the_way_back_passes_the_brain_route_only(self):
+        self.assertEqual(self.carrier.connect("sb1")["brain_way"], "carrier")
+        self.assertEqual(self.ask("/sandbox-brain/s3cret/mcp"), 200)
+        self.assertEqual(self.ask("/health"), 200)
+        self.assertEqual(self.ask("/sessions"), 403)       # refused before the engine
+        self.assertEqual(self.carrier.describe("sb1")["brain_refused"], 1)
+
+    def test_when_the_terminal_holds_the_way_back_the_connection_takes_it_over_once_it_is_free(self):
+        os.environ["STANDIN_PORT_TAKEN"] = str(self.carrier.brain_port)
+        try:
+            self.assertEqual(self.carrier.connect("sb1")["brain_way"], "terminal")
+        finally:
+            os.environ.pop("STANDIN_PORT_TAKEN", None)     # the terminal was closed
+        self.carrier.watch_once()
+        self.assertEqual(self.carrier.describe("sb1")["brain_way"], "carrier")
+        self.assertEqual(self.ask("/sandbox-brain/s3cret/mcp"), 200)
+
+    def test_the_terminal_checks_the_host_key_too(self):
+        from engine.sandbox_attach import ssh_base
+        base = " ".join(ssh_base(os.path.join(self.tmp, "keys", "sb1", "id_ed25519"), 4000))
+        self.assertIn("StrictHostKeyChecking=accept-new", base)
+        self.assertIn("HostKeyAlias=sandbox-sb1", base)
+        self.assertIn(os.path.join(self.tmp, "keys", "sb1", "known_hosts"), base)
+        self.assertNotIn("/dev/null", base)
 
 
 class RoutesTest(unittest.TestCase):

@@ -544,7 +544,9 @@
           seconds, then every minute, ten times), with what it carried; the block says why it fell and when it tries
           again. <b>Open a SOCKS proxy</b> gives one address on this computer through which a program set on it
           reaches everything inside the cloud sandbox. In the other direction, a cloud sandbox reaches nothing of
-          this computer but its way back to the Second Brain, unless you make a rule:
+          this computer but its way back to the Second Brain (only the Second Brain's route passes it, request by
+          request; when the lasting connection is open it carries that way, so the agent keeps the Second Brain
+          after its terminal is closed), unless you make a rule:
           <b>Let the sandbox reach a port of this computer…</b> makes that one port reachable from inside the cloud
           sandbox, on the same number there, until you close it; its wire shows what is asked and answered. Nothing is ever made public: every port
           listens on this computer only. The sandbox's host key is remembered at the first connection, and a key

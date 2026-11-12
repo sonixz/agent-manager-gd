@@ -37,9 +37,13 @@ def free_port() -> int:
 
 
 def ssh_base(key: str, port: int) -> list:
-    return ["ssh", "-i", key, "-p", str(port), "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ServerAliveInterval=20",
-            "-o", "ConnectTimeout=10"]
+    """OpenSSH toward a sandbox, with its own key only. Its host key is remembered at the first connection, under
+    the sandbox's own name (the address is always 127.0.0.1 with a port that changes), in the sandbox's key folder,
+    the same file the lasting connection uses; a key that changed refuses."""
+    folder = os.path.dirname(key)
+    return ["ssh", "-i", key, "-p", str(port), "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new",
+            "-o", f"UserKnownHostsFile={os.path.join(folder, 'known_hosts')}", "-o", f"HostKeyAlias=sandbox-{os.path.basename(folder)}",
+            "-o", "LogLevel=ERROR", "-o", "ServerAliveInterval=20", "-o", "ConnectTimeout=10"]
 
 
 def say(msg: str) -> None:
@@ -134,9 +138,13 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True) -> i
 
     def answers() -> bool:
         try:
-            return subprocess.run(base + ["root@127.0.0.1", "true"], capture_output=True, timeout=20).returncode == 0
+            out = subprocess.run(base + ["root@127.0.0.1", "true"], capture_output=True, text=True, timeout=20)
         except subprocess.TimeoutExpired:
             return False
+        low = out.stderr.lower()
+        if "host key" in low or "remote host identification" in low:   # trying again would change nothing
+            raise RuntimeError("the sandbox's host key is not the one remembered at its first connection: nothing was opened")
+        return out.returncode == 0
 
     proxy = open_tunnel()
     try:
@@ -153,8 +161,17 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True) -> i
             say("first start: setting up the sandbox…")
             setup(sbs, sb, rec, keys, base, store)
             sb = sbs.get(sbid)  # the setup chose its working folder
-        tunnel = ["-R", f"8765:127.0.0.1:{engine_port}"]
-        return subprocess.call(base + tunnel + ["-t", "root@127.0.0.1", "cd " + sb["workdir"] + " 2>/dev/null; tmux new -A -s am"])
+        # The way back to the Second Brain lands on a relay of this terminal that lets through only the Brain's
+        # route and the health, request by request; the rest of the engine is not reachable from the sandbox. When
+        # the sandbox's lasting connection holds that port already, this one is not needed and fails quietly.
+        from engine.relay import Relay, brain_paths
+        back = Relay()
+        way = back.open(engine_port, label="the way back", guard=brain_paths)
+        tunnel = ["-R", f"8765:127.0.0.1:{way['port']}"]
+        try:
+            return subprocess.call(base + tunnel + ["-t", "root@127.0.0.1", "cd " + sb["workdir"] + " 2>/dev/null; tmux new -A -s am"])
+        finally:
+            back.close_all()
     finally:
         proxy.kill()
         _forget_port(home, sbid)

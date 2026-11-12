@@ -24,7 +24,7 @@ import threading
 import time
 from contextlib import closing
 
-from .relay import LOOPBACK, Relay
+from .relay import LOOPBACK, Relay, brain_paths
 
 OURS = {2222: "the sandbox's SSH server", 8765: "the way back to this computer"}   # never offered as ports to open
 
@@ -122,8 +122,10 @@ def _end(proc: subprocess.Popen | None) -> None:
 
 
 class Carrier:
-    def __init__(self, sandboxes, relay: Relay, home: str, ssh: str = "ssh", flyctl: str | None = None):
+    def __init__(self, sandboxes, relay: Relay, home: str, ssh: str = "ssh", flyctl: str | None = None, engine_port: int = 0):
         self.sandboxes = sandboxes
+        self.engine_port = engine_port   # the way back to the Second Brain leads there, through a guarded relay
+        self.brain_port = 8765           # where the sandbox finds it (its MCP configuration says so)
         self.relay = relay
         self.home = home
         self.ssh = ssh
@@ -225,6 +227,7 @@ class Carrier:
         with self.lock:
             self.links[sbid] = link
             self.lost.pop(sbid, None)
+        self._hold_back(sbid)
         for r in self.remembered(sbid):   # what was open for this sandbox comes back with its connection
             try:
                 if r["kind"] == "in":
@@ -238,12 +241,33 @@ class Carrier:
         self._watch()
         return self.describe(sbid)
 
+    def _hold_back(self, sbid: str) -> None:
+        """The way back to the Second Brain, carried by this lasting connection, so an agent in the sandbox keeps the
+        Brain when its terminal is closed. It lands on a relay that lets through only the Brain's route and the
+        health. When the terminal's connection holds the port already, this one waits and takes it over later."""
+        if not self.engine_port:
+            return
+        with self.lock:
+            link = self.links.get(sbid)
+        if not link or (link.get("back") or {}).get("held"):
+            return
+        if not link.get("back"):
+            ch = self.relay.open(self.engine_port, label="the way back to the Second Brain", guard=brain_paths)
+            link["back"] = {"channel": ch["id"], "spec": f"{LOOPBACK}:{self.brain_port}:{LOOPBACK}:{ch['port']}", "held": False}
+        rc, _, _ = self._run(link, "-O", "forward", "-R", link["back"]["spec"], "root@127.0.0.1")
+        link["back"]["held"] = rc == 0
+
     def disconnect(self, sbid: str, forget_lost: bool = True) -> dict:
         with self.lock:
             link = self.links.pop(sbid, None)
             if forget_lost:
                 self.lost.pop(sbid, None)   # asked for: nothing tries again
         if link:
+            if link.get("back"):
+                try:
+                    self.relay.close(link["back"]["channel"], "the connection was closed")
+                except KeyError:
+                    pass
             for row in list(link["ports"].values()):
                 try:
                     self.relay.close(row["channel"], "the connection was closed")
@@ -395,7 +419,11 @@ class Carrier:
             return {"id": sbid, "state": "closed", "ports": []}
         up = link["master"] is not None and link["master"].poll() is None and link["proxy"].poll() is None
         ports = [self._port_row(link, p) for p in sorted(link["ports"], key=str)]
+        b = link.get("back") or {}
+        way = "carrier" if b.get("held") else ("terminal" if b else "none")
+        refused = next((int(c.get("denied", 0)) for c in self.relay.describe() if c["id"] == b.get("channel")), 0)
         return {"id": sbid, "state": "open" if up else "lost", "since": link["since"], "ports": ports,
+                "brain_way": way, "brain_refused": refused,
                 "sent": sum(int(p.get("sent", 0)) for p in ports), "received": sum(int(p.get("received", 0)) for p in ports),
                 "sent_rate": sum(float(p.get("sent_rate", 0.0)) for p in ports), "received_rate": sum(float(p.get("received_rate", 0.0)) for p in ports)}
 
@@ -409,6 +437,10 @@ class Carrier:
             self.disconnect(sbid, forget_lost=False)
             with self.lock:
                 self.lost[sbid] = {"why": "the connection fell", "tries": 0, "next": time.monotonic() + RETRY[0]}
+        with self.lock:
+            waiting = [sbid for sbid, link in self.links.items() if link.get("back") and not link["back"]["held"]]
+        for sbid in waiting:   # the terminal held the way back: take it over once it is free
+            self._hold_back(sbid)
         back = []
         with self.lock:
             due = [sbid for sbid, x in self.lost.items() if x["tries"] < 10 and time.monotonic() >= x["next"]]

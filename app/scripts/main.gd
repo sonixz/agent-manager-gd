@@ -3537,6 +3537,10 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 				l.text = "! " + l.text
 				l.add_theme_color_override("font_color", AmTheme.col("WARN"))
 			row.add_child(l)
+	var brain := _muted(SandboxView.brain_words(t))
+	brain.add_theme_font_size_override("font_size", 12)
+	if brain.text != "":
+		box.add_child(brain)
 	var rows: Array = SandboxView.port_rows(t)
 	var wires: Array = SandboxView.wire_rows(t)
 	if not wires.is_empty():

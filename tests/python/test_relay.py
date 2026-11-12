@@ -214,5 +214,100 @@ class RelayTest(unittest.TestCase):
         self.assertEqual((later["sent_rate"], later["received_rate"], later["sent"]), (0.0, 0.0, 5000))
 
 
+class Seen(http.server.BaseHTTPRequestHandler):
+    """Stands for the engine: answers every request, and writes down each path that reached it."""
+    protocol_version = "HTTP/1.1"
+    paths = []
+
+    def log_message(self, fmt, *args):
+        pass
+
+    def answer(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(n) if n else b""
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            body = b""
+            while True:
+                size = int(self.rfile.readline().split(b";")[0].strip(), 16)
+                if size == 0:
+                    self.rfile.readline()
+                    break
+                body += self.rfile.read(size)
+                self.rfile.readline()
+        Seen.paths.append((self.command, self.path, body))
+        out = b"ok " + body
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+
+    do_GET = do_POST = answer
+
+
+class GuardTest(unittest.TestCase):
+    """The way back of a sandbox: only the Second Brain's route and the health pass, request by request."""
+
+    def setUp(self):
+        Seen.paths = []
+        self.engine = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Seen)
+        threading.Thread(target=self.engine.serve_forever, daemon=True).start()
+        self.relay = Relay()
+        self.ch = self.relay.open(self.engine.server_address[1], label="the way back", guard=relay_mod.brain_paths)
+
+    def tearDown(self):
+        self.relay.close_all()
+        self.engine.shutdown()
+        self.engine.server_close()
+
+    def raw(self, data):
+        with socket.create_connection(("127.0.0.1", self.ch["port"]), timeout=10) as s:
+            s.sendall(data)
+            s.shutdown(socket.SHUT_WR)
+            back = b""
+            while True:
+                try:
+                    d = s.recv(65536)
+                except OSError:
+                    return back
+                if not d:
+                    return back
+                back += d
+
+    def test_the_paths(self):
+        ok = relay_mod.brain_paths
+        self.assertTrue(ok("/health") and ok("/sandbox-brain/s3cret/mcp") and ok("/sandbox-brain/s3cret/health?x=1"))
+        self.assertFalse(ok("/sessions") or ok("/host") or ok("/sandbox-brain/../sessions") or ok("//sandbox-brain/x") or ok("/healthz"))
+
+    def test_the_brain_route_passes_and_the_rest_is_refused_before_the_engine(self):
+        back = self.raw(b"POST /sandbox-brain/s3cret/mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello")
+        self.assertIn(b"200", back.split(b"\r\n")[0])
+        self.assertTrue(back.endswith(b"ok hello"))
+        back = self.raw(b"GET /sessions HTTP/1.1\r\nHost: x\r\n\r\n")
+        self.assertTrue(back.startswith(b"HTTP/1.1 403"))
+        self.assertEqual([p[1] for p in Seen.paths], ["/sandbox-brain/s3cret/mcp"])     # /sessions never reached it
+        now = self.relay.describe()[0]
+        self.assertEqual((now["denied"], now["guarded"]), (1, True))
+
+    def test_a_refused_request_hidden_behind_an_allowed_one_on_the_same_connection_never_reaches_the_engine(self):
+        back = self.raw(b"GET /health HTTP/1.1\r\nHost: x\r\n\r\n"
+                        b"POST /sessions HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{}")
+        self.assertIn(b"403", back)
+        self.assertEqual([p[1] for p in Seen.paths], ["/health"])
+
+    def test_bodies_by_length_and_by_chunks_pass_whole_and_two_requests_in_a_row_too(self):
+        back = self.raw(b"POST /sandbox-brain/k/mcp HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n"
+                        b"4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n"
+                        b"POST /sandbox-brain/k/mcp HTTP/1.1\r\nHost: x\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabc")
+        self.assertEqual([(p[1], p[2]) for p in Seen.paths], [("/sandbox-brain/k/mcp", b"Wikipedia"), ("/sandbox-brain/k/mcp", b"abc")])
+        self.assertIn(b"ok Wikipedia", back)
+        self.assertIn(b"ok abc", back)
+        self.assertEqual(self.relay.describe()[0]["denied"], 0)
+
+    def test_a_head_that_never_ends_is_refused(self):
+        back = self.raw(b"GET /health HTTP/1.1\r\nX: " + b"a" * 70000)
+        self.assertTrue(back.startswith(b"HTTP/1.1 403"))
+        self.assertEqual(Seen.paths, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -24,8 +24,11 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   be paused or closed. No public address is ever made. The sandbox's host key is remembered at that connection's
   first use, and a key that changed refuses. Opening a connection never starts a paused machine. A SOCKS proxy toward
   a cloud sandbox, when you open one, is on `127.0.0.1` too. In the other direction, a cloud sandbox reaches nothing
-  of this computer except its way back to the engine, through its SSH tunnel, and the engine answers it on two
-  addresses only (its health, and that cloud sandbox's own Second Brain route, guarded by its secret). Anything else
+  of this computer except its way back to the Second Brain, through its SSH tunnel. That way lands on a relay that
+  lets through, request by request, only the engine's health and the Second Brain route (which the engine guards
+  with that cloud sandbox's own secret); any other request is answered « refused » there and never reaches the
+  engine, even when it follows an allowed one on the same connection. The cloud sandbox's host key is checked by its
+  terminal too, against the one remembered at the first connection. Anything else
   needs a rule you make for one port of this computer and one cloud sandbox; it is listed, counted, and stays until you close it. You ask for it in
   ☁ Sandboxes, « Tunnel and ports ». Not tried against a real sandbox yet.
 - **Agents' logins**: agent CLIs run with their own login; Agent Manager never reads, copies or relays those tokens.

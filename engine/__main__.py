@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     from .relay import Relay
     from .sandbox_carrier import Carrier
     # Loop 38: a sandbox's ports, brought to this computer. AGMGD_CARRIER_SSH puts a stand-in for ssh (captures only).
-    sessions.carrier = Carrier(sessions.sandboxes, Relay(), h, ssh=os.environ.get("AGMGD_CARRIER_SSH") or "ssh")
+    sessions.carrier = Carrier(sessions.sandboxes, Relay(), h, ssh=os.environ.get("AGMGD_CARRIER_SSH") or "ssh", engine_port=a.port)
     print(f"engine ready on 127.0.0.1:{a.port} (data: {h})", flush=True)
     try:
         srv.serve_forever()

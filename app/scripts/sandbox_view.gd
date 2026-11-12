@@ -259,3 +259,16 @@ static func wire_rows(tunnel: Dictionary) -> Array:
 		out.append(row)
 	return out
 
+
+## The way back to the Second Brain, in words: who carries it, and what was refused on it.
+static func brain_words(tunnel: Dictionary) -> String:
+	if str(tunnel.get("state", "")) != "open":
+		return ""
+	var way := str(tunnel.get("brain_way", "none"))
+	var out := "Second Brain: carried by this connection, so the agent keeps it when its terminal is closed" if way == "carrier" else (
+		"Second Brain: carried by the terminal's connection for now; this one takes it over when the terminal closes" if way == "terminal" else "Second Brain: not carried")
+	var refused := int(tunnel.get("brain_refused", 0))
+	if refused > 0:
+		out += " · %d request%s to anything else refused" % [refused, "" if refused == 1 else "s"]
+	return out
+
