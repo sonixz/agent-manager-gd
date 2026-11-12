@@ -27,7 +27,8 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   the orchestrator and its sessions are refused `git push`, `git merge` and `git rebase`; at most 4 run at once under
   one root session, 2 levels deep. An agent can only write to sessions it started, and never presses keys (approvals) for
   another session.
-- **What it reads of your system** (Setup check, Engine room): Windows' version and whether virtualization is on,
+- **What it reads of your system** (the WSL page: Setup check, Engine room; read when that page opens and once a
+  few seconds after the app starts, for the top bar's button): Windows' version and whether virtualization is on,
   WSL's version and distributions, the size and drive of a distribution's disk file, the lines of your `.wslconfig`
   that set limits, memory and disk figures. None of it is sent anywhere, and what Windows tells stays in the window.
   One thing is kept on your disk: every 30 seconds the engine writes down the memory in use, how busy the

@@ -111,8 +111,9 @@
           Godot 4.7 and run it. The app starts the engine itself.</p>
 
         <h2 id="setup-check">Setup check</h2>
-        <p><b>◐ › Setup check</b> (and on its own at the first launch when the engine cannot start) reads what Agent
-          Manager stands on, from the ground up, and says what it found. On Windows it starts with Windows itself (its
+        <p>The <b>WSL</b> button of the top bar (on Linux: <b>Computer</b>), or <b>◐ › Setup check</b>, opens one
+          page: the setup check, then the engine room. It opens on its own at the first launch when the engine
+          cannot start. The setup check reads what Agent Manager stands on, from the ground up, and says what it found. On Windows it starts with Windows itself (its
           version, and whether virtualization is on), then WSL, then the Linux distribution WSL runs. Then, on Windows
           and on Linux alike: python3 (3.10+), tmux, git, ssh, the engine, and the optional Claude Code, Codex and
           flyctl, each with its version and path, or the command to install it.</p>
@@ -216,12 +217,23 @@
         </ul>
 
         <h2 id="views">Views and themes</h2>
+        <p>The top bar has two families of buttons. <b>View ▾</b> names the way the sessions are shown (it reads
+          <b>Focus ▾</b>, <b>Grid ▾</b>…) and opens the list of the five ways: Focus, Grid, Board, History, Review,
+          each with its shortcut. Beside it stand the managers, one button each: <b>WSL</b> (on Linux:
+          <b>Computer</b>), <b>☁ Sandboxes</b>, <b>⎇ Repos</b>. A click opens a manager's page; a second click on the
+          same button comes back to the sessions as they were shown. In a narrow window the managers show their sign
+          alone, and their names stay in the tooltips.</p>
+        <p>The <b>WSL</b> button is alive: <b>●</b> when everything stands, <b>!</b> when something deserves a look (a
+          disk nearly full, memory nearly gone), <b>✗</b> when something the app needs is missing or the engine does
+          not answer; then the memory in use. Its tooltip says why. It opens the
+          <a href="#setup-check">setup check and the engine room</a>.</p>
         <ul>
           <li><b>Focus</b>: one session, full size, with its header (tool, folder, branch, Brain, state).</li>
           <li><b>Grid</b>: up to four live terminals side by side (right click a session → Show in grid).</li>
           <li><b>Board</b>: a tile per session with a live preview of its screen and its state.</li>
-          <li><b>History</b>, <b>Review</b>, <b>◆ Orchestrator · beta</b>, <b>☁ Sandboxes</b>, <b>⎇ Repos</b>, <b>♪</b>
-            (mutes the small sounds), and in <b>◐</b>: Keys, Usage, Shortcuts, Connect other tools, Setup check.</li>
+          <li><b>History</b> and <b>Review</b>, in the same <b>View ▾</b> list. Then <b>◆ Orchestrator · beta</b>,
+            <b>♪</b> (mutes the small sounds), and in <b>◐</b>: Keys, Usage, Shortcuts, Connect other tools, Setup
+            check.</li>
         </ul>
         <p><b>◐</b> picks one of seven themes, the same as Second Brain's: Focus, Terminal, Neon, Evening, Forest,
           Morning, Paper. The interface and the terminal's colours change together.</p>

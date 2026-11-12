@@ -284,3 +284,46 @@ static func about(host: Dictionary, bias: int) -> String:
 	var since := ("since %s" % clock(int(h["since"]), true, bias)) if int(h.get("since", 0)) > 0 else "starting now"
 	var problem := (" The last reading failed: %s." % str(h["error"])) if str(h.get("error", "")) != "" else ""
 	return "One reading every %d s, kept %d days, %s.%s%s" % [int(h["interval"]), int(h["keep"]) / 86400, since, cost, problem]
+
+
+# ---------------------------------------------------------------- the top bar's button
+## The ground's button in the top bar: a mark, the name, the memory in use. `rungs` is the setup ladder ([] while
+## nothing was read yet). Gives {"level": "ok" | "warn" | "bad", "mark", "text", "short", "tip"}: `text` when there
+## is room, `short` when the bar is narrow. The state is never said by the colour alone: the mark changes with it.
+static func button(name: String, f: Dictionary, host: Dictionary, connected: bool, rungs: Array, windows := OS.get_name() == "Windows") -> Dictionary:
+	var level := "ok"
+	var why := []
+	if not connected:
+		host = {}  # what the engine said before it stopped answering is not said as if it were now
+	for r in rungs:
+		if str(r["state"]) == "no" and r["required"]:
+			level = "bad"
+			why.append("✗ %s: %s" % [str(r["name"]), str(r["note"])])
+		elif str(r["state"]) == "warn":
+			if level == "ok":
+				level = "warn"
+			why.append("! %s: %s" % [str(r["name"]), str(r["note"])])
+	if not connected and level != "bad":
+		level = "bad"
+		why.append("✗ The engine does not answer.")
+	for t in tiles(f, host, {}, windows):
+		if t["warn"]:
+			if level == "ok":
+				level = "warn"
+			why.append("! %s: %s (%s)" % [str(t["label"]), str(t["value"]), str(t["note"])])
+	var mark: String = {"ok": "●", "warn": "!", "bad": "✗"}[level]
+	var figure := ""
+	var first := "Everything it needs is there."
+	if not host.is_empty():
+		var m: Dictionary = host["memory"]
+		figure = mem(float(m["used"]))
+		var n: int = host.get("sessions", []).size()
+		first = "%s of %s in use · %d session%s running" % [figure, mem(float(m["total"])), n, "" if n == 1 else "s"]
+	elif rungs.is_empty() and connected:
+		first = "Not read yet."
+	var tip := "%s: %s" % [name, first]
+	for w in why:
+		tip += "\n" + str(w)
+	tip += "\nClick: the setup check and the engine room. Click again to come back."
+	return {"level": level, "mark": mark, "text": "%s %s%s" % [mark, name, ("  " + figure) if figure != "" else ""], "short": "%s %s" % [mark, name], "tip": tip}
+

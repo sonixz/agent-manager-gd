@@ -351,3 +351,18 @@ func _dashboard_cases() -> void:
 	var failed_h: Dictionary = host.duplicate(true)
 	failed_h["history"]["error"] = "OSError: disk full"
 	check("dashboard: a reading that failed is said", View.about(failed_h, 0).ends_with("The last reading failed: OSError: disk full."))
+	# --- the top bar's button
+	var ok_rungs := Probe.ladder({"port": 8790, "windows": Probe.parse_windows(_recorded("windows-en.txt")), "linux": {"code": 0, "found": Probe.parse_programs(_recorded("doctor.txt"))}}, true, true)
+	var calm: Dictionary = host.duplicate(true)
+	var b := View.button("WSL", {}, calm, true, ok_rungs, true)
+	check("top bar: all standing: a dot, the name, the memory in use", b["level"] == "ok" and b["text"] == "● WSL  1.0 GB" and b["short"] == "● WSL" and str(b["tip"]).begins_with("WSL: 1.0 GB of 16 GB in use · 2 sessions running"))
+	b = View.button("WSL", f, calm, true, ok_rungs, true)
+	check("top bar: a disk nearly full is a mark and a reason, not a colour alone", b["level"] == "warn" and b["text"] == "! WSL  1.0 GB" and str(b["tip"]).contains("! Disk, free on C:: 67 GB (93 % full"))
+	b = View.button("WSL", f, calm, false, ok_rungs, true)
+	check("top bar: an engine that does not answer is said, without its last figure", b["level"] == "bad" and b["text"] == "✗ WSL" and str(b["tip"]).contains("✗ The engine does not answer.") and not str(b["tip"]).contains("in use"))
+	var no_tmux := Probe.ladder({"port": 8790, "linux": {"code": 0, "found": {"python3": {"path": "/usr/bin/python3", "version": "3.12"}}}}, false, false)
+	b = View.button("Computer", {}, {}, false, no_tmux, false)
+	check("top bar: a missing program is said by its name, once", b["level"] == "bad" and b["text"] == "✗ Computer" and str(b["tip"]).contains("✗ tmux") and not str(b["tip"]).contains("The engine does not answer"))
+	b = View.button("WSL", {}, {}, true, [], true)
+	check("top bar: before anything was read, nothing is claimed", b["level"] == "ok" and b["text"] == "● WSL" and str(b["tip"]).begins_with("WSL: Not read yet."))
+

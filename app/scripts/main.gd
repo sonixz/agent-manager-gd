@@ -40,7 +40,15 @@ var status_label: Label
 var header_name: Label
 var header_meta: Label
 var header_state: Label
-var view_buttons := {}
+var view_buttons := {}      # the managers' buttons, by the view each opens
+var view_btn: Button        # « Focus ▾ »: the way the sessions are shown, and the door to the others
+var view_menu: PopupMenu
+var session_view := "focus" # the last way the sessions were shown: where a manager's second click comes back to
+var header_box: HBoxContainer
+var header_fitting := false
+var header_compact := false # the bar is narrow: the managers show their sign alone
+var ground := {}            # what the ground's button says (HostView.button)
+var setup_at_start := true  # the ground is read once, a few seconds after the start, so its button tells the truth
 var content: Control
 var parking: Control          # hidden home of terminals not on screen
 var empty_label: Label
@@ -225,6 +233,9 @@ func _ready() -> void:
 	cfg.load(SETTINGS)
 	AmTheme.apply(str(cfg.get_value("ui", "theme", OS.get_environment("AGMGD_THEME") if OS.get_environment("AGMGD_THEME") != "" else "focus")))
 	view = str(cfg.get_value("ui", "view", "focus"))
+	session_view = str(cfg.get_value("ui", "session_view", view if _is_session_view(view) else "focus"))
+	if not _is_session_view(session_view):
+		session_view = "focus"
 	if view in ["setup", "shortcuts", "connect"]:  # settings pages are not reopened at startup
 		view = "focus"
 	density = str(cfg.get_value("ui", "list", OS.get_environment("AGMGD_LIST") if OS.get_environment("AGMGD_LIST") != "" else "line"))
@@ -243,6 +254,7 @@ func _ready() -> void:
 	status_label.text = "Starting the engine…"
 	if not await engine.connect_engine():
 		status_label.text = "The engine did not start: see the setup check."
+		_render_ground_button()
 		set_view("setup")
 		return
 	status_label.text = "%s for commands" % key_text("palette")
@@ -261,6 +273,17 @@ func _ready() -> void:
 	timer.autostart = true
 	timer.timeout.connect(refresh)
 	add_child(timer)
+	var ground_timer := Timer.new()  # the bar's button for the ground says the truth: asked again every 30 s
+	ground_timer.wait_time = 30.0
+	ground_timer.autostart = true
+	ground_timer.timeout.connect(_ground_poll)
+	add_child(ground_timer)
+	_ground_poll()
+	# and the ground itself is read once, aside, a few seconds after the start (on Windows it takes three seconds
+	# of PowerShell): a disk nearly full or a missing program shows on the button without opening its page
+	get_tree().create_timer(5.0).timeout.connect(func() -> void:
+		if setup_at_start and setup_facts.is_empty() and setup_thread == null:
+			_setup_read())
 
 
 func _notification(what: int) -> void:
@@ -276,6 +299,16 @@ func _exit_tree() -> void:
 
 
 # ------------------------------------------------------------------ shortcuts
+## The top bar (Loop 36). The ways to look at the sessions are one « View » button that names the one in use and
+## opens their list. The managers stand beside it, one button each: a click opens a manager's page, a second click
+## comes back to the sessions. More managers will come (SSH, MCP): each is one line here and its page.
+const SESSION_VIEWS := [["focus", "Focus"], ["grid", "Grid"], ["board", "Board"], ["history", "History"], ["review", "Review"]]
+const MANAGERS := [
+	["setup", "", "", ""],  # the ground: WSL on Windows, the computer on Linux. Its button is alive: see _render_ground_button
+	["sandboxes", "☁ Sandboxes", "☁", "Cloud sandboxes: the manager and their connections"],
+	["repos", "⎇ Repos", "⎇", "Connected repositories and their deploy keys"],
+]
+
 const DEFAULT_KEYS := {"palette": "Ctrl+K", "new": "Ctrl+N", "focus": "Ctrl+F", "grid": "Ctrl+G", "board": "Ctrl+B",
 	"history": "Ctrl+H", "review": "Ctrl+R", "next": "Ctrl+Down", "prev": "Ctrl+Up", "approve": "Ctrl+A",
 	"dictate": "F8", "command": "F9", "orchestrator": "Ctrl+O"}
@@ -498,17 +531,15 @@ func _build() -> void:
 	header_state = Label.new()
 	header_state.add_theme_font_size_override("font_size", 13)
 	hb.add_child(header_state)
-	var seg := HBoxContainer.new()
-	seg.add_theme_constant_override("separation", 0)
-	hb.add_child(seg)
-	for v in [["focus", "Focus", "Ctrl+Shift+F"], ["grid", "Grid", "Ctrl+Shift+G"], ["board", "Board", "Ctrl+Shift+B"], ["history", "History", "Ctrl+Shift+H"], ["review", "Review", "Ctrl+Shift+R"]]:
-		var b := Button.new()
-		b.text = v[1]
-		b.tooltip_text = v[2]
-		b.toggle_mode = true
-		b.pressed.connect(set_view.bind(v[0]))
-		seg.add_child(b)
-		view_buttons[v[0]] = b
+	view_btn = Button.new()
+	view_btn.name = "ViewBtn"
+	view_btn.toggle_mode = true
+	view_btn.tooltip_text = "How the sessions are shown: Focus, Grid, Board, History, Review"
+	view_btn.pressed.connect(_open_view_menu)
+	hb.add_child(view_btn)
+	view_menu = PopupMenu.new()
+	view_menu.id_pressed.connect(func(i: int) -> void: set_view(str(SESSION_VIEWS[i][0])))
+	add_child(view_menu)
 	var resume_btn := Button.new()
 	resume_btn.name = "ResumeBtn"
 	resume_btn.text = "↻ Resume"
@@ -516,26 +547,25 @@ func _build() -> void:
 	resume_btn.visible = false
 	resume_btn.pressed.connect(func() -> void: _resume(selected, ""))
 	hb.add_child(resume_btn)
+	hb.add_child(VSeparator.new())
+	for m in MANAGERS:
+		var b := Button.new()
+		b.name = "Manager_" + str(m[0])
+		b.text = str(m[1])
+		b.tooltip_text = str(m[3])
+		b.toggle_mode = true
+		b.pressed.connect(_toggle_manager.bind(str(m[0])))
+		hb.add_child(b)
+		view_buttons[m[0]] = b
+	hb.add_child(VSeparator.new())
 	orch_btn = Button.new()  # Loop 25: shows or hides the orchestrator's panel on the right
 	orch_btn.text = "◆ Orchestrator · beta"
 	orch_btn.tooltip_text = "The orchestrator: it plans, starts sessions and hands you their work (%s)" % key_text("orchestrator")
 	orch_btn.toggle_mode = true
 	orch_btn.pressed.connect(toggle_orchestrator)
 	hb.add_child(orch_btn)
-	var sbx_btn := Button.new()
-	sbx_btn.text = "☁ Sandboxes"
-	sbx_btn.tooltip_text = "Cloud sandboxes: the manager and their connections"
-	sbx_btn.toggle_mode = true
-	sbx_btn.pressed.connect(set_view.bind("sandboxes"))
-	hb.add_child(sbx_btn)
-	view_buttons["sandboxes"] = sbx_btn
-	var repos_btn := Button.new()
-	repos_btn.text = "⎇ Repos"
-	repos_btn.tooltip_text = "Connected repositories and their deploy keys"
-	repos_btn.toggle_mode = true
-	repos_btn.pressed.connect(set_view.bind("repos"))
-	hb.add_child(repos_btn)
-	view_buttons["repos"] = repos_btn
+	header_box = hb
+	hb.resized.connect(_fit_header)
 	sound_btn = Button.new()  # the small sounds, on or muted (there is no spoken notice any more)
 	sound_btn.text = "♪" if sound_on else "♪ off"
 	sound_btn.toggle_mode = true
@@ -1952,8 +1982,7 @@ func _render_header() -> void:
 	var asks := str(s.get("activity", "")) == "waiting" and msg != ""
 	header_state.text = ("● asks you: " + msg.left(70)) if asks else (("● " + str(act[1]) if s else "") + (("  ·  " + msg.left(60)) if msg != "" and str(s.get("activity", "")) == "approval" else ""))
 	header_state.add_theme_color_override("font_color", act[0])
-	for k in view_buttons:
-		view_buttons[k].button_pressed = k == view
+	_sync_view_buttons()
 	var rb: Button = get_node("Root/MainCol/Header").find_child("ResumeBtn", true, false)
 	if rb:
 		rb.visible = s and str(s.get("tool", "")) != "shell" and str(s.get("state", "")) in ["exited", "missing"]
@@ -1978,9 +2007,102 @@ func select(id: String) -> void:
 	_render_header()
 
 
+func _is_session_view(v: String) -> bool:
+	return SESSION_VIEWS.any(func(x: Array) -> bool: return x[0] == v)
+
+
+## The top bar says where one is: the « View » button names the way the sessions are shown (pressed while they are
+## shown), each manager's button is pressed while its page is.
+func _sync_view_buttons() -> void:
+	for k in view_buttons:
+		view_buttons[k].set_pressed_no_signal(k == view)
+	if view_btn == null:
+		return
+	for x in SESSION_VIEWS:
+		if x[0] == session_view:
+			view_btn.text = "%s ▾" % str(x[1])
+	view_btn.set_pressed_no_signal(_is_session_view(view))
+
+
+func _open_view_menu() -> void:
+	_sync_view_buttons()  # the click flipped the button: it says the view, not the click
+	view_menu.clear()
+	for i in SESSION_VIEWS.size():
+		var keys := key_text(str(SESSION_VIEWS[i][0]))
+		view_menu.add_radio_check_item(str(SESSION_VIEWS[i][1]) + (("      " + keys) if keys != "" else ""), i)
+		view_menu.set_item_checked(i, view == SESSION_VIEWS[i][0])
+	view_menu.popup(Rect2i(Vector2i(view_btn.get_screen_position() + Vector2(0, view_btn.size.y)), Vector2i.ZERO))
+
+
+## A manager's button: its page, or back to the sessions when its page is already there.
+func _toggle_manager(id: String) -> void:
+	set_view(session_view if view == id else id)
+
+
+## The ground's name: WSL where the engine runs in WSL, the computer itself on Linux.
+func ground_name(short := true) -> String:
+	if setup_probe.on_windows:
+		return "WSL"
+	return "Computer" if short else "This computer"
+
+
+## The ground's button is alive: a mark (● all stands, ! something deserves a look, ✗ something is missing or the
+## engine does not answer), the name, the memory in use. Its tooltip says why.
+func _render_ground_button() -> void:
+	if not view_buttons.has("setup"):
+		return
+	var rungs: Array = [] if setup_facts.is_empty() else SetupProbe.ladder(setup_facts, engine.connected, setup_probe.on_windows)
+	ground = HostView.button(ground_name(), setup_facts, setup_host, engine.connected, rungs, setup_probe.on_windows)
+	var b: Button = view_buttons["setup"]
+	b.tooltip_text = str(ground["tip"])
+	var tint: Variant = {"warn": AmTheme.col("WARN"), "bad": AmTheme.col("ERROR")}.get(ground["level"])
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		if tint == null:
+			b.remove_theme_color_override(c)
+		else:
+			b.add_theme_color_override(c, tint)
+	_fit_header()
+
+
+## When the bar is too narrow for everything, the managers show their sign alone (their names stay in the
+## tooltips); the session's title keeps some room.
+func _fit_header() -> void:
+	if header_fitting or header_box == null:
+		return
+	header_fitting = true
+	_label_managers(false)
+	header_compact = header_box.size.x > 0.0 and header_box.size.x < header_box.get_combined_minimum_size().x + 220.0
+	if header_compact:
+		_label_managers(true)
+	header_fitting = false
+
+
+func _label_managers(compact: bool) -> void:
+	for m in MANAGERS:
+		var b: Button = view_buttons[m[0]]
+		if m[0] == "setup":
+			b.text = str(ground.get("short" if compact else "text", ground_name()))
+		else:
+			b.text = str(m[2] if compact else m[1])
+
+
+## Every 30 seconds, the engine is asked how the ground is doing, for the bar's button. On the ground's own page
+## the dashboard asks every 5 seconds already.
+func _ground_poll() -> void:
+	if engine.connected and view != "setup":
+		var r := await engine.call_api("GET", "/host")
+		if not r.has("error"):
+			setup_host = r
+	_render_ground_button()
+
+
 func set_view(v: String) -> void:
 	view = v
+	if _is_session_view(v):
+		session_view = v
 	_save("view", v)
+	if _is_session_view(v):
+		_save("session_view", v)
 	if v == "grid":
 		# fill the grid with the selected session and the most recent others
 		for x in sessions:
@@ -4869,6 +4991,7 @@ func _setup_ask_host() -> void:
 	var had := not setup_host.is_empty()
 	var r := await engine.call_api("GET", "/host") if engine.connected else {}
 	setup_host = {} if r.has("error") else r
+	_render_ground_button()
 	if view != "setup":
 		return
 	if had and not setup_host.is_empty() and is_instance_valid(setup_dash) and setup_dash.get_parent() != parking:
@@ -4938,6 +5061,7 @@ func _setup_done(f: Dictionary) -> void:
 	setup_thread.wait_to_finish()
 	setup_thread = null
 	setup_facts = f
+	_render_ground_button()
 	if setup_again:
 		setup_again = false
 		_setup_read()
@@ -4989,12 +5113,13 @@ func _setup_tint(r: Dictionary) -> Color:
 
 func _setup_rows() -> Array:
 	var rungs: Array = SetupProbe.ladder(setup_facts, engine.connected, setup_probe.on_windows)
-	var rows: Array = [_title("Setup check"),
-		_wrap("What Agent Manager GD stands on, from the ground up%s. It looks first, and changes nothing by itself: what it can install for you, it installs on your click, in a terminal you see." % (": Windows, WSL, then what runs inside WSL" if setup_probe.on_windows else ""))]
+	var rows: Array = [_title(ground_name(false)), _section_label("Setup check")]
+	var intro := "What Agent Manager GD stands on, from the ground up%s. It looks first, and changes nothing by itself: what it can install for you, it installs on your click, in a terminal you see." % (": Windows, WSL, then what runs inside WSL" if setup_probe.on_windows else "")
 	# Every line is shown while something is missing, deserves a look or is still being read. When all stands, one
 	# line of marks is enough: the page is then the engine room, and the ladder is one click away.
 	var trouble: bool = rungs.any(func(r: Dictionary) -> bool: return str(r["state"]) in ["warn", "wait", "after"] or (str(r["state"]) == "no" and r["required"]))
 	if trouble or setup_details:
+		rows.append(_wrap(intro))
 		var grid := GridContainer.new()
 		grid.columns = 4
 		grid.add_theme_constant_override("h_separation", 18)
@@ -5037,9 +5162,13 @@ func _setup_rows() -> Array:
 			pair.add_child(name)
 			flow.add_child(pair)
 		rows.append(flow)
-	rows.append(_wrap(SetupProbe.verdict(rungs) + ("  Looking again…" if setup_thread != null and not setup_facts.is_empty() else "")))
+	var verdict := SetupProbe.verdict(rungs) + ("  Looking again…" if setup_thread != null and not setup_facts.is_empty() else "")
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 8)
+	if trouble or setup_details:
+		rows.append(_wrap(verdict))
+	else:
+		actions.add_child(_muted(verdict))  # all stands: one line says it, with its buttons beside
 	actions.add_child(_small("Check again", _setup_check_again))
 	if not trouble:
 		actions.add_child(_small("Show less" if setup_details else "Show every line", func() -> void:

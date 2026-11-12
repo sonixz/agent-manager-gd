@@ -105,7 +105,7 @@ guide(
     "review", "Review a diff and send comments", "Work", 4,
     "Read what an agent changed, file by file, comment on lines, and send your comments to it in one go.",
     ["A session that changed files in a git repository"],
-    [(f"Select the session and click <b>Review</b> ({K('Ctrl', 'Shift', 'R')}).",
+    [(f"Select the session, click <b>View ▾</b> at the top and choose <b>Review</b> ({K('Ctrl', 'Shift', 'R')}).",
       "The files the agent changed since its branch started, with their added and removed lines, and the diff of "
       "the first file."),
      ("Click a file in the list.",
@@ -125,7 +125,7 @@ guide(
     "history", "Resume, fork and find any conversation", "Work", 4,
     "Find an old session in the History, pick up its conversation where it stopped, or try another way on a copy.",
     [],
-    [(f"Click <b>History</b> ({K('Ctrl', 'Shift', 'H')}).",
+    [(f"Click <b>View ▾</b> at the top and choose <b>History</b> ({K('Ctrl', 'Shift', 'H')}).",
       "Every session ever made, the archived ones too, with each conversation the agent had in it. Nothing is "
       "forgotten: removing a session keeps its conversations here."),
      ("Type in the search box: a name, a folder, a group or a conversation id.",

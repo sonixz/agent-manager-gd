@@ -131,6 +131,7 @@ func _sizes() -> String:
 func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	main = load("res://main.tscn").instantiate()
+	main.setup_at_start = false  # the steps ask for the ground's reading themselves, with their own answers
 	root.add_child(main)
 	var t0 := Time.get_ticks_msec()
 	while (main.engine == null or not main.engine.connected) and Time.get_ticks_msec() - t0 < 20000:
@@ -270,6 +271,82 @@ func _run() -> void:
 			main.dictation.recording = false
 			main.voice_live.visible = false
 			main.voice_overlay.visible = false
+		"topbar":  # Loop 36: the top bar. One « View » button for the ways to look at the sessions, the managers beside it (a click opens, a second click comes back), the ground's button alive, and a narrow window
+			main.select(made["Checkout flow"])
+			await wait(1.5)
+			report.append("topbar: at the start: %s" % _bar())
+			main.view_btn.pressed.emit()
+			await wait(0.3)
+			var listed := []
+			for i in main.view_menu.item_count:
+				listed.append(("✓ " if main.view_menu.is_item_checked(i) else "") + main.view_menu.get_item_text(i).replace("      ", " · "))
+			report.append("topbar: « View » opens: %s | the button still says the view: %s" % [" | ".join(listed), main.view_btn.button_pressed])
+			await shot("topbar-menu")
+			main.view_menu.hide()
+			main.view_menu.id_pressed.emit(1)
+			await wait(1.5)
+			report.append("topbar: « Grid » chosen: view « %s » | %s" % [main.view, _bar()])
+			main.view_buttons["sandboxes"].pressed.emit()
+			await wait(0.8)
+			report.append("topbar: « Sandboxes »: view « %s » | %s" % [main.view, _bar()])
+			main.view_buttons["repos"].pressed.emit()
+			await wait(0.8)
+			var on_repos: String = main.view
+			main.view_buttons["repos"].pressed.emit()
+			await wait(1.0)
+			report.append("topbar: « Repos » then « Repos » again: view « %s », then back to « %s » | %s" % [on_repos, main.view, _bar()])
+			# the ground's button: first as this display's engine says, then with a made-up computer for the pictures
+			await main._ground_poll()
+			report.append("topbar: the ground's button, nothing read yet: level %s, a figure after its name: %s | « %s »" % [main.ground["level"], str(main.ground["text"]).length() > str(main.ground["short"]).length(), str(main.ground["tip"]).get_slice("\n", 0).left(12)])
+			var rec := ProjectSettings.globalize_path("res://").path_join("../tools/setup/recorded")
+			var win := FileAccess.get_file_as_string(rec.path_join("windows-en.txt"))
+			var doc := FileAccess.get_file_as_string(rec.path_join("doctor.txt"))
+			main.setup_probe.on_windows = true
+			main.setup_probe.runner = func(a: Array) -> Dictionary:
+				return {"code": 0, "out": win if str(a[0]) == "powershell.exe" else doc}
+			main._setup_read()
+			while main.setup_thread != null:
+				await process_frame
+			await wait(0.6)  # the engine's own answer, asked with the reading, has come: the made-up one replaces it
+			var moment := int(Time.get_unix_time_from_datetime_string("2026-11-12T15:20:00"))
+			main.setup_host = _made_up_host(moment)
+			main._render_ground_button()
+			await wait(0.3)
+			report.append("topbar: a disk nearly full: « %s », level %s | it says why: %s" % [main.view_buttons["setup"].text, main.ground["level"], str(main.ground["tip"]).contains("! Disk, free on C:")])
+			main.set_view("focus")
+			await wait(1.5)
+			await shot("topbar")
+			main.view_buttons["setup"].pressed.emit()
+			while main.setup_thread != null:
+				await process_frame
+			await wait(0.4)
+			main.setup_dash._timer.stop()
+			main.setup_dash.bias = 0
+			main.setup_host = _made_up_host(moment)
+			main.setup_hist = _made_up_hour(moment)
+			main._layout_view()
+			main._render_ground_button()
+			await wait(0.3)
+			report.append("topbar: the ground's button opens its page: view « %s », titled « %s » | %s" % [main.view, (main.content.find_children("*", "Label", true, false)[0] as Label).text, _bar()])
+			await shot("topbar-wsl")
+			# a narrow window (here the app's own frame is narrowed: this display's window keeps its size): the
+			# managers show their sign alone, and nothing is cut
+			main.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			main.size = Vector2(1150, 1200)
+			await wait(0.6)
+			report.append("topbar: the app %d wide: compact: %s | %s | the bar fits: %s" % [int(main.size.x), main.header_compact, _bar(), main.header_box.get_combined_minimum_size().x <= main.header_box.size.x + 0.5])
+			await shot("topbar-narrow")
+			main.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			await wait(0.6)
+			report.append("topbar: wide again: compact: %s | %s" % [main.header_compact, _bar()])
+			main.view_buttons["setup"].pressed.emit()
+			await wait(1.0)
+			var engine_was: bool = main.engine.connected
+			main.engine.connected = false
+			main._render_ground_button()
+			report.append("topbar: back to « %s » | the engine not answering: « %s », level %s" % [main.view, main.view_buttons["setup"].text, main.ground["level"]])
+			main.engine.connected = engine_was
+			main._render_ground_button()
 		"typing":  # a check: keys pressed on the keyboard reach the selected session's terminal, the way the window receives them
 			main.select(made["Test runner"])
 			await wait(2.5)
@@ -1406,6 +1483,14 @@ func _speed(ids: Array) -> void:
 	report.append("      groups | a group folded or opened by a click: on screen after %s" % (("%.1f" % _med(folds)) if folds.min() >= 0.0 else "the engine's answer"))
 	report.append("      groups | a session moved to another group: on screen after %s, confirmed after %.0f | a group created: on screen after %s, confirmed after %.0f" % [
 		("%.1f" % _med(seen)) if _med(seen) >= 0.0 else "the engine's answer", _med(done), ("%.1f" % g_seen) if g_seen >= 0.0 else "the engine's answer", g_done])
+
+
+## The top bar as it is: the « View » button, then each manager's button; a pressed one is in brackets.
+func _bar() -> String:
+	var o := []
+	for b in [main.view_btn] + main.MANAGERS.map(func(m: Array) -> Button: return main.view_buttons[m[0]]):
+		o.append(("[%s]" if (b as Button).button_pressed else "%s") % (b as Button).text)
+	return "  ".join(o)
 
 
 ## The setup check as it is on screen: the marks of its lines in order, its last sentence, a line that holds a word.

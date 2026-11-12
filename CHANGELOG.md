@@ -6,6 +6,15 @@ Newest first.
 ## Unreleased: alpha
 
 ### The setup check reads from the ground up, and its engine room · Loop 36 (first steps)
+- The top bar is arranged for more to come. **View ▾** replaces the five buttons Focus, Grid, Board, History and
+  Review: it names the way the sessions are shown and opens the list of the five, each with its shortcut (the
+  shortcuts have not changed). Beside it stand the managers, one button each: **WSL** (on Linux: **Computer**),
+  **☁ Sandboxes**, **⎇ Repos**. A click opens a manager's page; a second click on it comes back to the sessions as
+  they were shown. In a narrow window the managers show their sign alone.
+- The **WSL** button is alive: **●** when everything stands, **!** when something deserves a look (a disk nearly
+  full), **✗** when something is missing or the engine does not answer, then the memory in use; its tooltip says
+  why. It opens the page that was only under ◐ › Setup check (still there too), now titled **WSL**. For it, the
+  ground is read once a few seconds after the app starts, aside, and the engine is asked every 30 seconds.
 - The **Engine room** is now a dashboard, under the Setup check. Five tiles say the moment: memory in use, sessions
   running, how busy the processors are, the room left on the disk, how long it has been up. Under them, **Memory in
   use, by session**: one bar per slice of time, one colour per session, over the last hour, 6 hours, 24 hours or
