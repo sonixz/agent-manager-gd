@@ -417,3 +417,18 @@ func _repo_cases() -> void:
 	var bar := Repo.button([gh, az, broken])
 	check("repos: the bar's button is marked when a repository needs a hand, and says which", bar["level"] == "bad" and bar["mark"] == "✗" and str(bar["tip"]).contains("✗ zeta: does not work") and str(bar["tip"]).contains("! Client Portal: waits to be added"))
 	check("repos: all well, the bar's button has no mark", Repo.button([gh])["mark"] == "" and Repo.button([])["level"] == "ok")
+	# --- what the drawn pieces show
+	var live := {"s1": {"state": "running", "activity": "working"}, "s2": {"state": "exited", "activity": "done"}, "s3": {"state": "running", "activity": "working"}}
+	var dots := Repo.session_dots(gh, live)
+	check("repos: a dot per open session, the running ones first, none for an archived one", dots.map(func(d: Dictionary) -> String: return "%s:%s" % [d["id"], d["activity"]]) == ["s1:working", "s2:off"])
+	var dated: Dictionary = gh.duplicate(true)
+	dated["sessions"] = [{"id": "x", "created": now - 3600.0}, {"id": "y", "created": now - 7200.0}, {"id": "z", "created": now - 3 * 86400.0 - 60.0}, {"id": "o", "created": now - 40 * 86400.0}, {"id": "f", "created": now + 5.0}]
+	var days := Repo.started_days(dated, now)
+	check("repos: sessions started per day, today last; older than the span is left out; a clock set back counts as today", days.size() == 14 and days[13] == 3 and days[10] == 1 and days.reduce(func(a: int, b: int) -> int: return a + b, 0) == 4)
+	var fresh: Dictionary = gh.duplicate(true)
+	fresh["checked_at"] = now - 300.0
+	check("repos: how fresh a check is: half way at five minutes, nothing at ten, nothing for a key that waits", is_equal_approx(Repo.freshness(fresh, now), 0.5) and Repo.freshness(fresh, now + 400.0) == 0.0 and Repo.freshness(az, now) == 0.0)
+	var top := Repo.tiles([gh, az, broken, other], live)
+	check("repos: the tiles: keys that work, who needs a hand, sessions running, hosts", top.map(func(t: Dictionary) -> String: return "%s=%s" % [t["id"], t["value"]]) == ["connected=2", "hand=2", "running=2", "hosts=3"] and top[1]["note"] == "Client Portal, zeta" and top[1]["level"] == "bad" and top[3]["note"] == "GitHub 2 · Azure DevOps 1 · git.example.org 1")
+	check("repos: the tiles when all is well and nothing runs", Repo.tiles([gh], {})[1]["note"] == "none" and Repo.tiles([gh], {})[1]["level"] == "ok" and Repo.tiles([gh], {})[2]["note"] == "on no repository" and Repo.tiles([gh], {})[0]["note"] == "of 1 repository")
+

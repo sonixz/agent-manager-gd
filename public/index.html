@@ -318,15 +318,15 @@
               <li><b>Add the SSH address</b>: a key is made for it, its public half shown with where to paste it. On
                 GitHub, a deploy key for that repository only; on Azure DevOps, a key on your profile, and the line
                 says it opens your whole account.</li>
-              <li><b>One line each</b>: the host, whether the key works and when that was checked, the folder's
-                branch and what waits in it, the sessions running. What needs a hand comes first.</li>
+              <li><b>One line each, drawn</b>: a chip for the host, the key's state and how fresh its check is, the
+                folder's branch and what waits in it, a dot per session. What needs a hand comes first.</li>
               <li><b>Passed through <code>GIT_SSH_COMMAND</code></b> to that repository's sessions only (its own
                 known_hosts, <code>IdentitiesOnly</code>). Nothing written to <code>~/.ssh</code> or to the repository's config.</li>
               <li><b>Your own clone</b>: « I already have it », or « clone it » where you choose. Rotate or disconnect any time.</li>
             </ul>
           </div>
           <figure class="screen">
-            <img src="assets/showcase/repos.webp" width="1920" height="1200" loading="lazy" alt="The Repos tab: five repositories, one per line, on GitHub and Azure DevOps, with the state of each key, what it opens and the folder's branch. The first line, an Azure DevOps repository that waits for its key, is unfolded: its public key, where to add it, Check, Rotate the key, Disconnect.">
+            <img src="assets/showcase/repos.webp" width="1920" height="1200" loading="lazy" alt="The Repos tab: four tiles (keys that work, need a hand, sessions running, hosts), then five repositories, one per line, on GitHub and Azure DevOps, each with a host chip, the state of its key, what the key opens, the folder's branch, a dot per session and the sessions started over fourteen days. The first line, an Azure DevOps repository that waits for its key, is unfolded: its public key, where to add it, Check, Rotate the key, Disconnect.">
           </figure>
         </div>
 

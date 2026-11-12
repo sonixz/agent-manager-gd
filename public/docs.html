@@ -452,11 +452,17 @@
         </ul>
 
         <h2 id="repos">Repositories and their keys</h2>
-        <p><b>⎇ Repos</b> lists the connected repositories, one per line, with what you need to know at a glance:
-          <b>Host</b> (GitHub, Azure DevOps, or the host's name), <b>Key</b> (it works, and when that was last checked;
-          it waits to be added; it does not work), <b>The key opens</b>, <b>Folder</b> (yours or Agent Manager's copy, its
-          branch, <i>↑</i> commits not pushed, <i>↓</i> commits behind, files changed), <b>Sessions</b> running on it and
-          <b>Last used</b>. The repositories that need a hand come first, already unfolded. Click a name or its arrow
+        <p><b>⎇ Repos</b> opens on four tiles (the keys that work, the repositories that need a hand, the sessions
+          running, the hosts), then lists the connected repositories, one per line, each column a small drawing:
+          <b>Host</b>, a chip (a disc for GitHub, a diamond for Azure DevOps, a ring for another host); <b>Key</b>, a
+          disc when it works, a ring when it waits to be added, a cross when it does not work, with a thin bar that
+          empties in ten minutes, the age at which the page checks it again, and a sign that turns while it is
+          checked; <b>The key opens</b>, one square for this repository only, a pile of squares for your whole
+          account; <b>Folder</b>, yours or Agent Manager's copy, its branch in a chip, then a triangle up for commits
+          not pushed, a triangle down for commits behind, a square for files changed; <b>Sessions</b>, a dot per open
+          session in the colour of its state (a session at work breathes; click a running one to show it);
+          <b>Started, 14 days</b>, the sessions started on it day by day, today at the right. Rest the pointer on any
+          of them for the words. The repositories that need a hand come first, already unfolded. Click a name or its arrow
           to unfold a line: the public key and <b>Copy the public key</b>, where to add it, the key's kind and age,
           <b>Check</b>, <b>Rotate the key</b>, <b>Disconnect</b>, and the folder. <b>New session</b> starts a session on
           that repository. In a narrow window some columns leave, the host last. The <b>⎇ Repos</b> button of the top

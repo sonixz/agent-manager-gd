@@ -6,9 +6,12 @@ Newest first.
 ## Unreleased: alpha
 
 ### Repositories, a line each, and Azure DevOps · Loop 37
-- The **⎇ Repos** page shows one repository per line: its host, whether its key works and when that was last
-  checked, what the key opens, the folder (yours or Agent Manager's copy, its branch, commits not pushed, files
-  changed), the sessions running on it, and when it was last used. The repositories that need a hand come first and
+- The **⎇ Repos** page is drawn, like the engine room. Four tiles on top: the keys that work, the repositories
+  that need a hand, the sessions running, the hosts. Then one repository per line, each column a small drawing: the
+  host as a chip; the key's state (a disc, a ring, a cross) with a thin bar that empties in ten minutes, and a sign
+  that turns while the key is checked; what the key opens (one square, or a pile of them for a whole account); the
+  folder's branch in a chip with what is not pushed and what changed; a dot per open session in the colour of its
+  state, breathing while it works, and a click shows it; the sessions started day by day over fourteen days. The repositories that need a hand come first and
   are unfolded. A click on a name or its arrow unfolds the rest: the public key, where to add it, **Check**,
   **Rotate the key**, **Disconnect**, the folder. In a narrow window some columns leave, the host last.
 - **Azure DevOps** repositories can be connected: `git@ssh.dev.azure.com:v3/organization/project/repository`

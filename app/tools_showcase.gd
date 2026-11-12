@@ -945,6 +945,10 @@ func _run() -> void:
 			var az_new: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@ssh.dev.azure.com:v3/acme/Back%20Office/billing-api", "local_path": ""})
 			var gh_new: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/pixel-forge.git", "local_path": code.path_join("pixel-forge")})
 			report.append("repos: Azure DevOps: key « %s… », opens « %s », its page %s | checked through the stand-in: %s" % [str(az["public_key"]).left(7), az["key_scope"], az["key_page"], (await main.engine.call_api("GET", "/repos"))["repos"].filter(func(x: Dictionary) -> bool: return x["id"] == az["id"])[0]["status"]])
+			# sessions on two of them, so the lines have their dots: an agent at work, an agent that waits, a shell
+			for made_on in [["acme-store", "Gift cards", "claude"], ["acme-store", "Tax rules", "claude"], ["acme-store", "A look around", "shell"], ["orbit-api", "Retry budget", "codex"]]:
+				await main.engine.call_api("POST", "/sessions", {"name": made_on[1], "tool": made_on[2], "repo": ids[made_on[0]], "group": "Repositories", "brain": false})
+			await wait(2.5)
 			await main.refresh()
 			var asked_at := Time.get_ticks_msec()
 			var listed: Dictionary = await main.engine.call_api("GET", "/repos")
@@ -963,7 +967,19 @@ func _run() -> void:
 			report.append("repos: %s" % main.repos_summary.text)
 			for l in lines:
 				report.append("repos:   " + l)
-			var head: Array = main.repos_list.get_child(0).get_children().filter(func(n: Node) -> bool: return n is Label).map(func(n: Node) -> String: return (n as Label).text)
+			var head: Array = main.repos_list.find_child("RepoHead", true, false).get_children().filter(func(n: Node) -> bool: return n is Label).map(func(n: Node) -> String: return (n as Label).text)
+			var by_id := {}
+			for x in main.sessions:
+				by_id[str(x["id"])] = x
+			var pieces := {}
+			for n in main.repos_list.find_children("*", "Control", true, false):
+				var what: String = str(n.get_script().resource_path).get_file() if n.get_script() != null else ""
+				if what == "repo_widgets.gd":
+					pieces[n.get_class()] = int(pieces.get(n.get_class(), 0)) + 1
+			var store: Dictionary = main.repos_cache.filter(func(x: Dictionary) -> bool: return x["name"] == "acme-store")[0]
+			report.append("repos: tiles: %s" % " | ".join(RepoView.tiles(main.repos_cache, by_id).map(func(t: Dictionary) -> String: return "%s %s (%s)" % [t["label"], t["value"], t["note"]])))
+			report.append("repos: drawn pieces on the page: %d | acme-store's dots: %s | started, 14 days: %s" % [main.repos_list.find_children("*", "Control", true, false).filter(func(n: Node) -> bool: return n.has_method("base")).size(),
+				", ".join(RepoView.session_dots(store, by_id).map(func(d: Dictionary) -> String: return "%s:%s" % [d["name"], d["activity"]])), str(RepoView.started_days(store, now))])
 			var unfolded := []
 			for c in main.repos_list.get_children():
 				if str(c.name).begins_with("Repo_") and c.find_children("*", "LineEdit", true, false).size() > 0:

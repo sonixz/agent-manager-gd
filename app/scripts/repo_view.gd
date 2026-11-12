@@ -10,7 +10,7 @@ const HostView := preload("res://scripts/host_view.gd")
 ## The columns after the name, with their width. In a narrow window they leave in the order of `GIVE_UP`: the host
 ## last, because it is what tells a GitHub repository from an Azure DevOps one.
 const COLUMNS := [["host", "Host", 116.0], ["key", "Key", 220.0], ["opens", "The key opens", 168.0], ["folder", "Folder", 250.0],
-	["sessions", "Sessions", 92.0], ["used", "Last used", 96.0]]
+	["sessions", "Sessions", 116.0], ["used", "Started, 14 days", 116.0]]
 const GIVE_UP := ["used", "sessions", "opens", "host"]
 const NAME_MIN := 170.0
 const FIXED := 26.0 + 118.0 + 40.0   # the mark, « New session », the arrow
@@ -241,3 +241,77 @@ static func button(repos: Array) -> Dictionary:
 	for w in why:
 		tip += "\n" + str(w)
 	return {"level": worst, "mark": "" if worst == "ok" else mark(worst), "tip": tip}
+
+
+# ---------------------------------------------------------------- what the drawn pieces show
+## A repository's open sessions as dots, the running ones first. `by_id` is the app's own list: session id -> the
+## session as the app knows it now (its state, what it is doing). An archived session has no dot.
+static func session_dots(r: Dictionary, by_id: Dictionary) -> Array:
+	var running := []
+	var others := []
+	for s in r.get("sessions", []):
+		if int(s.get("archived", 0)) == 1:
+			continue
+		var live: Dictionary = by_id.get(str(s["id"]), {})
+		var on := str(live.get("state", "")) == "running"
+		var dot := {"id": str(s["id"]), "name": str(s.get("name", "")), "running": on, "activity": str(live.get("activity", "")) if on else "off"}
+		if on:
+			running.append(dot)
+		else:
+			others.append(dot)
+	return running + others
+
+
+## How many sessions were started on it in each of the last `days` spans of 24 hours, the latest last.
+static func started_days(r: Dictionary, now: float, days := 14) -> Array:
+	var counts := []
+	counts.resize(days)
+	counts.fill(0)
+	for s in r.get("sessions", []):
+		var d := int(floor((now - float(s.get("created", 0.0))) / 86400.0))
+		if d < 0:
+			d = 0  # a clock set back a little: it is today
+		if d < days:
+			counts[days - 1 - d] += 1
+	return counts
+
+
+## How fresh the key's last check is: 1 just checked, 0 at ten minutes (when the page checks it again) or never.
+static func freshness(r: Dictionary, now: float) -> float:
+	var at := float(r.get("checked_at", 0.0))
+	if at <= 0.0 or str(r.get("status", "")) != "connected":
+		return 0.0
+	return clampf(1.0 - (now - at) / 600.0, 0.0, 1.0)
+
+
+## The figures above the lines, one tile each: label, value, a sentence, a level.
+static func tiles(repos: Array, by_id: Dictionary) -> Array:
+	var connected := 0
+	var hand := []
+	var worst := "ok"
+	var hosts := {}
+	var running := 0
+	var busy_repos := 0
+	for r in repos:
+		if str(r.get("status", "")) == "connected":
+			connected += 1
+		var lv := level(r)
+		if lv != "ok":
+			hand.append(str(r.get("name", "")))
+			worst = "bad" if lv == "bad" or worst == "bad" else "warn"
+		var h := host_label(r)
+		hosts[h] = int(hosts.get(h, 0)) + 1
+		var n := session_dots(r, by_id).filter(func(d: Dictionary) -> bool: return d["running"]).size()
+		running += n
+		if n > 0:
+			busy_repos += 1
+	var where := []
+	for h in hosts:
+		where.append("%s %d" % [h, hosts[h]])
+	return [
+		{"id": "connected", "label": "Keys that work", "value": str(connected), "note": "of %d repositor%s" % [repos.size(), "y" if repos.size() == 1 else "ies"], "level": "ok"},
+		{"id": "hand", "label": "Need a hand", "value": str(hand.size()), "note": "none" if hand.is_empty() else ", ".join(hand.slice(0, 3)) + (" and others" if hand.size() > 3 else ""), "level": worst},
+		{"id": "running", "label": "Sessions running", "value": str(running), "note": "on no repository" if busy_repos == 0 else "on %d repositor%s" % [busy_repos, "y" if busy_repos == 1 else "ies"], "level": "ok"},
+		{"id": "hosts", "label": "Hosts", "value": str(hosts.size()), "note": " · ".join(where), "level": "ok"},
+	]
+

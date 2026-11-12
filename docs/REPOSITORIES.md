@@ -11,9 +11,11 @@ on every line:
 
 ## The page
 
-**⎇ Repos** shows one repository per line: its host, whether its key works and when that was last checked, what
-the key opens, the folder (yours or Agent Manager's copy, its branch, commits not pushed, files changed), the
-sessions running on it, and when it was last used. The repositories that need a hand come first, unfolded. A click
+**⎇ Repos** opens on four tiles (keys that work, repositories that need a hand, sessions running, hosts), then
+shows one repository per line, each column a small drawing: its host as a chip, its key's state with a bar that
+empties in ten minutes (the age at which the page checks it again), what the key opens, the folder (yours or Agent
+Manager's copy, its branch, commits not pushed, files changed), a dot per open session, and the sessions started on
+it day by day over fourteen days. Rest the pointer on any of them for the words. The repositories that need a hand come first, unfolded. A click
 on a name or its arrow unfolds the rest: the public key, where to add it, Check, Rotate the key, Disconnect, the
 folder. Opening the page reads the folders again and checks again the keys checked more than ten minutes ago;
 **Check all** does it at once. Nothing is checked while the page is closed.

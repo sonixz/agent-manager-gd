@@ -8,6 +8,7 @@ const SetupProbe := preload("res://scripts/setup_probe.gd")  # by its path: a ne
 const HostView := preload("res://scripts/host_view.gd")
 const HostDash := preload("res://scripts/host_dash.gd")
 const RepoView := preload("res://scripts/repo_view.gd")
+const RepoWidgets := preload("res://scripts/repo_widgets.gd")
 const ACT_KEYS := ["working", "approval", "waiting", "done", "idle", "exited", "missing"]
 
 var engine: EngineClient
@@ -164,6 +165,7 @@ var repos_form: Control        # the form to connect one: folded away once there
 var repos_form_open := false
 var repos_open := {}           # a repository -> its line is unfolded (asked for; the ones that need a hand unfold by themselves)
 var repos_ticks := 0
+var repos_unfolding := ""      # the line a click just unfolded: its details fade in
 var f_repo: OptionButton
 var confirm_dialog: ConfirmationDialog
 var confirm_done: Callable
@@ -4224,13 +4226,16 @@ func _render_repos() -> void:
 	if repos_cache.is_empty():
 		return
 	var fit: Dictionary = RepoView.fit(repos_list.size.x if repos_list.size.x > 100.0 else content.size.x - 20.0)
-	var states := {}
+	var by_id := {}  # the app's own list of sessions: what each is doing now, for the dots
 	for x in sessions:
-		states[str(x["id"])] = str(x.get("state", ""))
+		by_id[str(x["id"])] = x
 	var now := Time.get_unix_time_from_system()
+	var tiles = RepoWidgets.Tiles.new(RepoView.tiles(repos_cache, by_id))
+	tiles.name = "RepoTiles"
+	repos_list.add_child(tiles)
 	repos_list.add_child(_repo_head(fit))
 	for repo in RepoView.order(repos_cache):
-		repos_list.add_child(_repo_line(repo, fit, states, now))
+		repos_list.add_child(_repo_line(repo, fit, by_id, now))
 
 
 func _repo_cell(text: String, width: float, tip := "") -> Label:
@@ -4265,7 +4270,7 @@ func _repo_head(fit: Dictionary) -> Control:
 
 
 ## One repository: its line, and under it, when unfolded, everything else about it.
-func _repo_line(r: Dictionary, fit: Dictionary, states: Dictionary, now: float) -> Control:
+func _repo_line(r: Dictionary, fit: Dictionary, by_id: Dictionary, now: float) -> Control:
 	var rid := str(r["id"])
 	var lv: String = RepoView.level(r)
 	var tint: Color = {"ok": AmTheme.col("MINT"), "warn": AmTheme.col("WARN"), "bad": AmTheme.col("ERROR")}[lv]
@@ -4290,6 +4295,7 @@ func _repo_line(r: Dictionary, fit: Dictionary, states: Dictionary, now: float) 
 	row.add_child(mark)
 	var toggle := func() -> void:
 		repos_open[rid] = not open
+		repos_unfolding = rid if not open else ""
 		_render_repos()
 	var name := Button.new()  # the name unfolds the line, as the arrow does
 	name.text = str(r["name"])
@@ -4301,26 +4307,28 @@ func _repo_line(r: Dictionary, fit: Dictionary, states: Dictionary, now: float) 
 	name.tooltip_text = str(r["url"])
 	name.pressed.connect(toggle)
 	row.add_child(name)
-	var key: Dictionary = RepoView.key_cell(r, now)
-	var folder: Dictionary = RepoView.folder_cell(r)
-	var cells := {"host": [RepoView.host_label(r), "ok", str(r.get("host", ""))],
-		"key": [str(key["text"]), str(key["level"]), str(r.get("message", ""))],
-		"opens": [RepoView.opens_cell(r), "ok", "What the key Agent Manager made for it opens on %s." % RepoView.host_label(r)],
-		"folder": [str(folder["text"]), str(folder["level"]), RepoView.folder_tip(r)],
-		"sessions": [RepoView.sessions_cell(r, states), "ok", ""],
-		"used": [RepoView.used_cell(r, now), "ok", "The last time a session used this repository's key."]}
+	# each column is a drawn piece (scripts/repo_widgets.gd): a chip, a sign that turns while the key is checked, a
+	# branch, a dot per session, the sessions started day by day
 	for c in RepoView.COLUMNS:
 		if not fit["shown"].has(c[0]):
 			continue
-		var cell: Array = cells[c[0]]
-		var l := _repo_cell(str(cell[0]), float(c[2]), str(cell[2]))
-		if cell[1] == "warn":
-			l.add_theme_color_override("font_color", AmTheme.col("WARN"))
-		elif cell[1] == "bad":
-			l.add_theme_color_override("font_color", AmTheme.col("ERROR"))
-		elif c[0] in ["sessions", "used", "host"] or (c[0] == "opens" and str(r.get("key_scope", "")) != "account"):
-			l.add_theme_color_override("font_color", AmTheme.col("MUTED"))
-		row.add_child(l)
+		var w := float(c[2])
+		match str(c[0]):
+			"host":
+				row.add_child(RepoWidgets.HostChip.new(r, w))
+			"key":
+				row.add_child(RepoWidgets.KeyPill.new(r, now, w))
+			"opens":
+				row.add_child(RepoWidgets.OpensMark.new(r, w))
+			"folder":
+				row.add_child(RepoWidgets.FolderMark.new(r, w))
+			"sessions":
+				var dots: Array = RepoView.session_dots(r, by_id)
+				var piece = RepoWidgets.SessionDots.new(dots, dots.map(func(d: Dictionary) -> Color: return activity_of(by_id.get(d["id"], {}))[0]), w)
+				piece.picked.connect(_setup_open_session)
+				row.add_child(piece)
+			"used":
+				row.add_child(RepoWidgets.StartedStrip.new(RepoView.started_days(r, now), RepoView.used_cell(r, now), w))
 	var spring := Control.new()
 	spring.size_flags_horizontal = SIZE_EXPAND_FILL
 	row.add_child(spring)
@@ -4335,7 +4343,12 @@ func _repo_line(r: Dictionary, fit: Dictionary, states: Dictionary, now: float) 
 	arrow.custom_minimum_size.x = 34.0
 	row.add_child(arrow)
 	if open:
-		inner.add_child(_repo_details(r, tint, now))
+		var details := _repo_details(r, tint, now)
+		inner.add_child(details)
+		if repos_unfolding == rid:  # just unfolded by a click: it comes in, it does not pop
+			repos_unfolding = ""
+			details.modulate.a = 0.0
+			create_tween().tween_property(details, "modulate:a", 1.0, 0.16)
 	return box
 
 
