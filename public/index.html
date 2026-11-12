@@ -107,6 +107,7 @@
               <li><span class="light working"></span><b>working</b> · <span class="light ok"></span><b>waits for your OK</b> · <span class="light asks"></span><b>asks you something</b> · <span class="light done"></span><b>done</b></li>
               <li><b>Approve</b>, <b>Refuse</b> or <b>Reply…</b> from the list, without opening the session.</li>
               <li>A toast when someone starts waiting; <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> approves the first one.</li>
+              <li><b>One session per line</b>: twenty sessions fit where eight tiles did. The tiles, which say more, are one click away in <b>◐</b>.</li>
             </ul>
           </div>
           <figure class="screen">
@@ -352,18 +353,19 @@
           <div>
             <p class="overline">Native voice</p>
             <h2>Talk to your agents</h2>
-            <p class="muted">Hold <kbd>F8</kbd> and speak: your words land in the active agent's prompt, as a paste,
-              never sent until you press Enter. Hold <kbd>F9</kbd> to run the control room by voice, in English or
-              French.</p>
+            <p class="muted">Hold <kbd>F8</kbd> and speak: your words appear in a small see-through box, phrase by
+              phrase, and stay there when you release the key. Read them, correct them, add more; <kbd>Enter</kbd>
+              sends all of it to the agent, and nothing before. Hold <kbd>F9</kbd> to run the control room by voice,
+              in English or French.</p>
             <div class="cards" style="grid-template-columns: 1fr 1fr; margin: 18px 0">
-              <article class="card"><h3><span class="icon">F8</span>Dictation</h3><p>Into the prompt of the active session. About $0.003 a minute with your OpenAI key, shown.</p></article>
+              <article class="card"><h3><span class="icon">F8</span>Dictation</h3><p>Into a box you send with Enter, saved on your computer so nothing you said is lost. About $0.003 a minute with your OpenAI key, shown.</p></article>
               <article class="card"><h3><span class="icon">F9</span>Commands</h3><p>« approve Flaky tests », « who is waiting? », « grid view », « wrap up Docs ». Plain rules, no model.</p></article>
             </div>
             <p class="small muted">Approving, refusing and wrapping up always ask for a visible confirmation.
               A soft sound tells you when an agent waits for you; <b>♪</b> mutes it.</p>
           </div>
           <figure class="screen">
-            <img src="assets/showcase/voice.webp" width="1920" height="1200" loading="lazy" alt="Dictation: the listening overlay with a level meter above a Claude Code session, « release F8 to write it ».">
+            <img src="assets/showcase/voice.webp" width="1920" height="1200" loading="lazy" alt="Dictation: a see-through box at the bottom of a Claude Code session, listening, with a first phrase already written in it and « Enter sends it all » below.">
           </figure>
         </div>
       </div>
@@ -436,6 +438,9 @@
           <li><span class="when">Loop 24</span><b>Permission levels</b><span>From Ask before acting to No permission; paths no agent may touch at any level.</span></li>
           <li><span class="when">Loops 25–26</span><b>The orchestrator</b><span>One agent plans across your repositories, delegates in worktrees and hands you each result.</span></li>
           <li><span class="when">Loops 27–31</span><b>What each agent may do</b><span>Level, file access and git rights per session, changed on an open agent; one view for all of them.</span></li>
+          <li><span class="when">Loop 32</span><b>One session per line</b><span>The list and « They wait for you » in lines: twenty sessions where eight tiles fitted.</span></li>
+          <li><span class="when">Loop 33</span><b>No more small delays</b><span>Measured, then fixed: opening a session again went from 80 ms to 8.</span></li>
+          <li><span class="when">Loop 34</span><b>The dictation box</b><span>What you say appears as you say it, stays in a box, and Enter sends all of it.</span></li>
         </ol>
       </div>
     </section>
