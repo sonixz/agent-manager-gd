@@ -18,10 +18,10 @@ Newest first.
   tries again. What you opened for a sandbox is remembered and comes back on the same address at the next
   connection. A failure says its family: the key refused, the SSH server not up yet, no answer in time, the port
   already taken on the other side, the host key changed.
-- The way back from a sandbox to the Second Brain is narrowed: it reaches only the Second Brain's route and the
-  engine's health, request by request; anything else is refused before the engine, and counted. When the sandbox's
-  lasting connection is open it carries that way too, so an agent in the sandbox keeps the Second Brain when its
-  terminal is closed; the block says who carries it.
+- The way back from a cloud sandbox to the Second Brain, through its SSH tunnel, is narrowed: it reaches only the
+  Second Brain's route and the engine's health, request by request; anything else is refused before the engine, and
+  counted. When the lasting SSH connection is open it carries that way too, so an agent in the cloud sandbox keeps
+  the Second Brain when its terminal is closed; the block says who carries it.
 - A sandbox's terminal now checks the sandbox's host key too, against the one remembered at the first connection.
   Before, it accepted any.
 - Two sandboxes that listen on the same port each get their own address on this computer: the first keeps the
