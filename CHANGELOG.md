@@ -46,7 +46,7 @@ Newest first.
 
 ### Website
 - The home page shows the orchestrator and the permissions, tells the dictation box and the list in lines, and its
-  list of loops goes up to Loop 34. Every screenshot is retaken with the session list in lines.
+  list of loops goes up to Loop 35. Every screenshot is retaken with the session list in lines.
 
 ### Agent permissions · Loop 31
 - ◐ › Agent permissions…: every agent with its level, file access, Claude Code's sandbox and git rights, and Edit…
