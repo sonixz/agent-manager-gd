@@ -119,8 +119,14 @@
         <p>It stops at the first thing that is missing: the lines under it are marked <b>·</b>, because nothing can be
           said of them yet. When the engine does not answer, it says why: it is not running (<b>Check again</b> starts
           it), it is starting or stuck, another program holds its port, or it runs inside WSL and Windows cannot reach
-          it. <b>It only looks</b>: it installs and downloads nothing; you run the commands yourself. The window stays
-          free while it reads, which takes a few seconds on Windows.</p>
+          it. It looks first and changes nothing by itself. The window stays free while it reads, which takes a few
+          seconds on Windows.</p>
+        <p>When python3, tmux, git or ssh is missing and the distribution has <code>apt-get</code>, the check offers
+          to install them: it shows the exact command, and <b>Install …</b> runs it in a terminal on the page, where
+          you see everything it does. Inside WSL it runs as the distribution's root, which needs no Windows
+          administrator and no password; on Linux it goes through <code>sudo</code>, which asks for your password in
+          that terminal. When it ends, the check reads again and starts the engine if that was all that was missing.
+          Everything else (WSL itself, the agents, flyctl) is still yours to install: the check says how.</p>
         <p>Under the check, the <b>Engine room</b> says how the ground is doing; you will rarely look at it, and it is
           there when something is slow or full. <b>Memory</b>: what is used, and on Windows what the whole computer has.
           <b>Sessions</b>: what the running ones weigh, the heaviest first, and about how many more would fit.

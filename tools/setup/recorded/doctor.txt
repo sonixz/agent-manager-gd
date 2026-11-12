@@ -5,6 +5,7 @@ ssh=/usr/bin/ssh|
 claude=/home/dev/.local/bin/claude|
 codex=/home/dev/.local/bin/codex|
 flyctl=/home/dev/.local/opt/flyctl/flyctl|v0.5.5
+apt=/usr/bin/apt-get|
 distro=Ubuntu-24.04|Ubuntu 24.04.4 LTS
 engine-process=4242|
 engine-port=open|

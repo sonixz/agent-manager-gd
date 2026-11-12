@@ -99,6 +99,9 @@ var setup_thread: Thread    # the reading on its way: it takes seconds and never
 var setup_again := false    # a reading was asked while one was on its way
 var setup_host := {}        # the engine's own figures (memory, disk, what each session weighs); {} when it does not answer
 var setup_restart: Thread   # « Restart WSL » on its way
+var setup_term: Control     # the terminal an installation runs in: what it does is seen, never done behind the page
+var setup_term_what := ""   # the command it runs, as it was shown before the click
+var setup_install_argv := Callable()  # the checks put their own command here, in place of the package manager
 var f_brief: CheckBox
 var dictation: Dictation
 var voice_mode := "dictate"     # F8 dictate, F9 command
@@ -2015,6 +2018,8 @@ func _ensure_terminal(id: String) -> void:
 
 
 func _park_all() -> void:
+	if is_instance_valid(setup_term) and setup_term.get_parent() != parking:
+		setup_term.reparent(parking, false)  # an installation goes on while another view is shown
 	for t in terms.values():
 		if is_instance_valid(t) and t.get_parent() != parking:
 			t.reparent(parking, false)
@@ -4865,7 +4870,9 @@ func _setup_done(f: Dictionary) -> void:
 		_layout_view()
 
 
-## « Check again »: reads again, and starts the engine when the only thing missing is the engine itself.
+## « Check again »: reads again; then, when everything under the engine stands and the app is not connected to it,
+## reaches an engine that answers after all (it took longer to start than the app waited: a cold WSL), or starts one
+## when none is running.
 func _setup_check_again() -> void:
 	_setup_read()
 	_layout_view()
@@ -4874,10 +4881,10 @@ func _setup_check_again() -> void:
 	if engine.connected:
 		return
 	for r in SetupProbe.ladder(setup_facts, false, setup_probe.on_windows):
-		if r["id"] == "engine" and r.get("start", false):
+		if r["id"] == "engine" and r["state"] == "no" and (r.get("start", false) or await engine._health()):
 			status_label.text = "Starting the engine…"
 			if await engine.connect_engine():
-				status_label.text = "Engine started."
+				status_label.text = "Engine started." if r.get("start", false) else "The engine answers."
 				await refresh()
 			else:
 				status_label.text = "The engine did not start."
@@ -4889,7 +4896,7 @@ func _setup_check_again() -> void:
 func _setup_rows() -> Array:
 	var rungs: Array = SetupProbe.ladder(setup_facts, engine.connected, setup_probe.on_windows)
 	var rows: Array = [_title("Setup check"),
-		_wrap("What Agent Manager GD stands on, from the ground up%s. This check only looks: it installs and downloads nothing. Run the commands yourself in a terminal." % (": Windows, WSL, then what runs inside WSL" if setup_probe.on_windows else ""))]
+		_wrap("What Agent Manager GD stands on, from the ground up%s. It looks first, and changes nothing by itself: what it can install for you, it installs on your click, in a terminal you see." % (": Windows, WSL, then what runs inside WSL" if setup_probe.on_windows else ""))]
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 18)
@@ -4926,6 +4933,27 @@ func _setup_rows() -> Array:
 	rows.append(grid)
 	rows.append(_wrap(SetupProbe.verdict(rungs) + ("  Looking again…" if setup_thread != null and not setup_facts.is_empty() else "")))
 	rows.append(_small("Check again", _setup_check_again))
+	# --- what the app can install on a click (Loop 36): the command is shown first and runs in a terminal on this page
+	var packages: Array = SetupProbe.missing_packages(setup_facts)
+	var busy: bool = is_instance_valid(setup_term) and setup_term.is_running()
+	if not packages.is_empty() and not busy:
+		var argv: Array = setup_install_argv.call(packages) if setup_install_argv.is_valid() else SetupProbe.install_argv(packages, engine.engine_root(), setup_probe.on_windows)
+		rows.append(_wrap("The app can install %s for you, with the distribution's own package manager. It runs %s, in a terminal you see here:" % [", ".join(packages),
+			"as the distribution's root (no Windows administrator, no password)" if setup_probe.on_windows else "through sudo, which asks for your password"]))
+		var shown := _wrap(" ".join(argv))
+		shown.add_theme_font_override("font", font)
+		rows.append(shown)
+		rows.append(_small("Install %s" % ", ".join(packages), _setup_run.bind(argv)))
+	if is_instance_valid(setup_term):
+		rows.append(_wrap(("Running: " if busy else "It ran: ") + setup_term_what))  # wrapped: a long command must not widen the page
+		if setup_term.get_parent() != null:
+			setup_term.get_parent().remove_child(setup_term)
+		rows.append(setup_term)
+		if not busy:
+			rows.append(_small("Hide this terminal", func() -> void:
+				setup_term.queue_free()
+				setup_term = null
+				_layout_view()))
 	# --- the engine room (Loop 36): how the ground is doing. Rarely looked at; there when something is slow or full.
 	var room: Array = SetupProbe.engine_room(setup_facts, setup_host, setup_probe.on_windows)
 	if not setup_facts.is_empty() and room.any(func(l: Dictionary) -> bool: return l["label"] != "Memory, sessions"):  # something real to say
@@ -4954,6 +4982,32 @@ func _setup_rows() -> Array:
 		if setup_probe.on_windows and bool(setup_facts.get("windows", {}).get("wsl", false)):
 			rows.append(_small("Restart WSL…", _setup_restart_wsl, "Stops WSL entirely, every session with it, then starts the engine again. It asks first."))
 	return rows
+
+
+## Runs a command of the setup in a terminal on the page. When it ends, everything is read again, and the engine is
+## started if it was the only thing missing.
+func _setup_run(argv: Array) -> void:
+	if is_instance_valid(setup_term):
+		if setup_term.is_running():
+			return
+		setup_term.queue_free()
+	var t = ClassDB.instantiate("VtTerminal")
+	t.font = font
+	t.font_size = 14
+	_style_terminal(t)
+	t.custom_minimum_size = Vector2(0, 280)
+	t.size_flags_horizontal = SIZE_EXPAND_FILL
+	parking.add_child(t)
+	setup_term = t
+	setup_term_what = " ".join(argv)
+	t.size = Vector2(1000, 280)
+	await get_tree().process_frame
+	t.start(str(argv[0]), PackedStringArray(argv.slice(1)), "", PackedStringArray(["TERM=xterm-256color", "COLORTERM=truecolor"]))
+	_layout_view()  # after the start: the page shows « Running », and no second « Install » to press
+	t.grab_focus()  # sudo asks for a password there
+	t.exited.connect(func(code: int) -> void:
+		status_label.text = "Done." if code == 0 else "It ended with an error (exit %d): read what the terminal says." % code
+		_setup_check_again())
 
 
 ## « Restart WSL… »: says what would stop, by name, then asks for a typed word. WSL's own command does the rest.

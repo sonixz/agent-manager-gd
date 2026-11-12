@@ -225,6 +225,17 @@ func _cases() -> void:
 	check("engine room on Linux: memory, no session, the disk as it is, no word of WSL", text.call(plain, "Memory") == "8.0 of 16 GB used." and text.call(plain, "Sessions") == "None is running." and text.call(plain, "Disk") == "200 GB free of 500." and text.call(plain, "Limits") == "" and text.call(plain, "Up for") == "3 days.")
 	check("the registry and the settings file are read without a backslash in the script", not Probe.WINDOWS_SCRIPT.contains("\\"))
 
+	# --- what the app offers to install on a click
+	check("nothing is missing: nothing is offered", Probe.missing_packages({"linux": linux}).is_empty())
+	check("tmux and git missing: their packages are offered, and ssh would be openssh-client", Probe.missing_packages({"linux": {"code": 0, "found": f5}}) == ["tmux", "git"] and Probe.PACKAGE["ssh"] == "openssh-client")
+	check("an old python3 is not offered: its package would not make it newer", Probe.missing_packages({"linux": {"code": 0, "found": f6}}).is_empty())
+	var no_apt: Dictionary = f5.duplicate(true)
+	no_apt["apt"] = {"path": "", "version": ""}
+	check("no apt-get in the distribution: nothing is offered", Probe.missing_packages({"linux": {"code": 0, "found": no_apt}}).is_empty())
+	check("the check did not run: nothing is offered", Probe.missing_packages({"linux": {"code": 1, "found": f5}}).is_empty() and Probe.missing_packages({}).is_empty())
+	check("inside WSL the command runs as the distribution's root, without a shell in between", Probe.install_argv(["tmux", "git"], "/mnt/c/Program Files/Agent Manager", true) == ["wsl.exe", "-u", "root", "-e", "bash", "/mnt/c/Program Files/Agent Manager/engine/setup_install.sh", "tmux", "git"])
+	check("on Linux it goes through sudo", Probe.install_argv(["tmux"], "/opt/agent-manager", false) == ["sudo", "bash", "/opt/agent-manager/engine/setup_install.sh", "tmux"])
+
 	# --- on Linux: no rung for Windows
 	var on_linux := Probe.ladder({"port": 8790, "linux": linux}, true, false)
 	check("Linux: the ladder starts at the programs (%s)" % _states(on_linux), _states(on_linux).begins_with("python3=ok tmux=ok git=ok ssh=ok engine=ok"))

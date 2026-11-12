@@ -562,6 +562,41 @@ func _run() -> void:
 			report.append("setup: the word typed: commands run: %s | status line: « %s »" % [ran.filter(func(c: String) -> bool: return c.begins_with("wsl.exe --")), main.status_label.text])
 			main.setup_probe.runner = func(a: Array) -> Dictionary:
 				return {"code": 0, "out": win if str(a[0]) == "powershell.exe" else doc}
+			# tmux and git are missing: the page offers to install them, shows the command, and runs it in a terminal here.
+			# A stand-in plays the package manager: nothing is installed on this display.
+			var installed := [false]
+			main.setup_probe.runner = func(a: Array) -> Dictionary:
+				return {"code": 0, "out": win if str(a[0]) == "powershell.exe" else (doc if installed[0] else doc.replace("tmux=/usr/bin/tmux|3.4", "tmux=|").replace("git=/usr/bin/git|2.43.0", "git=|"))}
+			main.engine.connected = false
+			main._setup_read()
+			while main.setup_thread != null:
+				await process_frame
+			await wait(0.2)
+			main._layout_view()
+			await wait(0.2)
+			report.append("setup: tmux and git missing: %s | offered: « %s » | shown: « %s »" % [_setup_marks(), _find_button(main.content, "Install tmux, git") != null, _setup_text("setup_install.sh")])
+			await shot("setup-missing")
+			main.setup_install_argv = func(packages: Array) -> Array:
+				return ["bash", "-c", "echo '→ apt-get update'; sleep 0.6; echo 'Get:1 http://archive.ubuntu.com/ubuntu noble InRelease [256 kB]'; sleep 0.6; echo '→ apt-get install -y %s'; sleep 0.8; echo 'Setting up tmux (3.4-1ubuntu0.1) ...'; echo 'Setting up git (1:2.43.0-1ubuntu7.3) ...'; sleep 0.6; echo; echo 'Installed: %s'" % [" ".join(packages), " ".join(packages)]]
+			main._layout_view()
+			await wait(0.2)
+			_find_button(main.content, "Install tmux, git").pressed.emit()
+			await wait(1.6)
+			var mid: String = main.setup_term.get_screen_text().strip_edges().replace("\n", " / ")
+			report.append("setup: installing: the terminal is on the page: %s, running: %s | it shows: « %s »" % [main.setup_term.is_inside_tree() and main.setup_term.get_parent() != main.parking, main.setup_term.is_running(), mid.left(90)])
+			await shot("setup-installing")
+			installed[0] = true
+			while main.setup_term.is_running():
+				await process_frame
+			await wait(0.6)
+			while main.setup_thread != null:
+				await process_frame
+			await wait(1.0)
+			report.append("setup: installed: %s | the terminal says: « %s » | status line: « %s » | engine answers: %s" % [_setup_marks(), str(main.setup_term.get_screen_text()).strip_edges().get_slice("\n", str(main.setup_term.get_screen_text()).strip_edges().get_slice_count("\n") - 1), main.status_label.text, main.engine.connected])
+			_find_button(main.content, "Hide this terminal").pressed.emit()
+			await wait(0.3)
+			report.append("setup: the terminal hidden: %s" % (not is_instance_valid(main.setup_term)))
+			main.setup_install_argv = Callable()
 			# WSL is not installed: Windows answers, and nothing is asked of WSL
 			var asked := []
 			main.setup_probe.runner = func(a: Array) -> Dictionary:

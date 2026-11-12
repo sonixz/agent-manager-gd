@@ -12,6 +12,10 @@ Newest first.
 - On Windows the disk line tells the true room: WSL keeps a distribution's disk in one file on a Windows drive, and
   Linux may report hundreds of gigabytes free on a drive that has few left. The line is a warning when that drive is
   nearly full.
+- When python3, tmux, git or ssh is missing, the check offers to install them: it shows the exact command, and
+  **Install …** runs it in a terminal on the page, with the distribution's own package manager. Inside WSL it needs
+  no Windows administrator and no password; on Linux `sudo` asks for yours in that terminal. Then the check reads
+  again and starts the engine. Not tried for real yet: only against a stand-in for the package manager.
 - **Restart WSL…** stops WSL and starts the engine again. It names the sessions that would stop, then asks you to
   type « restart ». Not tried for real yet: only against a stand-in for WSL's command.
 - On Windows, the Setup check now starts with Windows itself (its version, virtualization), then WSL, then the Linux

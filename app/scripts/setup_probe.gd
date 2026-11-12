@@ -341,6 +341,33 @@ static func ladder(f: Dictionary, connected: bool, windows := OS.get_name() == "
 	return rungs
 
 
+## The package that brings each required program, in Ubuntu's and Debian's names.
+const PACKAGE := {"python3": "python3", "tmux": "tmux", "git": "git", "ssh": "openssh-client"}
+
+
+## The required programs that are missing and that the app can install on a click: only where the check ran and the
+## distribution has apt-get. A python3 that is there but too old is not one of them: its package would not make it
+## newer.
+static func missing_packages(f: Dictionary) -> Array:
+	var linux: Dictionary = f.get("linux", {})
+	var found: Dictionary = linux.get("found", {})
+	var out: Array = []
+	if int(linux.get("code", 1)) != 0 or str(found.get("apt", {}).get("path", "")) == "":
+		return out
+	for p in REQUIRED:
+		if str(found.get(p, {}).get("path", "")) == "":
+			out.append(PACKAGE[p])
+	return out
+
+
+## The command that installs them, exactly as it is shown and run. Inside WSL it runs as the distribution's root,
+## which needs no Windows administrator and no password; on Linux through sudo, which asks for the user's password in
+## the terminal. engine/setup_install.sh refuses any name that is not one of the four packages.
+static func install_argv(packages: Array, root: String, windows := OS.get_name() == "Windows") -> Array:
+	var script := root.path_join("engine/setup_install.sh")
+	return (["wsl.exe", "-u", "root", "-e", "bash", script] if windows else ["sudo", "bash", script]) + packages
+
+
 static func gb(bytes: int) -> String:
 	var v := bytes / 1073741824.0
 	return ("%.1f" % v) if v < 10.0 else ("%d" % int(round(v)))

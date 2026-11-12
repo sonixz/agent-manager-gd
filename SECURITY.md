@@ -30,8 +30,10 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
 - **What it reads of your system** (Setup check, Engine room): Windows' version and whether virtualization is on,
   WSL's version and distributions, the size and drive of a distribution's disk file, the lines of your `.wslconfig`
   that set limits, memory and disk figures. All of it stays in the window: none is stored or sent. It changes none
-  of it. The only action there is **Restart WSL…**, which runs WSL's own `wsl --shutdown` after you typed
-  « restart ».
+  of it. Two actions exist there, each on your click only. **Install …** installs python3, tmux, git or
+  openssh-client, and nothing else, with the distribution's own package manager: the command is shown first and
+  runs in a terminal you see, as the distribution's root inside WSL (no Windows administrator) or through `sudo` on
+  Linux. **Restart WSL…** runs WSL's own `wsl --shutdown` after you typed « restart ».
 
 ## What it does not protect
 

@@ -14,6 +14,7 @@ for c in python3 tmux git ssh claude codex; do
 done
 f="$HOME/.local/opt/flyctl/flyctl"; [ -x "$f" ] || f="$(command -v flyctl 2>/dev/null)"
 echo "flyctl=$f|$([ -n "$f" ] && "$f" version 2>/dev/null | head -1 | cut -d' ' -f2)"
+echo "apt=$(command -v apt-get 2>/dev/null)|"
 echo "distro=${WSL_DISTRO_NAME:-}|$(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-}")"
 if [ -n "${1:-}" ]; then
   echo "engine-process=$(pgrep -f "python3 -m engine --port $1\$" | head -1)|"
