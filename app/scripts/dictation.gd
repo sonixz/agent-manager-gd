@@ -2,11 +2,13 @@ class_name Dictation
 extends Node
 ## Hold-to-talk recording: the microphone on a silent bus with a capture effect. The recording is given in pieces, cut
 ## at each pause, as 16 kHz mono 16-bit WAV for the engine's transcription: the text can follow the voice, phrase by
-## phrase, and a long dictation is never one long recording. Nothing is recorded while the key is not held.
+## phrase. The pieces are what is shown while speaking; the whole recording, to its very end, is what is written down
+## when the key is released. Nothing is recorded while the key is not held, but for a moment after its release.
 
 signal level(value: float)
 signal piece(index: int, wav: PackedByteArray, seconds: float)
 signal mute(seconds: float)  # the key is held and the microphone has given nothing for that long
+signal ended(seconds: float)  # the listening is over: how much was recorded in all (0: a tap, nothing to write down)
 
 const SPEECH := 0.03     # louder than this, someone speaks
 const QUIET := 0.02      # quieter than this for PAUSE seconds, after speech: a pause, where a piece ends
@@ -17,17 +19,23 @@ const QUIET := 0.02      # quieter than this for PAUSE seconds, after speech: a 
 const PAUSE := 0.5
 const MIN_PIECE := 1.2   # seconds: a piece is never shorter (a breath is not a pause)
 const SOON := 4.0        # seconds: a piece this long ends at the first dip
-const DIP := 0.15        # seconds of quiet that make a dip
+const DIP := 0.25        # seconds of quiet that make a dip: a gap between phrases (0.15 s can be a consonant inside a word)
 const MAX_PIECE := 12.0  # seconds: a piece is never longer, pause or not
+# The key is released as the last word is said, often before its end, and the sound takes a moment to come through
+# the audio device: it goes on listening this long. Without it the last syllables were cut (the owner, 2026-11-11:
+# « il capte pas la fin de mes phrases »).
+const TAIL := 0.4
 
 var bus := -1
 var capture: AudioEffectCapture
 var player: AudioStreamPlayer
 var recording := false
+var closing := false     # the key is released: it listens a little longer (TAIL), then ends
 var frames := PackedVector2Array()  # the piece being recorded
 var started_ms := 0
 var pieces := 0          # pieces given so far in this recording
-var whole := PackedByteArray()  # all of them end to end, as 16 kHz mono 16-bit samples: the recording in one piece
+var whole := PackedByteArray()  # every sample of the recording, as 16 kHz mono 16-bit: the pieces end to end, then its end
+var rest := PackedByteArray()   # its end, which no piece held: what was said between the last cut and the key's release
 var _heard := false      # speech in the piece being recorded
 var _ever := false       # speech anywhere in this recording; when never, the levels tell nothing and everything is given
 var _quiet := 0.0        # seconds of quiet at the end of the piece being recorded
@@ -36,6 +44,8 @@ var _fed_ms := 0         # when the audio last gave frames at all
 var _loudest := 0.0      # the loudest sample of this recording: exactly 0 means no microphone behind the frames
 var _reopened := false   # it was opened again once in this recording
 var _told := false       # « it gives nothing » was said once in this recording
+var _closing_ms := 0     # when the key was released
+var _held := 0.0         # seconds recorded while the key was held
 
 
 func _ready() -> void:
@@ -58,7 +68,9 @@ func available() -> bool:
 func start() -> void:
 	frames = PackedVector2Array()
 	whole = PackedByteArray()
+	rest = PackedByteArray()
 	pieces = 0
+	closing = false
 	_heard = false
 	_ever = false
 	_quiet = 0.0
@@ -82,6 +94,9 @@ func _process(_d: float) -> void:
 	if n > 0:
 		_fed_ms = Time.get_ticks_msec()
 		feed(capture.get_buffer(n))
+	if closing and Time.get_ticks_msec() - _closing_ms >= TAIL * 1000.0:
+		_end()
+		return
 	if _live:
 		# An open microphone always gives something: frames at every tick, and never a perfect zero for long (a room
 		# is never that quiet). No frame at all, or nothing but zeros since the key went down, means it is gone:
@@ -119,6 +134,8 @@ func feed(chunk: PackedVector2Array) -> void:
 		_quiet = 0.0
 	elif peak < QUIET:
 		_quiet += chunk.size() / rate
+	if closing:
+		return  # the key is released: what comes now is the end of the recording, not a new piece
 	var length := frames.size() / rate
 	if _heard and ((_quiet >= PAUSE and length >= MIN_PIECE) or (_quiet >= DIP and length >= SOON)):
 		_give()
@@ -138,24 +155,46 @@ func _give() -> void:
 	piece.emit(pieces - 1, wav, seconds)
 
 
-## The key is released: what is left is the last piece. Returns how many pieces this recording gave in all (0: a
-## tap). A silent tail is not given, unless no speech was ever told apart (a very quiet microphone: all of it goes).
-func stop() -> int:
+## The key is released. It listens a little longer (TAIL), then `ended` tells how much was recorded.
+func release() -> void:
+	if not recording or closing:
+		return
+	closing = true
+	_closing_ms = Time.get_ticks_msec()
+	_held = whole.size() / 32000.0 + frames.size() / AudioServer.get_mix_rate()
+
+
+## The key is pressed again before the listening ended: the same recording goes on.
+func resume() -> void:
+	closing = false
+
+
+## The listening is over. What was said since the last cut joins the whole recording, always: it is short, or said
+## lower than the rest, and it is the end of the sentence. Before, it was only kept when it was long and loud enough,
+## and the last words were lost (the owner, 2026-11-11: « la plupart de mes derniers mots sont jamais pris »).
+## Nothing is to be written down after a tap: the key barely held, and no speech.
+func _end() -> void:
 	recording = false
+	closing = false
 	_live = false
 	player.stop()
 	var n := capture.get_frames_available()
 	if n > 0:
 		frames.append_array(capture.get_buffer(n))
-	if frames.size() / AudioServer.get_mix_rate() >= 0.4 and (_heard or not _ever):
-		_give()
+	rest = to_wav(frames, AudioServer.get_mix_rate()).slice(44)
+	whole.append_array(rest)
 	frames = PackedVector2Array()
-	return pieces
+	ended.emit(whole.size() / 32000.0 if (_ever or _held >= 0.4) else 0.0)
 
 
-## The whole recording so far as one WAV: written down once more in one piece, it gives the text that is kept.
+## The whole recording as one WAV: written down in one piece, it gives the text that is kept.
 func whole_wav() -> PackedByteArray:
 	return wav_of(whole)
+
+
+## Its end alone, which no piece held: kept to be written down again when the whole could not be.
+func rest_wav() -> PackedByteArray:
+	return wav_of(rest)
 
 
 ## Stereo float frames at the mix rate -> WAV bytes, 16 kHz, mono, 16-bit (what transcription needs, small).

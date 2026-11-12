@@ -2,7 +2,9 @@
 OpenAI key the owner pasted in « Keys ». The text goes into the active session's prompt; it is never sent with
 Enter by Agent Manager: the owner reads it and presses Enter himself.
 
-AGMGD_VOICE_FAKE=<text> returns that text without any call (tests, captures)."""
+AGMGD_VOICE_FAKE=<text> returns that text without any call (tests, captures): « a | b » gives one phrase per piece,
+in turn. AGMGD_VOICE_FAKE_WHOLE gives what the recording written in one piece says (« a | b »: one per dictation, in
+turn). AGMGD_VOICE_FAKE_DELAY and AGMGD_VOICE_FAKE_WHOLE_DELAY make each of them take that many seconds."""
 from __future__ import annotations
 
 import json
@@ -32,6 +34,7 @@ def _multipart(fields: dict, file_bytes: bytes) -> tuple[bytes, str]:
 
 PROMPT = "Dictée pour un agent de code. Ponctuation et accents français. Noms de fichiers et de commandes exacts."
 _fake_turn = 0
+_fake_whole_turn = 0
 
 
 def prompt_for(context: str, whole: bool = False) -> str:
@@ -51,10 +54,15 @@ def transcribe(wav: bytes, key: str, seconds: float, language: str = "", context
     fake = os.environ.get("AGMGD_VOICE_FAKE")
     if fake:
         import time
-        global _fake_turn
-        time.sleep(float(os.environ.get("AGMGD_VOICE_FAKE_DELAY") or 0))  # checks: a long dictation takes a while to write down
+        global _fake_turn, _fake_whole_turn
+        delay = os.environ.get("AGMGD_VOICE_FAKE_DELAY") or 0  # checks: a long dictation takes a while to write down
+        if whole and os.environ.get("AGMGD_VOICE_FAKE_WHOLE_DELAY"):  # checks: the whole is back before a late piece
+            delay = os.environ["AGMGD_VOICE_FAKE_WHOLE_DELAY"]
+        time.sleep(float(delay))
         if whole:  # checks: the recording in one piece reads better than its pieces; by default, the pieces end to end
-            return {"text": os.environ.get("AGMGD_VOICE_FAKE_WHOLE") or " ".join(p.strip() for p in fake.split("|")),
+            wholes = [p.strip() for p in (os.environ.get("AGMGD_VOICE_FAKE_WHOLE") or "").split("|") if p.strip()]
+            _fake_whole_turn += 1
+            return {"text": wholes[(_fake_whole_turn - 1) % len(wholes)] if wholes else " ".join(p.strip() for p in fake.split("|")),
                     "model": "fake", "cost_usd": 0.0}
         said = [p.strip() for p in fake.split("|")]  # checks: « a | b | c » gives one phrase per piece, in turn
         _fake_turn += 1

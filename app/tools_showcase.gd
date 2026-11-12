@@ -423,6 +423,33 @@ func _run() -> void:
 				mic._reopened, main.voice_label.text, main.status_label.text])
 			await shot("voice-mute")
 			await main._voice_stop()
+		"voice-end":  # a check: the last words, short and said low, with the key released on them; and a piece that comes back late. Run with AGMGD_VOICE_FAKE="a first phrase" AGMGD_VOICE_FAKE_DELAY=6 AGMGD_VOICE_FAKE_WHOLE="A first phrase, and its last words." AGMGD_VOICE_FAKE_WHOLE_DELAY=0.5
+			main.select(made["Checkout flow"])
+			await wait(2.5)
+			_hold("dictate")
+			await _say(2.5)  # a phrase and its pause: a piece is cut there, and takes 6 s to be written down
+			await _say(0.3, 0.0, 0.025)  # the last words: short, lower than what counts as speech
+			var ear: Dictation = main.dictation
+			var let_go := Time.get_ticks_usec()
+			await main._voice_stop()
+			report.append("voice-end: 3.7 s said, the key released on low last words: it listened %.2f s more | the whole recording holds %.2f s | its end, which no piece held: %.2f s | pieces shown: %d" % [
+				_ms(let_go) / 1000.0, ear.whole.size() / 32000.0, ear.rest.size() / 32000.0, ear.pieces])
+			await wait(1.5)
+			report.append("voice-end, 1.5 s later, the piece still being written: the box holds « %s » | nothing is waited for: %s" % [
+				main.voice_text.text, int(main.take.get("pending", 0)) == 0])
+			await wait(6.5)
+			report.append("voice-end, once the late piece is back: the box holds « %s » | kept for another try: %d | status line: « %s »" % [
+				main.voice_text.text, main.voice_kept.size(), main.status_label.text])
+			_hold("dictate")  # pressed again within the moment it still listens: the same dictation goes on
+			await _say(1.0, 0.0)
+			main._voice_stop()
+			await wait(0.15)
+			main._voice_start()
+			await _say(1.0, 0.0)
+			await main._voice_stop()
+			report.append("voice-end, released and pressed again at once: one recording of %.2f s (2 s said)" % (ear.whole.size() / 32000.0))
+			await wait(1.5)
+			await shot("voice-end")
 		"voice-long":  # a check: a long dictation whose writing is slow (AGMGD_VOICE_FAKE="a | b | c" AGMGD_VOICE_FAKE_DELAY=<s>): every phrase must arrive, in order
 			main.select(made["Checkout flow"])
 			await wait(2.5)
@@ -962,6 +989,9 @@ func _hold(mode: String) -> void:
 	var d: Dictation = main.dictation
 	d.frames = PackedVector2Array()
 	d.whole = PackedByteArray()
+	d.rest = PackedByteArray()
+	d.closing = false
+	d.capture.clear_buffer()  # as start() does: the silence the bus gave before the key went down is not part of it
 	d.pieces = 0
 	d._heard = false
 	d._ever = false
@@ -975,9 +1005,9 @@ func _hold(mode: String) -> void:
 
 ## Someone speaks for `seconds`, then pauses: a tone loud enough to count as speech, then quiet, given to the
 ## dictation in 20 ms chunks as the microphone would. A pause of 0 leaves the phrase unfinished.
-func _say(seconds: float, pause := 0.9) -> void:
+func _say(seconds: float, pause := 0.9, loud := 0.2) -> void:
 	var rate := AudioServer.get_mix_rate()
-	for part in [[seconds, 0.2], [pause, 0.0]]:
+	for part in [[seconds, loud], [pause, 0.0]]:
 		var left := int(rate * float(part[0]))
 		while left > 0:
 			var chunk := PackedVector2Array()

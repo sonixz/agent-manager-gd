@@ -29,6 +29,11 @@ Newest first.
   click on the corner gives it its own size back.
 - The words follow the voice more closely: a phrase is shown after half a second of quiet, or at the first dip of
   the voice once it is four seconds long. What is kept still comes from the whole recording, written in one piece.
+- The last words are no longer lost. The box goes on listening for a moment after you release the key, and the end
+  of the recording, however short or low, is always written down: the text that is kept now always comes from the
+  whole recording. Before, what was said between the last pause and the release was dropped when it was short or
+  said low. The text is in the box as soon as the whole recording is written, without waiting for a piece still on
+  its way.
 
 ### Faster · Loop 33
 - Picking a session, changing view and the 2-second refresh no longer stutter. Measured with twenty sessions on the

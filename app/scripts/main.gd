@@ -2609,6 +2609,7 @@ func _build_voice_overlay(area: Control) -> void:
 	_style_voice_box()
 	_draft_load()
 	dictation.piece.connect(_on_piece)
+	dictation.ended.connect(_voice_ended)
 	dictation.mute.connect(func(_s: float) -> void:
 		voice_mute = true
 		status_label.text = "Voice: the microphone gives nothing. Windows may have changed the audio device."
@@ -2768,6 +2769,9 @@ func _box_keys(e: InputEvent) -> void:
 
 
 func _voice_start() -> void:
+	if dictation.closing:
+		dictation.resume()  # pressed again at once: the same dictation goes on
+		return
 	if dictation.recording:
 		return
 	if not dictation.available():
@@ -2781,14 +2785,24 @@ func _voice_start() -> void:
 	_box_show(false)  # shown without taking the keyboard: the key is still held
 
 
+## The key is released. The listening goes on for a moment (the end of the last word is still on its way), then
+## `_voice_ended` takes over. Whoever waits for this waits for the end of the listening.
 func _voice_stop() -> void:
-	if not dictation.recording:
+	if not dictation.recording or dictation.closing:
 		return
+	dictation.release()
+	await dictation.ended
+
+
+## The listening is over. The text that is kept always comes from the whole recording, written down in one piece: the
+## pieces were only what could be shown while speaking, and the end of the recording is in none of them.
+func _voice_ended(seconds: float) -> void:
 	var t := take
-	var n := dictation.stop()  # what is left comes as the last piece
 	t["ended"] = true
-	if n >= 2:  # said in several pieces: the whole is written down once more, in one piece (a single piece is already the whole)
-		_write_whole(t, dictation.whole_wav())
+	t["seconds"] = seconds
+	t["ended_ms"] = Time.get_ticks_msec()
+	if seconds > 0.0:
+		_write_whole(t, dictation.whole_wav(), dictation.rest_wav())
 	_take_show(t)
 	_box_title()
 	if int(t["pending"]) == 0:
@@ -2806,6 +2820,8 @@ func _on_piece(i: int, wav: PackedByteArray, seconds: float) -> void:
 	_take_show(t)
 	var before := (voice_text.text + " " + _take_text(t)).strip_edges().right(300)
 	var r := await engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(wav), "seconds": seconds, "context": before}, true, 150.0)
+	if t.get("closed", false):
+		return  # the whole recording is written already: this piece was only there to be shown, nobody waits for it
 	t["pending"] = int(t["pending"]) - 1
 	if r.has("error"):
 		texts[i] = ""
@@ -2820,20 +2836,29 @@ func _on_piece(i: int, wav: PackedByteArray, seconds: float) -> void:
 		await _take_done(t)
 
 
-## The whole recording, written down once more in one piece when the key is released. The pieces are what could be
-## shown while speaking, each one written without the rest of its sentence (the owner, 2026-11-11: « la transcription
-## en temps réel est vraiment pas terrible »); the whole, with every word in its sentence, is the text that is kept.
-## If it cannot be written, the pieces stay.
-func _write_whole(t: Dictionary, wav: PackedByteArray) -> void:
+## The whole recording, written down in one piece when the key is released: the text that is kept. The pieces are
+## what could be shown while speaking, each one written without the rest of its sentence (the owner, 2026-11-11: « la
+## transcription en temps réel est vraiment pas terrible »), and none of them holds the end of the recording. As soon
+## as it is written, the dictation is done: a piece still on its way is not waited for. If it cannot be written, the
+## pieces stay, and what they do not hold is kept to be written down again.
+func _write_whole(t: Dictionary, wav: PackedByteArray, rest: PackedByteArray) -> void:
 	t["pending"] = int(t["pending"]) + 1
 	var secs := (wav.size() - 44) / 32000.0
 	var r := await engine.call_api("POST", "/voice/transcribe", {"audio_b64": Marshalls.raw_to_base64(wav), "seconds": secs, "context": voice_text.text.right(300), "whole": true}, true, 150.0)
-	t["pending"] = int(t["pending"]) - 1
 	if r.has("error"):
-		status_label.text = "Voice: the final writing failed (%s); what was shown while you spoke is kept" % r["error"]
+		t["pending"] = int(t["pending"]) - 1
+		t["error"] = str(r["error"])
+		if (t["texts"] as Array).is_empty():  # nothing else holds it: all of it is kept
+			(t["failed"] as Array).append({"wav": wav, "seconds": secs})
+		else:
+			status_label.text = "Voice: the final writing failed (%s); what was shown while you spoke is kept" % r["error"]
+			if rest.size() - 44 >= 12800:  # 0.4 s: the end, which no piece held
+				(t["failed"] as Array).append({"wav": rest, "seconds": (rest.size() - 44) / 32000.0})
 	else:
 		t["whole"] = str(r.get("text", "")).strip_edges()
 		t["cost"] = float(t["cost"]) + float(r.get("cost_usd", 0))
+		t["closed"] = true
+		t["pending"] = 0
 	_box_title()
 	if t["ended"] and int(t["pending"]) == 0:
 		await _take_done(t)
@@ -2865,13 +2890,19 @@ func _take_show(t: Dictionary) -> void:
 ## The key is released and every piece is written. A command runs; anything else joins the text of the box. Nothing
 ## goes to the agent here: the owner reads, corrects, adds more, and Enter sends it all.
 func _take_done(t: Dictionary) -> void:
+	if t.get("done", false):
+		return
+	t["done"] = true
 	var said := str(t.get("whole", "")).strip_edges()
 	if said == "":
 		said = _take_text(t).strip_edges()
 	if is_same(t, take):
 		voice_live.text = ""
 		voice_live.visible = false
-	var failed: Array = t["failed"]
+	# Durations only, never a word of what was said: enough to tell, afterwards, where a slow dictation spent its time.
+	print("voice: %.1f s recorded, pieces shown while speaking: %d, written %.1f s after the key was released" % [
+		float(t.get("seconds", 0.0)), (t["texts"] as Array).size(), (Time.get_ticks_msec() - int(t.get("ended_ms", Time.get_ticks_msec()))) / 1000.0])
+	var failed: Array = [] if t.has("whole") else t["failed"]  # with the whole written, a piece that failed lost nothing
 	if not failed.is_empty():  # never lost: kept to be written down again
 		voice_kept.append_array(failed)
 		var why := str(t.get("error", "it could not be written down"))
@@ -2879,7 +2910,7 @@ func _take_done(t: Dictionary) -> void:
 		_toast("%s. That part of the recording is kept: %s › Send my last recording again" % [why, key_text("palette")])
 		if why.contains("Keys"):
 			set_view("keys")
-	elif said == "" and not (t["texts"] as Array).is_empty():
+	elif said == "" and (t.has("whole") or not (t["texts"] as Array).is_empty()):
 		_toast("Nothing was heard in that recording")
 	if said != "":
 		draft_cost += float(t["cost"])
