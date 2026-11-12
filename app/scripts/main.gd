@@ -113,6 +113,10 @@ const NO_PLACE := Vector2(-1, -1)
 var voice_place := NO_PLACE     # where the owner put the box (its top left corner in the window); NO_PLACE: its own place
 var voice_drag := ""            # "held" then "moved" while the mouse drags the box by its top line
 var voice_area: Control         # the main area, whose bottom centre is the box's own place
+const VOICE_SIZE := Vector2(720, 104)
+const VOICE_SMALLEST := Vector2(420, 60)
+var voice_size := VOICE_SIZE    # the size of the box's text area: changed by the box's bottom right corner
+var voice_grip: Label
 var voice_looks: Array = []     # the box's two looks: see-through while it waits, solid while it is used
 var voice_mute := false         # the key is held and the microphone gives nothing: said in the box
 var voice_solid := false
@@ -2534,6 +2538,7 @@ func _build_voice_overlay(area: Control) -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS)
 	voice_place = cfg.get_value("ui", "voice_box", NO_PLACE)
+	voice_size = cfg.get_value("ui", "voice_box_size", VOICE_SIZE)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
 	voice_overlay.add_child(v)
@@ -2554,12 +2559,12 @@ func _build_voice_overlay(area: Control) -> void:
 	top.add_child(_small("Empty", _draft_empty, "Empty the box; what it held goes to Earlier"))
 	top.add_child(_small("✕", _box_hide, "Hide the box; its text is kept (Esc)"))
 	voice_meter = ProgressBar.new()
-	voice_meter.custom_minimum_size = Vector2(720, 4)
+	voice_meter.custom_minimum_size = Vector2(voice_size.x, 4)
 	voice_meter.show_percentage = false
 	voice_meter.max_value = 1.0
 	v.add_child(voice_meter)
 	voice_text = TextEdit.new()
-	voice_text.custom_minimum_size = Vector2(720, 104)
+	voice_text.custom_minimum_size = voice_size
 	voice_text.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	voice_text.placeholder_text = "Hold %s and speak. What you say is put together here; Enter sends all of it to the session." % key_text("dictate")
 	voice_text.add_theme_font_size_override("font_size", 15)
@@ -2568,7 +2573,7 @@ func _build_voice_overlay(area: Control) -> void:
 	v.add_child(voice_text)
 	voice_live = Label.new()  # the phrase being heard or written, not in the text yet
 	voice_live.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	voice_live.custom_minimum_size = Vector2(720, 0)
+	voice_live.custom_minimum_size = Vector2(voice_size.x, 0)
 	voice_live.add_theme_font_size_override("font_size", 14)
 	voice_live.visible = false
 	v.add_child(voice_live)
@@ -2580,6 +2585,13 @@ func _build_voice_overlay(area: Control) -> void:
 	voice_hint.size_flags_horizontal = SIZE_EXPAND_FILL
 	foot.add_child(voice_hint)
 	foot.add_child(_small("Send", _draft_send, "Send all of it to the selected session (Enter)"))
+	voice_grip = Label.new()  # its bottom right corner makes it larger or smaller, to see more of a long text
+	voice_grip.text = "◢"
+	voice_grip.mouse_filter = MOUSE_FILTER_STOP
+	voice_grip.mouse_default_cursor_shape = CURSOR_FDIAGSIZE
+	voice_grip.tooltip_text = "Drag to make the box larger or smaller · double click: its own size"
+	voice_grip.gui_input.connect(_box_resize)
+	foot.add_child(voice_grip)
 	add_child(voice_overlay)  # over the whole window, not only the main area: it can be put anywhere
 	var look := Timer.new()
 	look.wait_time = 0.15
@@ -2631,6 +2643,7 @@ func _style_voice_box() -> void:
 	voice_label.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 	voice_live.add_theme_color_override("font_color", AmTheme.col("INFO"))
 	voice_hint.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+	voice_grip.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 
 
 func _box_look() -> void:
@@ -2690,6 +2703,38 @@ func _box_drag(e: InputEvent) -> void:
 	elif e is InputEventMouseMotion and voice_drag != "":
 		voice_drag = "moved"
 		voice_overlay.position = (voice_overlay.position + e.relative).clamp(Vector2.ZERO, (size - voice_overlay.size).max(Vector2.ZERO))
+
+
+## The mouse on the box's bottom right corner: a drag makes its text area larger or smaller, and the size is
+## remembered; a double click gives it its own size back. Its top left corner stays where it is while it grows.
+func _box_resize(e: InputEvent) -> void:
+	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+		if e.pressed and e.double_click:
+			voice_drag = ""
+			voice_size = VOICE_SIZE
+			_save("voice_box_size", voice_size)
+			_box_fit()
+			return
+		if e.pressed:
+			voice_drag = "size"
+			if voice_place == NO_PLACE:  # in its own place it grows upwards; held by its corner it must grow towards the mouse
+				voice_place = voice_overlay.position
+				_save("voice_box", voice_place)
+		else:
+			voice_drag = ""
+			_save("voice_box_size", voice_size)
+	elif e is InputEventMouseMotion and voice_drag == "size":
+		var around := voice_overlay.size - voice_size  # the box's own edges, title and bottom line
+		var most := (size - voice_overlay.position - around).max(VOICE_SMALLEST)
+		voice_size = (voice_size + e.relative).clamp(VOICE_SMALLEST, most)
+		_box_fit()
+
+
+func _box_fit() -> void:
+	voice_meter.custom_minimum_size = Vector2(voice_size.x, 4)
+	voice_text.custom_minimum_size = voice_size
+	voice_live.custom_minimum_size = Vector2(voice_size.x, 0)
+	_box_place()
 
 
 func _box_show(keys: bool) -> void:

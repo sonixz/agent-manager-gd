@@ -355,6 +355,36 @@ func _run() -> void:
 				await process_frame
 				await process_frame
 			report.append("voice-box, dragged with the mouse itself: moved by %s | solid while it has the keyboard: %s" % [main.voice_overlay.position - was, main.voice_solid])
+			# its bottom right corner makes it larger: pressed, moved, released with the mouse itself
+			var corner: Vector2 = main.voice_grip.get_global_rect().get_center()
+			var small: Vector2 = main.voice_overlay.size
+			var stays: Vector2 = main.voice_overlay.position
+			for step in [["down", Vector2.ZERO], ["move", Vector2(140, 110)], ["move", Vector2(280, 220)], ["up", Vector2(280, 220)]]:
+				var ev: InputEvent
+				if step[0] == "move":
+					ev = InputEventMouseMotion.new()
+					ev.relative = Vector2(140, 110)
+					ev.button_mask = MOUSE_BUTTON_MASK_LEFT
+				else:
+					ev = InputEventMouseButton.new()
+					ev.button_index = MOUSE_BUTTON_LEFT
+					ev.pressed = step[0] == "down"
+				ev.position = corner + step[1]
+				ev.global_position = corner + step[1]
+				Input.parse_input_event(ev)
+				await process_frame
+				await process_frame
+			await wait(0.3)
+			report.append("voice-box, its corner dragged with the mouse: from %s to %s | its top left corner did not move: %s | the size is remembered: %s" % [
+				small, main.voice_overlay.size, main.voice_overlay.position == stays, main.voice_size != main.VOICE_SIZE])
+			await shot("voice-box-large")
+			var back := InputEventMouseButton.new()
+			back.button_index = MOUSE_BUTTON_LEFT
+			back.pressed = true
+			back.double_click = true
+			main._box_resize(back)
+			await wait(0.2)
+			report.append("voice-box, a double click on its corner: its own size again: %s" % (main.voice_overlay.size.distance_to(small) < 2.0))
 			main._box_drag(twice)
 			_hold("dictate")  # a second dictation adds to the first
 			await _say(2.2)

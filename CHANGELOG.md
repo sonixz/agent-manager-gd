@@ -24,8 +24,11 @@ Newest first.
   one never waits for one long transcription.
 - The box goes where you want: drag it by its top line, anywhere in the window; it remembers its place, and a double
   click sends it back. See-through while it waits, solid while you use it.
-- A pause in the middle of a sentence no longer leaves a full stop there, and a pause must last a little longer
-  (0.9 s) to cut.
+- A pause in the middle of a sentence no longer leaves a full stop there.
+- The box grows: drag its bottom right corner to see more of a long text; its size is remembered, and a double
+  click on the corner gives it its own size back.
+- The words follow the voice more closely: a phrase is shown after half a second of quiet, or at the first dip of
+  the voice once it is four seconds long. What is kept still comes from the whole recording, written in one piece.
 
 ### Faster · Loop 33
 - Picking a session, changing view and the 2-second refresh no longer stutter. Measured with twenty sessions on the

@@ -10,9 +10,15 @@ signal mute(seconds: float)  # the key is held and the microphone has given noth
 
 const SPEECH := 0.03     # louder than this, someone speaks
 const QUIET := 0.02      # quieter than this for PAUSE seconds, after speech: a pause, where a piece ends
-const PAUSE := 0.9      # 0.7 cut the owner's sentences at each hesitation (2026-11-11)
+# The pieces are only what is shown while speaking: the text that is kept comes from the whole recording, written
+# once more in one piece. So they are cut early, for the words to follow the voice (the owner, 2026-11-11: « le texte
+# apparaît pas vraiment en real time »): at half a second of quiet, and, once a piece is a few seconds long, at the
+# first dip of the voice.
+const PAUSE := 0.5
 const MIN_PIECE := 1.2   # seconds: a piece is never shorter (a breath is not a pause)
-const MAX_PIECE := 30.0  # seconds: a piece is never longer, pause or not
+const SOON := 4.0        # seconds: a piece this long ends at the first dip
+const DIP := 0.15        # seconds of quiet that make a dip
+const MAX_PIECE := 12.0  # seconds: a piece is never longer, pause or not
 
 var bus := -1
 var capture: AudioEffectCapture
@@ -114,7 +120,9 @@ func feed(chunk: PackedVector2Array) -> void:
 	elif peak < QUIET:
 		_quiet += chunk.size() / rate
 	var length := frames.size() / rate
-	if (_heard and _quiet >= PAUSE and length >= MIN_PIECE) or length >= MAX_PIECE:
+	if _heard and ((_quiet >= PAUSE and length >= MIN_PIECE) or (_quiet >= DIP and length >= SOON)):
+		_give()
+	elif length >= MAX_PIECE:
 		_give()
 
 
