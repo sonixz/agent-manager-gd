@@ -28,7 +28,7 @@ for step in "${@:-hero}"; do
   env -i PATH="$REPO/tools/showcase/bin:/usr/local/bin:/usr/bin:/bin:$(dirname "$(command -v godot)")" \
     HOME="$DEV_HOME" USER=dev LANG=C.UTF-8 TERM=xterm-256color DISPLAY="$VDISPLAY" \
     SHOWCASE_SCENES="$REPO/tools/showcase/scenes" SHOWCASE_MAP="$ROOT/map" SHOWCASE_REMOTES="$ROOT/remote" \
-    AGMGD_HOME="$ROOT/data" AGMGD_PORT=18791 AGMGD_TMUX_SOCKET=agmgd-showcase AGMGD_BRAIN_HOME="$ROOT/brain" AGMGD_BRAIN_REPO="$ROOT/brain-repo" AGMGD_KEYS_PLAIN=1 \
+    AGMGD_HOME="$ROOT/data" AGMGD_PORT=18791 AGMGD_TMUX_SOCKET=agmgd-showcase AGMGD_BRAIN_HOME="$ROOT/brain" AGMGD_BRAIN_REPO="$ROOT/brain-repo" AGMGD_KEYS_PLAIN=1 AGMGD_HOST_SAMPLE=2 \
     AGMGD_DEMO_FLY="$ROOT/data/demo-fly.json" AGMGD_DEMO_FLY_DELAY="${AGMGD_DEMO_FLY_DELAY:-}" \
     AGMGD_VOICE_FAKE="${AGMGD_VOICE_FAKE:-}" AGMGD_VOICE_FAKE_DELAY="${AGMGD_VOICE_FAKE_DELAY:-}" AGMGD_VOICE_FAKE_WHOLE="${AGMGD_VOICE_FAKE_WHOLE:-}" AGMGD_VOICE_FAKE_WHOLE_DELAY="${AGMGD_VOICE_FAKE_WHOLE_DELAY:-}" SHOW_STEP="$step" SHOW_OUT="$OUT" SHOW_HOWTO="${SHOW_HOWTO:-$REPO/public/assets/howto}" SHOW_REPORTS="$REPORTS" \
     godot --display-driver x11 --audio-driver Dummy --rendering-driver opengl3 --resolution "${SHOW_SIZE:-1920x1200}" --path app \

@@ -127,13 +127,30 @@
           administrator and no password; on Linux it goes through <code>sudo</code>, which asks for your password in
           that terminal. When it ends, the check reads again and starts the engine if that was all that was missing.
           Everything else (WSL itself, the agents, flyctl) is still yours to install: the check says how.</p>
-        <p>Under the check, the <b>Engine room</b> says how the ground is doing; you will rarely look at it, and it is
-          there when something is slow or full. <b>Memory</b>: what is used, and on Windows what the whole computer has.
-          <b>Sessions</b>: what the running ones weigh, the heaviest first, and about how many more would fit.
-          <b>Disk</b>: on Windows, WSL keeps a distribution's disk in one file on a Windows drive, so the room left on
-          that drive is the true room, whatever Linux reports; the line turns to a warning when the drive is nearly
-          full. <b>Folders</b>: the sessions that work on the Windows disk (<code>/mnt/c/…</code>), where git is slower
-          than inside Linux. <b>Limits</b>: what your <code>.wslconfig</code> sets, read and never changed.</p>
+        <p>When everything the app needs is there, the ladder is one line of marks, and <b>Show every line</b>
+          brings the lines back. Under it, the <b>Engine room</b> is a dashboard of the ground: you will rarely look
+          at it, and it is there when something is slow or full. Five tiles say the moment. <b>Memory in use</b>:
+          what the programs hold, of what there is; on Windows also what Windows gives WSL, which is more, because
+          Linux keeps files in memory. <b>Sessions running</b>: how many, what they weigh together, and about how
+          many more would fit. <b>Processors busy</b>. <b>Disk</b>: on Windows, WSL keeps a distribution's disk in one
+          file on a Windows drive, so the room left on that drive is the true room, whatever Linux reports; the tile
+          is marked <b>!</b> when the drive is nearly full. <b>Up for</b>: since WSL, or the computer, started.</p>
+        <p><b>Memory in use, by session</b> shows the same over time: one bar per slice of time, one colour per
+          session, and in grey what runs beside them (the engine, tmux, other programs). Choose <b>Last hour</b>,
+          <b>6 hours</b>, <b>24 hours</b> or <b>7 days</b>. Point at a bar to read its time and what each session
+          held. A time when the engine was not running stays empty, and a small mark under the axis says where WSL
+          started anew. When the bars come near all the memory there is, a dashed line shows it. Past eight sessions,
+          the others are drawn together.</p>
+        <p>The table under the bars lists the sessions: how long each has been open, when its screen last changed,
+          its memory now and at the most in the span, its share of one processor (100 % is one processor busy all
+          the time), and whether its folder is on the Windows disk (<code>/mnt/c/…</code>), where git is slower than
+          inside Linux. The sessions that ended within the span come after the running ones. Click a running
+          session to open it.</p>
+        <p>The engine takes one reading every 30 seconds and keeps seven days of them in
+          <code>data/host_history.sqlite3</code>, in its data folder; nothing of it leaves the computer. Deleting the
+          file loses the bars and nothing else. <code>AGMGD_HOST_SAMPLE=0</code> stops the readings, and another
+          number sets the seconds between two of them. Under the table: the sessions on the Windows disk, and the
+          <b>Limits</b> your <code>.wslconfig</code> sets, read and never changed.</p>
         <p><b>Restart WSL…</b> (Windows) stops WSL entirely and starts the engine again. It first names the sessions
           that would stop, then asks you to type « restart »: it also stops anything else you run in WSL. Conversations
           are kept; restart a session afterwards and it resumes.</p>

@@ -16,8 +16,9 @@ launch if the engine cannot start) reads what the app stands on, from the ground
 (its version, virtualization), WSL and its Linux distribution; then the programs, the engine, the agents. It
 tells you the command to run at the first thing that is missing. When python3, tmux, git or ssh is missing, it
 offers to install them itself: it shows the command and runs it on your click, in a terminal you see (as the
-distribution's root inside WSL; through `sudo` on Linux). Under it, the **Engine room** says how
-that ground is doing: memory, what the sessions weigh, the true room on the disk, the limits of your `.wslconfig`.
+distribution's root inside WSL; through `sudo` on Linux). Under it, the **Engine room** is a dashboard of
+that ground: memory in use by session, now and over the last seven days, what each session weighs, the true room on
+the disk, the limits of your `.wslconfig`.
 
 ## Windows, step by step
 

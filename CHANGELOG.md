@@ -6,9 +6,26 @@ Newest first.
 ## Unreleased: alpha
 
 ### The setup check reads from the ground up, and its engine room · Loop 36 (first steps)
-- New, under the Setup check: the **Engine room**. Memory used, and what the whole computer has; what the running
-  sessions weigh, the heaviest first, and about how many more would fit; the disk; the sessions that work on the
-  Windows disk, where git is slower; the limits your `.wslconfig` sets (read, never changed); how long it has been up.
+- The **Engine room** is now a dashboard, under the Setup check. Five tiles say the moment: memory in use, sessions
+  running, how busy the processors are, the room left on the disk, how long it has been up. Under them, **Memory in
+  use, by session**: one bar per slice of time, one colour per session, over the last hour, 6 hours, 24 hours or
+  7 days. Point at a bar and it says the time and what each session held. A time when the engine was not running
+  stays empty; a small mark under the axis says where WSL (or the computer) started anew.
+- Under the bars, the sessions in a table: how long each has been open, when its screen last changed, its memory
+  now and at the most in the span, its share of a processor, and whether it works on the Windows disk. The sessions
+  that ended within the span are listed after the running ones. Click a running session to open it.
+- For that, the engine now keeps what it reads: one reading every 30 seconds, seven days of them, in a file of its
+  own in its data folder (`data/host_history.sqlite3`). Older readings are deleted. Measured here: a reading takes
+  about 6 ms of processor, a full week with five sessions is 5 MB. `AGMGD_HOST_SAMPLE=0` stops the readings. The
+  bars begin when the engine starts with this version (it starts anew with the app): nothing is known of before.
+- On Windows the memory tile also says how much memory Windows gives WSL at that moment, which is more than what
+  Linux uses: Linux keeps files in memory, and Windows counts that too.
+- When everything the app needs is there, the ladder is one line of marks; **Show every line** brings the lines
+  back, and they come back by themselves when something is missing.
+- Not seen in the real Windows window yet: the dashboard was checked on the test display, with real readings every
+  2 seconds for its plumbing and made-up figures for its pictures.
+- Also in the Engine room: the sessions that work on the Windows disk, where git is slower, and the limits your
+  `.wslconfig` sets (read, never changed).
 - On Windows the disk line tells the true room: WSL keeps a distribution's disk in one file on a Windows drive, and
   Linux may report hundreds of gigabytes free on a drive that has few left. The line is a warning when that drive is
   nearly full.

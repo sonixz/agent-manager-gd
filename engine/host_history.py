@@ -188,7 +188,7 @@ class Watch:
                "t": [(b0 + i) * step for i in range(n)], "readings": [0] * n, "total": 0,
                "used": list(blank), "used_peak": list(blank), "held": list(blank), "cpu": list(blank),
                "load": list(blank), "engine_bytes": list(blank), "engine_cpu": list(blank),
-               "sessions": [], "marks": [], "since": 0, "error": self.error}
+               "sessions": [], "marks": [], "since": 0}   # no « error » key: to the app, an answer that has one failed
         with closing(self._db()) as db:
             for b, c, used, peak, held, cpu, load, total, eb, ec in db.execute(
                     "SELECT ts / ?, COUNT(*), AVG(mem_used), MAX(mem_used), AVG(mem_held), AVG(cpu), AVG(load), "

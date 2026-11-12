@@ -3,6 +3,8 @@ build=26200
 virt_firmware=True
 hypervisor=True
 ram=34359738368
+free=15032385536
+vmmem=2684354560
 service=True
 #version 0
 WSL version: 2.6.3.0

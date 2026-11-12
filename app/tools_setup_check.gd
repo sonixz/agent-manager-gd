@@ -8,6 +8,7 @@ extends SceneTree
 ## Windows in French…) are written by hand from what the documentation says: they were never seen on a computer.
 
 const Probe := preload("res://scripts/setup_probe.gd")
+const View := preload("res://scripts/host_view.gd")
 
 var failed := 0
 var passed := 0
@@ -38,6 +39,7 @@ func _initialize() -> void:
 				print("room   %-24s %s%s" % [l["label"], l["text"], "  (!)" if l["warn"] else ""])
 		_:
 			_cases()
+			_dashboard_cases()
 			print("%d passed, %d failed" % [passed, failed])
 			quit(1 if failed > 0 else 0)
 			return
@@ -261,3 +263,91 @@ func _cases() -> void:
 		return {"code": 0, "out": real_w} if str(a[0]) == "powershell.exe" else {"code": 0, "out": real_l}
 	got = p.read("/mnt/c/app", 8790)
 	check("WSL there: Windows, then the check inside WSL with the engine's port", asked == ["powershell.exe", "wsl.exe -e bash"] and got["linux"]["found"].has("engine-port"))
+
+
+## The engine room's dashboard (scripts/host_view.gd): its words, its colours, its bars, its tiles, its table.
+func _dashboard_cases() -> void:
+	var gib := 1073741824.0
+	var mib := 1048576.0
+	check("dashboard: memory is written in MB under one GB, in GB above", View.mem(520 * mib) == "520 MB" and View.mem(1.3 * gib) == "1.3 GB" and View.mem(15.6 * gib) == "16 GB")
+	check("dashboard: durations", View.span(40) == "40 s" and View.span(12 * 60 + 5) == "12 min" and View.span(3 * 3600 + 5 * 60) == "3 h 05" and View.span(2 * 86400 + 4 * 3600) == "2 d 4 h")
+	check("dashboard: how long ago", View.ago(3) == "now" and View.ago(300) == "5 min ago")
+	check("dashboard: a share of one processor", View.share(null) == "…" and View.share(0.034) == "3.4 %" and View.share(0.5) == "50 %" and View.share(2.4) == "240 %" and View.share(0.0) == "0 %" and View.share(0.0002) == "under 0.1 %")
+	# 1 800 000 000 is January 15, 2027, 08:00 UTC
+	check("dashboard: the hour in the computer's time zone, the day too for a long span", View.clock(1800000000, false, 0) == "08:00" and View.clock(1800000000, false, -300) == "03:00" and View.clock(1800000000, true, -300) == "Jan 15, 03:00")
+	check("dashboard: the axis ends on a round figure above the tallest bar", View.top_of(1.3 * gib) == 1.5 * gib and View.top_of(2.2 * gib) == 2.5 * gib and View.top_of(2.8 * gib) == 3 * gib and View.top_of(7 * gib) == 8 * gib and View.top_of(310 * mib) == 400 * mib and View.top_of(0) == mib)
+	check("dashboard: an unknown span is the first one", View.range_of("nope")["id"] == "1h" and View.range_of("7d")["seconds"] == 604800)
+	# --- colours: a session keeps its hue
+	var first := View.assign({}, ["a", "b", "c"])
+	check("dashboard: hues are given in a fixed order", first == {"a": 0, "b": 1, "c": 2})
+	var then := View.assign(first, ["b", "c", "d"])
+	check("dashboard: who stays keeps its hue, who comes takes the one given back", then == {"b": 1, "c": 2, "d": 0})
+	var many := View.assign({}, ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"])
+	check("dashboard: past the eighth, a session joins the others", many["s7"] == 7 and many["s8"] == View.OTHER and many["s9"] == View.OTHER)
+	check("dashboard: the running sessions are served before the ended ones", View.ids_to_show({"sessions": [{"id": "run"}]}, {"sessions": [{"id": "old"}, {"id": "run"}]}) == ["run", "old"])
+	check("dashboard: light and dark themes each have their own steps of the same hues", View.hue(0, false) == Color.html("3987e5") and View.hue(0, true) == Color.html("2a78d6") and View.HUES_DARK.size() == View.HUES_LIGHT.size())
+	# --- the bars
+	var hist := {"used": [4 * gib, null, 3 * gib], "sessions": [
+		{"id": "aa", "name": "Checkout flow", "bytes": [1 * gib, null, 2 * gib], "peak": 2.5 * gib, "first": 100, "last": 400},
+		{"id": "bb", "name": "Docs refresh", "bytes": [0.5 * gib, null, 0], "peak": 0.6 * gib, "first": 100, "last": 200}]}
+	var st := View.stack(hist, {"aa": 1, "bb": 0})
+	var b0: Dictionary = st["bars"][0]
+	check("dashboard: a bar piles the sessions in the order of their hues, then the rest", b0["segs"].map(func(x: Dictionary) -> int: return x["slot"]) == [0, 1, View.REST] and b0["segs"][2]["bytes"] == 2.5 * gib and b0["sum"] == 4 * gib)
+	check("dashboard: a time without reading has no bar", st["bars"][1] == null)
+	check("dashboard: a session that ended is no longer in the pile", st["bars"][2]["segs"].map(func(x: Dictionary) -> String: return x["id"]) == ["aa", ""])
+	check("dashboard: the axis follows the tallest bar", st["top"] == 4 * gib)
+	var near: Dictionary = hist.duplicate(true)
+	near["total"] = 6 * gib
+	check("dashboard: near all the memory there is, the axis is that memory", View.stack(near, {"aa": 1, "bb": 0})["top"] == 6 * gib)
+	near["total"] = 16 * gib
+	check("dashboard: far from it, the axis stays on the bars", View.stack(near, {"aa": 1, "bb": 0})["top"] == 4 * gib)
+	var over := View.stack({"used": [1 * gib], "sessions": [{"id": "aa", "bytes": [1.5 * gib]}]}, {"aa": 0})
+	check("dashboard: sessions that weigh more together than what is in use leave no rest", over["bars"][0]["segs"].size() == 1 and over["bars"][0]["sum"] == 1.5 * gib and over["bars"][0]["used"] == 1 * gib)
+	var crowd := View.stack({"used": [3 * gib], "sessions": [{"id": "x", "bytes": [0.5 * gib]}, {"id": "y", "bytes": [0.25 * gib]}, {"id": "z", "bytes": [0.25 * gib]}]}, {"x": 0, "y": View.OTHER, "z": View.OTHER})
+	check("dashboard: the sessions past the eighth are one piece", crowd["bars"][0]["segs"].map(func(x: Dictionary) -> Array: return [x["slot"], x["bytes"]]) == [[0, 0.5 * gib], [View.OTHER, 0.5 * gib], [View.REST, 2 * gib]])
+	check("dashboard: nothing to show gives no bar", View.stack({}, {})["bars"].is_empty())
+	check("dashboard: the last figure of a series", View.last_of([1, null, 3, null]) == 3 and View.last_of([null]) == null)
+	# --- the tiles
+	var f := {"windows": {"ram": 32 * gib, "vmmem": 2.4 * gib, "default": "Ubuntu-24.04", "disks": {"Ubuntu-24.04": {"drive": "C:", "file": 45 * gib, "free": 67 * gib, "total": 950 * gib}}}}
+	var host := {"wsl": true, "distro": "Ubuntu-24.04", "now": 10000.0, "uptime": 11520.0, "load": 0.52, "processors": 16, "cpu": 0.034,
+		"memory": {"total": 15.5 * gib, "available": 14.5 * gib, "used": 1.0 * gib, "held": 2.1 * gib, "swap_total": 4 * gib, "swap_used": 0},
+		"disk": {"total": 1007 * gib, "free": 918 * gib}, "sessions_bytes": 1.3 * gib,
+		"sessions": [{"id": "aa", "name": "Checkout flow", "tool": "claude", "bytes": 0.8 * gib, "created": 4000.0, "activity": 9880.0, "attached": 1, "drive": "c", "cpu": 0.5},
+			{"id": "cc", "name": "Flaky tests", "tool": "codex", "bytes": 0.5 * gib, "created": 9000.0, "activity": 9998.0, "attached": 0, "drive": "", "cpu": null}],
+		"engine": {"bytes": 28 * mib, "cpu": 0.0002}, "history": {"interval": 30, "keep": 604800, "since": 1800000000, "readings": 120, "error": ""}}
+	var tiles := View.tiles(f, host, hist, true)
+	var tile := func(id: String) -> Dictionary:
+		for t in tiles:
+			if t["id"] == id:
+				return t
+		return {}
+	check("dashboard: the tiles, in their order", tiles.map(func(t: Dictionary) -> String: return t["id"]) == ["memory", "sessions", "processors", "disk", "up"])
+	check("dashboard: memory in use, of what, and what Windows gives WSL", tile.call("memory")["value"] == "1.0 GB" and tile.call("memory")["note"] == "of 16 GB inside WSL · Windows gives WSL 2.4 GB" and not tile.call("memory")["warn"] and tile.call("memory")["spark"] == hist["used"])
+	check("dashboard: the sessions, their weight together and the room left", tile.call("sessions")["value"] == "2" and tile.call("sessions")["note"] == "1.3 GB together · room for about 22 more")
+	check("dashboard: how busy the processors are", tile.call("processors")["value"] == "3.4 %" and tile.call("processors")["note"] == "of 16 processors · 0.5 programs wanting one")
+	check("dashboard: the true room is the Windows drive's, with a mark when it is nearly full", tile.call("disk")["label"] == "Disk, free on C:" and tile.call("disk")["value"] == "67 GB" and tile.call("disk")["note"] == "93 % full · WSL's disk is a 45 GB file there" and tile.call("disk")["warn"])
+	check("dashboard: how long WSL has been up", tile.call("up")["value"] == "3 h 12" and tile.call("up")["note"] == "since WSL started")
+	check("dashboard: no engine, no tile", View.tiles(f, {}, {}, true).is_empty())
+	var tight: Dictionary = host.duplicate(true)
+	tight["memory"]["available"] = 0.4 * gib
+	tight["cpu"] = null
+	var tt := View.tiles({}, tight, {}, false)
+	check("dashboard: memory nearly gone and no room for one more session are marked", tt[0]["warn"] and tt[1]["warn"] and tt[1]["note"].ends_with("no room for one more"))
+	check("dashboard: before two readings, the processors' share is not guessed", tt[2]["value"] == "…")
+	check("dashboard: without Windows' figures, the disk is the one Linux reports", tt[3]["label"] == "Disk, free" and tt[3]["value"] == "918 GB" and tt[3]["note"] == "9 % full" and not tt[3]["warn"])
+	# --- the table
+	var rows := View.rows(host, hist, {"aa": 0, "bb": 1, "cc": 2}, 10000.0)
+	check("dashboard: the running sessions first, then the ones that ended in the span", rows.map(func(r: Dictionary) -> String: return r["name"]) == ["Checkout flow", "Flaky tests", "Docs refresh"] and rows.map(func(r: Dictionary) -> bool: return r["running"]) == [true, true, false])
+	check("dashboard: a session's age, its last activity, its weight now and at the most", rows[0]["open"] == 6000.0 and rows[0]["idle"] == 120.0 and rows[0]["bytes"] == 0.8 * gib and rows[0]["peak"] == 2.5 * gib and rows[0]["cpu"] == 0.5 and rows[0]["drive"] == "c")
+	check("dashboard: a session the readings do not know yet still has its line", rows[1]["peak"] == 0.5 * gib and rows[1]["spark"].is_empty() and rows[1]["cpu"] == null)
+	check("dashboard: an ended session says how long it ran and when it ended", rows[2]["open"] == 100.0 and rows[2]["idle"] == 9800.0 and rows[2]["peak"] == 0.6 * gib and rows[2]["slot"] == 1)
+	# --- what the readings cost
+	check("dashboard: the readings' sentence", View.about(host, 0) == "One reading every 30 s, kept 7 days, since Jan 15, 08:00. The engine itself holds 28 MB and takes under 0.1 % of one processor.")
+	var off: Dictionary = host.duplicate(true)
+	off["history"] = {}
+	check("dashboard: readings turned off are said", View.about(off, 0).begins_with("The readings over time are off"))
+	off.erase("history")
+	check("dashboard: an engine older than the readings is said, with the way out", View.about(off, 0).contains("started before the readings over time existed") and View.about(off, 0).contains("close it and open it again"))
+	var failed_h: Dictionary = host.duplicate(true)
+	failed_h["history"]["error"] = "OSError: disk full"
+	check("dashboard: a reading that failed is said", View.about(failed_h, 0).ends_with("The last reading failed: OSError: disk full."))

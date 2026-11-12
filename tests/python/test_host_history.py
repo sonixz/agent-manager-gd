@@ -130,6 +130,7 @@ class HistoryTest(unittest.TestCase):
         self.assertEqual(bb["bytes"], [50_000 * PAGE, None, 0])      # ended: nothing in a slice that was read, its name kept
         self.assertEqual((bb["first"], bb["last"]), (T0, T0 + 30))
         self.assertEqual(s["since"], T0)
+        self.assertNotIn("error", s)   # the app reads an answer that holds « error » as a failed call
 
     def test_the_sessions_of_a_slice_add_up_when_one_started_in_its_middle(self):
         self.process(100, 1, 100_000, ticks=0)

@@ -3,6 +3,7 @@ extends SceneTree
 ## (user « dev », projects in ~/code). Agent terminals replay recorded real screens (tools/showcase/bin/agent-replay).
 ## SHOW_STEP = measure | hero | … ; screenshots go to SHOW_OUT as webp.
 
+const HostView := preload("res://scripts/host_view.gd")
 var out := OS.get_environment("SHOW_OUT")
 var report: Array[String] = []
 var main: Control
@@ -519,18 +520,126 @@ func _run() -> void:
 			report.append("setup: the page opened in %d ms; the reading took %.1f s, during which %d frames were drawn, the longest in %d ms" % [open_ms, (Time.get_ticks_msec() - began) / 1000.0, drawn, worst])
 			await wait(0.2)
 			report.append("setup: everything there: %s | « %s »" % [_setup_marks(), _setup_text("Everything needed")])
-			# the engine room: the engine's own answer first (this display's real figures: only their shape is reported), then made-up figures for the picture
-			var real: Dictionary = await main.engine.call_api("GET", "/host")
-			report.append("setup: the engine's figures: memory %s | disk %s | %d sessions weighed, the lightest above 1 MB: %s" % [int(real["memory"]["total"]) > 0, int(real["disk"]["total"]) > 0, real["sessions"].size(), real["sessions"].all(func(x: Dictionary) -> bool: return int(x["bytes"]) > 1048576)])
-			var gib := 1073741824
-			main.setup_host = {"wsl": true, "distro": "Ubuntu-24.04", "uptime": 70200.0, "memory": {"total": 16 * gib, "available": 14 * gib, "used": 2 * gib, "swap_total": 4 * gib, "swap_used": 0},
-				"disk": {"total": 1007 * gib, "free": 918 * gib}, "drives": [{"letter": "c", "total": 931 * gib, "free": 68 * gib}],
-				"sessions": [{"id": "a", "name": "Checkout flow", "bytes": 505 * 1048576}, {"id": "b", "name": "Flaky tests", "bytes": 412 * 1048576}, {"id": "c", "name": "Rate limiter", "bytes": 398 * 1048576}, {"id": "d", "name": "Sparks", "bytes": 371 * 1048576}, {"id": "e", "name": "Docs refresh", "bytes": 96 * 1048576}],
-				"sessions_bytes": 1782 * 1048576, "on_windows_disk": [{"id": "a", "name": "Checkout flow", "drive": "c"}, {"id": "b", "name": "Flaky tests", "drive": "c"}]}
-			main._layout_view()
+			# with everything standing, the ladder is one line of marks; « Show every line » brings the lines back
+			var marks_line: bool = main.content.find_child("SetupMarks", true, false) != null
+			_find_button(main.content, "Show every line").pressed.emit()
 			await wait(0.2)
-			report.append("setup: engine room: « %s » | « %s » | « %s »" % [_setup_text("of 16 GB used"), _setup_text("running, about"), _setup_text("true room")])
+			report.append("setup: all standing: one line of marks: %s | « Show every line »: %d lines, « %s » offered" % [marks_line, _setup_marks().length(), "Show less" if _find_button(main.content, "Show less") != null else "?"])
+			await shot("setup-lines")
+			_find_button(main.content, "Show less").pressed.emit()
+			await wait(0.2)
+			# --- the engine room's dashboard. First the engine's own answers on this display: real readings (every
+			# 2 seconds here, 30 in the app), only their shape is reported. Then a made-up hour and a made-up week for
+			# the pictures.
+			var real: Dictionary = await main.engine.call_api("GET", "/host")
+			var hist_real := {}
+			var readings := 0
+			for i in 40:
+				hist_real = await main.engine.call_api("GET", "/host/history?seconds=3600&points=60")
+				readings = 0
+				for c in hist_real.get("readings", []):
+					readings += int(c)
+				if readings >= 3:
+					break
+				await wait(0.5)
+			real = await main.engine.call_api("GET", "/host")
+			report.append("setup: the engine's figures: memory %s | disk %s | %d sessions weighed, the lightest above 1 MB: %s" % [int(real["memory"]["total"]) > 0, int(real["disk"]["total"]) > 0, real["sessions"].size(), real["sessions"].all(func(x: Dictionary) -> bool: return int(x["bytes"]) > 1048576)])
+			report.append("setup: readings over time: every %d s here | at least 3 readings: %s | sessions named in them: %d of %d running | each session's age and processor share known: %s | the engine weighs itself: %s" % [
+				int(real["history"]["interval"]), readings >= 3, hist_real["sessions"].size(), real["sessions"].size(),
+				real["sessions"].all(func(x: Dictionary) -> bool: return float(x["created"]) > 0.0 and x["cpu"] != null), int(real["engine"]["bytes"]) > 1048576])
+			await main._setup_ask_host()
+			await main._setup_ask_history()
+			await wait(0.3)
+			var dash = main.setup_dash
+			var on_page: bool = is_instance_valid(dash) and dash.is_visible_in_tree()
+			report.append("setup: the dashboard is on the page: %s | tiles: %s | bars: %d, with a reading: %d | lines in the table: %d" % [on_page,
+				", ".join(dash._tiles.items.map(func(t: Dictionary) -> String: return str(t["id"]))), dash._chart.bars.size(),
+				dash._chart.bars.filter(func(x: Variant) -> bool: return x != null).size(), dash._table.rows.size()])
+			# its tick asks the engine again without laying the page out again (the page would jump back to its top)
+			var page_before: Node = main.content.get_child(0)
+			var now_before := float(dash.host.get("now", 0.0))
+			await wait(1.1)
+			await main._setup_tick()
+			await wait(0.3)
+			report.append("setup: a tick: newer figures: %s | the page was not laid out again: %s" % [float(dash.host.get("now", 0.0)) > now_before, main.content.get_child(0) == page_before])
+			# a click on a running session's line shows that session
+			var first_id := str(dash._table.rows[0]["id"])
+			var selected_was: String = main.selected
+			var move := InputEventMouseMotion.new()
+			move.position = Vector2(60, dash._table.HEAD + dash._table.ROW * 0.5)
+			dash._table._gui_input(move)
+			var click := InputEventMouseButton.new()
+			click.position = move.position
+			click.button_index = MOUSE_BUTTON_LEFT
+			click.pressed = true
+			dash._table._gui_input(click)
+			await wait(0.4)
+			report.append("setup: a click on a session's line: the view is « %s », on that session: %s" % [main.view, main.selected == first_id])
+			main.selected = selected_was  # as it was (no session was selected in this step): the pictures' header stays plain
+			main.tree_sig = ""
+			main._render_list()
+			main._render_header()
+			main.setup_probe.runner = func(a: Array) -> Dictionary:
+				return {"code": 0, "out": win if str(a[0]) == "powershell.exe" else doc}
+			main.set_view("setup")
+			while main.setup_thread != null:
+				await process_frame
+			await wait(0.3)
+			report.append("setup: back on the page: the same dashboard is there: %s" % (main.setup_dash == dash and dash.is_visible_in_tree()))
+			# another span: the engine is asked for it, and the choice is kept
+			dash._buttons["7d"].button_pressed = true
+			dash._buttons["7d"].pressed.emit()
+			await wait(0.6)
+			report.append("setup: « 7 days »: %d slices of %d s asked of the engine | kept as the chosen span: %s | shown at full strength again: %s" % [dash.hist.get("t", []).size(), int(dash.hist.get("step", 0)), main.setup_range == "7d", dash._chart.modulate.a == 1.0])
+			dash._buttons["1h"].button_pressed = true
+			dash._buttons["1h"].pressed.emit()
+			await wait(0.6)
+			# --- the pictures: a made-up hour, then a made-up week, at a made-up moment (so they do not change with the day they are taken)
+			dash._timer.stop()
+			dash.bias = 0
+			dash._table.hover = -1
+			var moment := int(Time.get_unix_time_from_datetime_string("2026-11-12T15:20:00"))
+			main.setup_host = _made_up_host(moment)
+			main.setup_hist = _made_up_hour(moment)
+			main._layout_view()
+			await wait(0.3)
+			var tiles: Array = HostView.tiles(main.setup_facts, main.setup_host, main.setup_hist, true)
+			report.append("setup: dashboard, a made-up hour: %s" % " | ".join(tiles.map(func(t: Dictionary) -> String: return "%s%s: %s (%s)" % ["! " if t["warn"] else "", t["label"], t["value"], t["note"]])))
+			report.append("setup: under it: « %s » | « %s » | « %s »" % [_setup_text("work in a folder on the Windows disk"), _setup_text("No .wslconfig"), _setup_text("One reading every")])
 			await shot("setup")
+			# the pointer on a bar: the box says the slice's time and every piece of the pile
+			var piece: Array = dash._chart.pieces(34)[1]
+			var over := InputEventMouseMotion.new()
+			over.position = (piece[0] as Rect2).get_center()
+			dash._chart._gui_input(over)
+			await wait(0.2)
+			report.append("setup: the pointer on a bar: slice %d, on « %s »" % [dash._chart.hover, dash.name_of(str(piece[1]["id"]))])
+			await shot("setup-hover")
+			dash._chart.hover = -1
+			# the same page on a light theme and on the palest dark one: the hues have their own steps there
+			var theme_was: String = AmTheme.current
+			for t in ["paper", "morning"]:
+				await main.set_theme_name(t)
+				await wait(0.3)
+				report.append("setup: on « %s »: the same dashboard is there: %s, light hues: %s" % [t, main.setup_dash == dash and dash.is_visible_in_tree(), AmTheme.is_light()])
+				await shot("setup-" + t)
+			await main.set_theme_name(theme_was)
+			await wait(0.3)
+			main.setup_range = "7d"
+			dash.set_range("7d")
+			main.setup_hist = _made_up_week(moment)
+			dash.set_history(main.setup_hist)
+			await wait(0.3)
+			var week: Dictionary = HostView.stack(main.setup_hist, dash.slots)
+			report.append("setup: a made-up week: %d slices, %d without reading | hues given: %d, sessions drawn together as others: %d | the axis ends at %s of %s" % [week["bars"].size(),
+				week["bars"].filter(func(x: Variant) -> bool: return x == null).size(), dash.slots.values().filter(func(v: int) -> bool: return v >= 0).size(),
+				dash.slots.values().filter(func(v: int) -> bool: return v == HostView.OTHER).size(), HostView.mem(float(week["top"])), HostView.mem(float(main.setup_hist["total"]))])
+			await shot("setup-week")
+			main.setup_range = "1h"
+			dash.set_range("1h")
+			main.setup_hist = _made_up_hour(moment)
+			dash.set_history(main.setup_hist)
+			main._save("host_range", "1h")
 			# « Restart WSL… »: nothing is run before the word is typed; a wrong word runs nothing
 			var ran := []
 			main.setup_probe.runner = func(a: Array) -> Dictionary:
@@ -1302,6 +1411,11 @@ func _speed(ids: Array) -> void:
 ## The setup check as it is on screen: the marks of its lines in order, its last sentence, a line that holds a word.
 func _setup_marks() -> String:
 	var o := ""
+	var line: Node = main.content.find_child("SetupMarks", true, false)  # all standing: one line of marks
+	if line != null:
+		for pair in line.get_children():
+			o += (pair.get_child(0) as Label).text
+		return o
 	for g in main.content.find_children("*", "GridContainer", true, false):
 		if (g as GridContainer).columns == 4:  # the ladder; the engine room's lines are in a grid of two
 			for i in range(0, g.get_child_count(), 4):
@@ -1326,3 +1440,123 @@ func _find_button(root: Node, text: String) -> Button:
 		if (n as Button).text == text:
 			return n
 	return null
+
+## The engine's answer to /host for the pictures: five sessions of the fictional workspace at a made-up moment.
+func _made_up_host(now: int) -> Dictionary:
+	var gib := 1073741824
+	var mib := 1048576
+	return {"wsl": true, "distro": "Ubuntu-24.04", "now": float(now), "uptime": 26100.0, "load": 0.62, "processors": 16, "cpu": 0.07,
+		"memory": {"total": 16 * gib, "available": 13.4 * gib, "used": 2.6 * gib, "held": 4.9 * gib, "swap_total": 4 * gib, "swap_used": 0},
+		"disk": {"total": 1007 * gib, "free": 918 * gib}, "drives": [{"letter": "c", "total": 931 * gib, "free": 68 * gib}],
+		"sessions": [
+			{"id": "b", "name": "Flaky tests", "tool": "codex", "bytes": 612 * mib, "created": now - 24300, "activity": now - 4, "attached": 1, "drive": "c", "cpu": 0.41},
+			{"id": "a", "name": "Checkout flow", "tool": "claude", "bytes": 548 * mib, "created": now - 25200, "activity": now - 95, "attached": 1, "drive": "c", "cpu": 0.06},
+			{"id": "c", "name": "Rate limiter", "tool": "claude", "bytes": 402 * mib, "created": now - 2280, "activity": now - 610, "attached": 0, "drive": "", "cpu": 0.0},
+			{"id": "d", "name": "Sparks", "tool": "claude", "bytes": 371 * mib, "created": now - 19800, "activity": now - 3900, "attached": 0, "drive": "", "cpu": 0.0}],
+		"sessions_bytes": 1933 * mib, "on_windows_disk": [{"id": "a", "name": "Checkout flow", "drive": "c"}, {"id": "b", "name": "Flaky tests", "drive": "c"}],
+		"engine": {"bytes": 31 * mib, "cpu": 0.0004}, "history": {"interval": 30, "keep": 604800, "since": now - 6 * 86400 - 7 * 3600, "readings": 9800, "error": ""}}
+
+
+## One made-up series: `shape` gives the megabytes at a slice, or a negative figure where the session was not there.
+func _made_up_series(id: String, name: String, n: int, read: Array, first: int, last: int, shape: Callable) -> Dictionary:
+	var bytes := []
+	var peak := 0.0
+	for i in n:
+		if not read[i]:
+			bytes.append(null)
+			continue
+		var v := maxf(0.0, float(shape.call(i))) * 1048576.0
+		bytes.append(v)
+		peak = maxf(peak, v)
+	return {"id": id, "name": name, "bytes": bytes, "cpu": [], "peak": peak * 1.06, "first": first, "last": last}
+
+
+## What /host/history would answer, from made-up sessions: the slices that were read, what was in use (the sessions
+## and about 650 MB beside them), the marks.
+func _made_up_span(range_id: String, now: int, read: Array, sessions: Array, marks: Array) -> Dictionary:
+	var r: Dictionary = HostView.range_of(range_id)
+	var n: int = r["points"]
+	var step: int = int(r["seconds"]) / n
+	var b0 := (now - int(r["seconds"])) / step + 1
+	var t := []
+	var used := []
+	var peak := []
+	var cpu := []
+	var counts := []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 36
+	for i in n:
+		t.append((b0 + i) * step)
+		counts.append((step / 30) if read[i] else 0)
+		if not read[i]:
+			used.append(null)
+			peak.append(null)
+			cpu.append(null)
+			continue
+		var sum := (640.0 + 40.0 * sin(i * 0.31)) * 1048576.0
+		for s in sessions:
+			sum += float(s["bytes"][i])
+		used.append(sum)
+		peak.append(sum * (1.0 + 0.12 * rng.randf()))
+		cpu.append(0.03 + 0.2 * rng.randf())
+	return {"interval": 30, "keep": 604800, "step": step, "from": b0 * step, "to": now, "t": t, "readings": counts, "total": 16 * 1073741824,
+		"used": used, "used_peak": peak, "held": used, "cpu": cpu, "load": cpu, "engine_bytes": [], "engine_cpu": [],
+		"sessions": sessions, "marks": marks, "since": now - 6 * 86400 - 7 * 3600}
+
+
+## A made-up hour: four sessions run, one of them started 38 minutes ago, one ran its tests a while (a bump), and
+## « Docs refresh » ended 20 minutes ago.
+func _made_up_hour(now: int) -> Dictionary:
+	var n := 60
+	var read := []
+	read.resize(n)
+	read.fill(true)
+	var sessions := [
+		_made_up_series("a", "Checkout flow", n, read, now - 25200, now, func(i: int) -> float: return 430.0 + i * 2.0 + 14.0 * sin(i * 0.7)),
+		_made_up_series("b", "Flaky tests", n, read, now - 24300, now, func(i: int) -> float: return 410.0 + (520.0 * sin((i - 28) * PI / 12.0) if i >= 28 and i <= 40 else 0.0) + (200.0 if i > 52 else 0.0) + 10.0 * cos(i * 0.9)),
+		_made_up_series("c", "Rate limiter", n, read, now - 2280, now, func(i: int) -> float: return (-1.0 if i < 22 else 300.0 + minf(100.0, (i - 22) * 9.0))),
+		_made_up_series("d", "Sparks", n, read, now - 19800, now, func(i: int) -> float: return 368.0 + 6.0 * sin(i * 0.4)),
+		_made_up_series("e", "Docs refresh", n, read, now - 9000, now - 1200, func(i: int) -> float: return (96.0 + 8.0 * sin(i * 0.5)) if i < 40 else -1.0)]
+	return _made_up_span("1h", now, read, sessions, [])
+
+
+## A made-up week, hour by hour: the computer is on from 8 to 19 on working days (elsewhere there is no reading,
+## and WSL starts anew each morning); the four sessions of today were resumed each day; seven others came and went,
+## so three of them are drawn together as « other sessions »; on Tuesday afternoon « Flaky tests » grew to 9 GB.
+func _made_up_week(now: int) -> Dictionary:
+	var n := 168
+	var step := 3600
+	var b0 := (now - 604800) / step + 1
+	var read := []
+	var marks := []
+	var day_of := []  # for each slice: the day's number when it was read, -1 otherwise
+	var was := false
+	for i in n:
+		var d := Time.get_datetime_dict_from_unix_time((b0 + i) * step)
+		var on := int(d["weekday"]) >= 1 and int(d["weekday"]) <= 5 and int(d["hour"]) >= 8 and int(d["hour"]) < 19 and (b0 + i) * step <= now
+		read.append(on)
+		day_of.append(int(d["weekday"]) if on else -1)
+		if on and not was:
+			marks.append({"ts": (b0 + i) * step + 120, "kind": "boot"})
+			marks.append({"ts": (b0 + i) * step + 180, "kind": "engine"})
+		was = on
+	var first := b0 * step
+	var daily := func(base: float, days: Array, grow := 0.0) -> Callable:
+		return func(i: int) -> float: return (base + grow * (i % 24) + 12.0 * sin(i * 0.8)) if day_of[i] in days else -1.0
+	var sessions := [
+		_made_up_series("a", "Checkout flow", n, read, first, now, daily.call(440.0, [1, 2, 3, 4, 5], 6.0)),
+		_made_up_series("b", "Flaky tests", n, read, first, now, func(i: int) -> float:
+			if day_of[i] < 0:
+				return -1.0
+			var hour := int(Time.get_datetime_dict_from_unix_time((b0 + i) * step)["hour"])
+			return 420.0 + (1750.0 * (hour - 11) if day_of[i] == 2 and hour >= 12 and hour <= 16 else 0.0)),
+		_made_up_series("c", "Rate limiter", n, read, now - 2280, now, daily.call(390.0, [4])),
+		_made_up_series("d", "Sparks", n, read, first + 86400, now, daily.call(365.0, [2, 3, 4])),
+		_made_up_series("e", "Docs refresh", n, read, first, now - 1200, daily.call(98.0, [1, 3, 4])),
+		_made_up_series("f", "Login form", n, read, first + 3600, first + 2 * 86400, daily.call(510.0, [5, 1])),
+		_made_up_series("g", "Image cache", n, read, first + 7200, first + 4 * 86400, daily.call(330.0, [5, 1, 2])),
+		_made_up_series("h", "Billing export", n, read, first + 3 * 86400, first + 5 * 86400, daily.call(610.0, [1, 2])),
+		_made_up_series("i", "Search index", n, read, first + 4 * 86400, first + 6 * 86400, daily.call(280.0, [2, 3])),
+		_made_up_series("j", "Onboarding", n, read, first + 5 * 86400, first + 6 * 86400, daily.call(240.0, [3])),
+		_made_up_series("k", "Changelog", n, read, first + 5 * 86400 + 3600, first + 6 * 86400, daily.call(120.0, [3]))]
+	return _made_up_span("7d", now, read, sessions, marks)

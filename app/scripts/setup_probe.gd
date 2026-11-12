@@ -20,7 +20,9 @@ const OPTIONAL := ["claude", "codex", "flyctl"]
 ##    stand-in wsl.exe that offers to install it: a check that only looks must never start that.
 ##  - WSL_UTF8 makes wsl.exe write plain text instead of UTF-16 (measured, WSL 2.6.3). It is set inside this one
 ##    call, not for the app: the terminals keep what they have.
-##  - For the engine room: this computer's memory; each distribution's disk, which is one file on a Windows drive
+##  - For the engine room: this computer's memory, how much of it is free, and how much of it WSL holds right now
+##    (the memory of the process Windows runs WSL in, vmmemWSL: readable without administrator rights; measured
+##    2.4 GB while Linux used 1.0); each distribution's disk, which is one file on a Windows drive
 ##    (its size, and the room left on that drive: the true room, whatever Linux reports); and the few lines of the
 ##    user's .wslconfig that set limits. All read, none written. No folder's name is printed: only the drive.
 ##    No backslash is written in this script: one less thing to escape twice.
@@ -37,6 +39,9 @@ $c=Get-CimInstance Win32_ComputerSystem
 'virt_firmware='+$p.VirtualizationFirmwareEnabled
 'hypervisor='+$c.HypervisorPresent
 'ram='+$c.TotalPhysicalMemory
+'free='+([int64](Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory*1024)
+$v=Get-Process -Name vmmemWSL,vmmem|Sort-Object WorkingSet64 -Descending|Select-Object -First 1
+'vmmem='+[int64]$v.WorkingSet64
 $s=[bool](Get-Service WslService) -or [bool](Get-Service LxssManager)
 'service='+$s
 if($s -and (Get-Command wsl.exe)){
@@ -99,7 +104,7 @@ static func wsl_files() -> bool:
 ## Everything, read now. `root` is the repository as the engine sees it; `port` the engine's. Blocking: call it in a
 ## thread.
 func read(root: String, port: int) -> Dictionary:
-	var f := {"port": port, "on_windows": on_windows}
+	var f := {"port": port, "on_windows": on_windows, "read_at": Time.get_unix_time_from_system()}
 	if on_windows:
 		var r := run(windows_argv())
 		var w := parse_windows(str(r["out"]))
@@ -149,6 +154,8 @@ static func parse_windows(text: String) -> Dictionary:
 			w[kv[0].strip_edges()] = kv[1].strip_edges()
 	w["build"] = int(str(w.get("build", "0")))
 	w["ram"] = int(str(w.get("ram", "0")))
+	w["free"] = int(str(w.get("free", "0")))
+	w["vmmem"] = int(str(w.get("vmmem", "0")))
 	w["disks"] = {}
 	for line in sections.get("disks", []):
 		var d: PackedStringArray = str(line).trim_prefix("disk=").split("|")

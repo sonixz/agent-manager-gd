@@ -5,6 +5,8 @@ extends Control
 
 const SETTINGS := "user://settings.cfg"
 const SetupProbe := preload("res://scripts/setup_probe.gd")  # by its path: a new class name is unknown until Godot scans the project again
+const HostView := preload("res://scripts/host_view.gd")
+const HostDash := preload("res://scripts/host_dash.gd")
 const ACT_KEYS := ["working", "approval", "waiting", "done", "idle", "exited", "missing"]
 
 var engine: EngineClient
@@ -98,6 +100,11 @@ var setup_facts := {}       # what the last reading of the ground gave (Setup ch
 var setup_thread: Thread    # the reading on its way: it takes seconds and never runs while a frame is drawn
 var setup_again := false    # a reading was asked while one was on its way
 var setup_host := {}        # the engine's own figures (memory, disk, what each session weighs); {} when it does not answer
+var setup_hist := {}        # the same over time (/host/history), for the span chosen; {} until the engine told it
+var setup_range := "1h"     # the span the dashboard shows
+var setup_dash: Control     # the engine room's dashboard: kept from one layout to the next, so the page does not jump
+var setup_ticks := 0        # the dashboard's 5-second ticks: the history is asked again every sixth
+var setup_details := false  # every line of the ladder is shown though nothing is wrong
 var setup_restart: Thread   # « Restart WSL » on its way
 var setup_term: Control     # the terminal an installation runs in: what it does is seen, never done behind the page
 var setup_term_what := ""   # the command it runs, as it was shown before the click
@@ -225,6 +232,7 @@ func _ready() -> void:
 		density = "line"
 	spoken = bool(cfg.get_value("ui", "spoken", false))
 	sound_on = bool(cfg.get_value("ui", "sound", true))
+	setup_range = str(HostView.range_of(str(cfg.get_value("ui", "host_range", "1h")))["id"])
 	_load_keymap()
 	theme = AmTheme.build()
 	font = TermFont.make()
@@ -2020,6 +2028,8 @@ func _ensure_terminal(id: String) -> void:
 func _park_all() -> void:
 	if is_instance_valid(setup_term) and setup_term.get_parent() != parking:
 		setup_term.reparent(parking, false)  # an installation goes on while another view is shown
+	if is_instance_valid(setup_dash) and setup_dash.get_parent() != parking:
+		setup_dash.reparent(parking, false)  # kept: its colours, its span and what it shows come back as they were
 	for t in terms.values():
 		if is_instance_valid(t) and t.get_parent() != parking:
 			t.reparent(parking, false)
@@ -4849,14 +4859,79 @@ func _setup_read() -> void:
 		if setup_thread != null and view == "setup":
 			status_label.text = "Still reading: Windows or WSL is slow to answer.")
 	_setup_ask_host()
+	_setup_ask_history()
 
 
-## The engine room's figures that only the engine knows. Asked aside: the page does not wait for them.
+## The engine room's figures that only the engine knows. Asked aside: the page does not wait for them. When the
+## dashboard is already on the page, only its figures move: the page is not laid out again (it would jump back to
+## its top every five seconds).
 func _setup_ask_host() -> void:
+	var had := not setup_host.is_empty()
 	var r := await engine.call_api("GET", "/host") if engine.connected else {}
 	setup_host = {} if r.has("error") else r
-	if view == "setup":
+	if view != "setup":
+		return
+	if had and not setup_host.is_empty() and is_instance_valid(setup_dash) and setup_dash.get_parent() != parking:
+		setup_dash.set_host(setup_host)
+	else:
 		_layout_view()
+
+
+## The same over time, for the span chosen. An answer for a span that is no longer the chosen one is dropped.
+func _setup_ask_history() -> void:
+	if not engine.connected:
+		return
+	var asked := setup_range
+	var r: Dictionary = HostView.range_of(asked)
+	var h := await engine.call_api("GET", "/host/history?seconds=%d&points=%d" % [r["seconds"], r["points"]])
+	if asked != setup_range:
+		return
+	if h.has("error"):
+		if is_instance_valid(setup_dash):
+			setup_dash.history_failed()
+		return
+	setup_hist = h
+	if is_instance_valid(setup_dash):
+		setup_dash.set_history(h)
+
+
+## The dashboard's tick, every 5 seconds while it is on screen: the figures of now each time, the history every
+## 30 seconds (the engine reads every 30 seconds: asking more often would show nothing new).
+func _setup_tick() -> void:
+	if view != "setup" or not engine.connected:
+		return
+	setup_ticks += 1
+	_setup_ask_host()
+	if setup_ticks % 6 == 0:
+		_setup_ask_history()
+
+
+func _setup_pick_range(id: String) -> void:
+	setup_range = id
+	_save("host_range", id)
+	_setup_ask_history()
+
+
+## A running session clicked in the dashboard: the app shows it.
+func _setup_open_session(id: String) -> void:
+	for x in sessions:
+		if str(x["id"]) == id:
+			select(id)
+			set_view("focus")
+			return
+
+
+func _setup_dashboard() -> Control:
+	if not is_instance_valid(setup_dash):
+		setup_dash = HostDash.new()
+		setup_dash.set_range(setup_range)
+		setup_dash.tick.connect(_setup_tick)
+		setup_dash.range_picked.connect(_setup_pick_range)
+		setup_dash.session_picked.connect(_setup_open_session)
+	if setup_dash.get_parent() != null:
+		setup_dash.get_parent().remove_child(setup_dash)
+	setup_dash.set_all(setup_facts, setup_host, setup_hist)
+	return setup_dash
 
 
 func _setup_done(f: Dictionary) -> void:
@@ -4893,46 +4968,84 @@ func _setup_check_again() -> void:
 				_layout_view()
 
 
+func _setup_mark(r: Dictionary) -> Label:
+	var state := str(r["state"])
+	var mark := Label.new()
+	mark.text = {"ok": "✓", "no": "✗" if r["required"] else "–", "warn": "!", "wait": "…", "after": "·"}[state]
+	mark.add_theme_color_override("font_color", _setup_tint(r))
+	return mark
+
+
+func _setup_tint(r: Dictionary) -> Color:
+	var state := str(r["state"])
+	if state == "ok":
+		return AmTheme.col("MINT")
+	if state == "warn":
+		return AmTheme.col("WARN")
+	if state == "no" and r["required"]:
+		return AmTheme.col("ERROR")
+	return AmTheme.col("FAINT")
+
+
 func _setup_rows() -> Array:
 	var rungs: Array = SetupProbe.ladder(setup_facts, engine.connected, setup_probe.on_windows)
 	var rows: Array = [_title("Setup check"),
 		_wrap("What Agent Manager GD stands on, from the ground up%s. It looks first, and changes nothing by itself: what it can install for you, it installs on your click, in a terminal you see." % (": Windows, WSL, then what runs inside WSL" if setup_probe.on_windows else ""))]
-	var grid := GridContainer.new()
-	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 18)
-	grid.add_theme_constant_override("v_separation", 8)
-	for r in rungs:
-		var state := str(r["state"])
-		var dim := state in ["wait", "after"]
-		var mark := Label.new()
-		mark.text = {"ok": "✓", "no": "✗" if r["required"] else "–", "warn": "!", "wait": "…", "after": "·"}[state]
-		var tint: Color = AmTheme.col("FAINT")
-		if state == "ok":
-			tint = AmTheme.col("MINT")
-		elif state == "warn":
-			tint = AmTheme.col("WARN")
-		elif state == "no" and r["required"]:
-			tint = AmTheme.col("ERROR")
-		mark.add_theme_color_override("font_color", tint)
-		grid.add_child(mark)
-		var name := Label.new()
-		name.text = str(r["name"])
-		name.add_theme_font_override("font", AmTheme.ui_font(650))
-		if dim:
-			name.add_theme_color_override("font_color", AmTheme.col("FAINT"))
-		grid.add_child(name)
-		var note := _wrap(("" if r["required"] else "optional · ") + str(r["note"]))
-		note.custom_minimum_size.x = 430  # a fixed width: the way out of a missing line stays beside its sentence, not across the window
-		if (state == "no" and r["required"]) or state == "warn":
-			note.add_theme_color_override("font_color", tint)  # what is wrong is said in the colour of its mark
-		grid.add_child(note)
-		var how := _wrap(str(r["how"]))
-		how.custom_minimum_size.x = 340
-		how.size_flags_horizontal = SIZE_EXPAND_FILL
-		grid.add_child(how)
-	rows.append(grid)
+	# Every line is shown while something is missing, deserves a look or is still being read. When all stands, one
+	# line of marks is enough: the page is then the engine room, and the ladder is one click away.
+	var trouble: bool = rungs.any(func(r: Dictionary) -> bool: return str(r["state"]) in ["warn", "wait", "after"] or (str(r["state"]) == "no" and r["required"]))
+	if trouble or setup_details:
+		var grid := GridContainer.new()
+		grid.columns = 4
+		grid.add_theme_constant_override("h_separation", 18)
+		grid.add_theme_constant_override("v_separation", 8)
+		for r in rungs:
+			var state := str(r["state"])
+			var tint := _setup_tint(r)
+			grid.add_child(_setup_mark(r))
+			var name := Label.new()
+			name.text = str(r["name"])
+			name.add_theme_font_override("font", AmTheme.ui_font(650))
+			if state in ["wait", "after"]:
+				name.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+			grid.add_child(name)
+			var note := _wrap(("" if r["required"] else "optional · ") + str(r["note"]))
+			note.custom_minimum_size.x = 430  # a fixed width: the way out of a missing line stays beside its sentence, not across the window
+			if (state == "no" and r["required"]) or state == "warn":
+				note.add_theme_color_override("font_color", tint)  # what is wrong is said in the colour of its mark
+			grid.add_child(note)
+			var how := _wrap(str(r["how"]))
+			how.custom_minimum_size.x = 340
+			how.size_flags_horizontal = SIZE_EXPAND_FILL
+			grid.add_child(how)
+		rows.append(grid)
+	else:
+		var flow := HFlowContainer.new()
+		flow.name = "SetupMarks"
+		flow.add_theme_constant_override("h_separation", 18)
+		flow.add_theme_constant_override("v_separation", 6)
+		for r in rungs:
+			var pair := HBoxContainer.new()
+			pair.add_theme_constant_override("separation", 6)
+			pair.tooltip_text = ("" if r["required"] else "optional · ") + str(r["note"])
+			pair.mouse_filter = Control.MOUSE_FILTER_STOP  # so the note shows when the pointer rests there
+			pair.add_child(_setup_mark(r))
+			var name := Label.new()
+			name.text = str(r["name"])
+			if str(r["state"]) != "ok":
+				name.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+			pair.add_child(name)
+			flow.add_child(pair)
+		rows.append(flow)
 	rows.append(_wrap(SetupProbe.verdict(rungs) + ("  Looking again…" if setup_thread != null and not setup_facts.is_empty() else "")))
-	rows.append(_small("Check again", _setup_check_again))
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	actions.add_child(_small("Check again", _setup_check_again))
+	if not trouble:
+		actions.add_child(_small("Show less" if setup_details else "Show every line", func() -> void:
+			setup_details = not setup_details
+			_layout_view(), "Each line with what it is for and where it was found."))
+	rows.append(actions)
 	# --- what the app can install on a click (Loop 36): the command is shown first and runs in a terminal on this page
 	var packages: Array = SetupProbe.missing_packages(setup_facts)
 	var busy: bool = is_instance_valid(setup_term) and setup_term.is_running()
@@ -4954,7 +5067,8 @@ func _setup_rows() -> Array:
 				setup_term.queue_free()
 				setup_term = null
 				_layout_view()))
-	# --- the engine room (Loop 36): how the ground is doing. Rarely looked at; there when something is slow or full.
+	# --- the engine room (Loop 36): how the ground is doing. A dashboard when the engine answers: the figures of now,
+	# the memory over time by session, the sessions. Without the engine, the few lines Windows alone can tell.
 	var room: Array = SetupProbe.engine_room(setup_facts, setup_host, setup_probe.on_windows)
 	if not setup_facts.is_empty() and room.any(func(l: Dictionary) -> bool: return l["label"] != "Memory, sessions"):  # something real to say
 		var gap := Control.new()
@@ -4962,23 +5076,27 @@ func _setup_rows() -> Array:
 		rows.append(gap)
 		rows.append(_section_label("Engine room"))
 		rows.append(_wrap("How the ground under the engine is doing%s. It only reads." % (": this computer and WSL" if setup_probe.on_windows else "")))
-		var lines := GridContainer.new()
-		lines.columns = 2
-		lines.add_theme_constant_override("h_separation", 18)
-		lines.add_theme_constant_override("v_separation", 8)
-		for l in room:
-			var label := Label.new()
-			label.text = str(l["label"])
-			label.add_theme_font_override("font", AmTheme.ui_font(650))
-			label.size_flags_vertical = SIZE_SHRINK_BEGIN
-			lines.add_child(label)
-			var text := _wrap(str(l["text"]))
-			text.custom_minimum_size.x = 430
-			text.size_flags_horizontal = SIZE_EXPAND_FILL
-			if l["warn"]:
-				text.add_theme_color_override("font_color", AmTheme.col("WARN"))
-			lines.add_child(text)
-		rows.append(lines)
+		if not setup_host.is_empty():
+			rows.append(_setup_dashboard())
+			room = room.filter(func(l: Dictionary) -> bool: return str(l["label"]) in ["Folders", "Limits"])  # the tiles say the rest
+		if not room.is_empty():
+			var lines := GridContainer.new()
+			lines.columns = 2
+			lines.add_theme_constant_override("h_separation", 18)
+			lines.add_theme_constant_override("v_separation", 8)
+			for l in room:
+				var label := Label.new()
+				label.text = str(l["label"])
+				label.add_theme_font_override("font", AmTheme.ui_font(650))
+				label.size_flags_vertical = SIZE_SHRINK_BEGIN
+				lines.add_child(label)
+				var text := _wrap(str(l["text"]))
+				text.custom_minimum_size.x = 430
+				text.size_flags_horizontal = SIZE_EXPAND_FILL
+				if l["warn"]:
+					text.add_theme_color_override("font_color", AmTheme.col("WARN"))
+				lines.add_child(text)
+			rows.append(lines)
 		if setup_probe.on_windows and bool(setup_facts.get("windows", {}).get("wsl", false)):
 			rows.append(_small("Restart WSL…", _setup_restart_wsl, "Stops WSL entirely, every session with it, then starts the engine again. It asks first."))
 	return rows

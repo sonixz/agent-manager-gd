@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
 
 from .tmux import PREFIX
 
@@ -162,7 +163,7 @@ def report(records: list[dict], live: dict, proc: str = PROC, mnt: str = MNT, ro
             u = _usage(os.path.join(mnt, d))
             if u and u["total"] > 0:
                 drives.append({"letter": d, **u})
-    return {"wsl": wsl, "distro": os.environ.get("WSL_DISTRO_NAME", "") if wsl else "",
+    return {"wsl": wsl, "distro": os.environ.get("WSL_DISTRO_NAME", "") if wsl else "", "now": time.time(),
             "memory": memory(proc), "uptime": uptime(proc), "load": load(proc), "processors": os.cpu_count() or 1,
             "disk": _usage(root) or {"total": 0, "free": 0},
             "drives": drives, "sessions": weights, "sessions_bytes": sum(w["bytes"] for w in weights),
