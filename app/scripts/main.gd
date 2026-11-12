@@ -2962,9 +2962,9 @@ func _sbx_second() -> void:
 	if view != "sandboxes":
 		return
 	for pair in sbx_live:
-		var l: Label = pair[0]
+		var l = pair[0]  # not typed: a label freed when the cards were rebuilt cannot be put in a typed variable (it raised an error every second)
 		if is_instance_valid(l):
-			l.text = "on for " + _span(Time.get_unix_time_from_system() - float(pair[1]))
+			(l as Label).text = "on for " + _span(Time.get_unix_time_from_system() - float(pair[1]))
 
 
 static func _span(sec: float) -> String:

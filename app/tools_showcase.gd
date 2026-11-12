@@ -269,6 +269,29 @@ func _run() -> void:
 			main.dictation.recording = false
 			main.voice_live.visible = false
 			main.voice_overlay.visible = false
+		"typing":  # a check: keys pressed on the keyboard reach the selected session's terminal, the way the window receives them
+			main.select(made["Test runner"])
+			await wait(2.5)
+			await main.engine.call_api("POST", "/sessions/%s/send" % made["Test runner"], {"text": "clear"})
+			await wait(0.8)
+			var holder := root.gui_get_focus_owner()
+			report.append("typing: the keyboard is on: %s" % (holder.get_class() if holder else "nothing"))
+			for ch in "echo typed-by-keys":
+				var ev := InputEventKey.new()
+				ev.pressed = true
+				ev.unicode = ch.unicode_at(0)
+				ev.keycode = KEY_SPACE if ch == " " else (KEY_MINUS if ch == "-" else OS.find_keycode_from_string(ch.to_upper()))
+				ev.physical_keycode = ev.keycode
+				Input.parse_input_event(ev)
+				await process_frame
+				var up: InputEventKey = ev.duplicate()
+				up.pressed = false
+				Input.parse_input_event(up)
+				await process_frame
+			await wait(1.2)
+			var typed: Dictionary = await main.engine.call_api("GET", "/sessions/%s/preview?lines=14" % made["Test runner"])
+			report.append("typing: the terminal shows what was typed: %s" % str(typed.get("text", "")).contains("echo typed-by-keys"))
+			await shot("typing")
 		"voice-box":  # Loop 34: the dictation box, from the first word to Enter. Run with AGMGD_VOICE_FAKE="one | two | three | four" (a small delay shows it writing)
 			main.select(made["Test runner"])
 			await wait(2.5)
