@@ -5,6 +5,9 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Install
+- Docs › Install, the README and `docs/INSTALL.md`: the Windows archive's name links to the Releases page.
+
 ### Keys, step by step
 - New: a **⚷ Keys** button in the top bar, between WSL and Sandboxes.
 - The Keys page is now three numbered steps, each needed only for what it opens: **1 · Voice dictation** (the OpenAI
@@ -12,6 +15,11 @@ Newest first.
   Anthropic key for Claude Code inside a sandbox), **3 · Your projects' secrets, with dotenvx** (how dotenvx keeps a
   `.env` encrypted, why its private key belongs in the vault rather than in a file of WSL, and what the vault does
   not do). A step's disc fills with a ✓ when its key is there; a dashed disc is a step you can skip.
+
+## 0.39.0-alpha · 2026-11-13 · the first public pre-release
+
+Download for Windows: `AgentManagerGD-0.39.0-alpha-win64.zip` on the
+[Releases page](https://github.com/sonixz/agent-manager-gd/releases). It holds everything below this line.
 
 ### Secrets for your projects, given session by session · Loop 39
 - New: **Keys › Secrets**. Keep the keys of your projects (an ElevenLabs key, a GitHub token, a dotenvx private key)

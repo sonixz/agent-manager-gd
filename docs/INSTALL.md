@@ -22,7 +22,8 @@ the disk, the limits of your `.wslconfig`.
 
 ## Windows, step by step
 
-1. Build or receive `AgentManagerGD-<version>-win64.zip` (`tools/build_release.sh <version>` after
+1. Download `AgentManagerGD-<version>-win64.zip` from the [Releases page](https://github.com/sonixz/agent-manager-gd/releases) (pre-releases for
+   now: take the newest), or build it yourself (`tools/build_release.sh <version>` after
    `tools/build_native.sh template_release`).
 2. Unzip it anywhere and right-click `install.ps1` → *Run with PowerShell*
    (or `powershell -ExecutionPolicy Bypass -File install.ps1`).

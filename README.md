@@ -64,7 +64,7 @@ F9 for voice commands. Run an agent in a throw-away cloud sandbox. See token usa
 
 **Windows** (WSL with `python3` and `tmux`):
 
-1. Download the latest `AgentManagerGD-<version>-win64.zip` from the Releases page and unzip it.
+1. Download the latest `AgentManagerGD-<version>-win64.zip` from the [Releases page](https://github.com/sonixz/agent-manager-gd/releases) and unzip it.
 2. Right-click `install.ps1` › *Run with PowerShell*. It installs for your user only, **without administrator
    rights**, and downloads nothing.
 3. Start *Agent Manager GD* from the Start menu. The **Setup check** says what is missing (WSL, python3, tmux, git;
