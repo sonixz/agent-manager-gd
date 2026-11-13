@@ -17,7 +17,15 @@ cleanup() {
   pkill -f "fake_brain.py .* 18792$" 2>/dev/null || true
   if [[ -n "$ROOT" ]]; then cp "$ROOT/godot.log" "$REPORTS/godot-last.log" 2>/dev/null || true; rm -rf "$ROOT"; fi
 }
-trap 'cleanup; vdisplay_stop' EXIT
+OVERRIDE=""
+trap 'cleanup; [[ -n "$OVERRIDE" ]] && rm -f "$OVERRIDE"; vdisplay_stop' EXIT
+# filming: Godot's movie mode records at the project's window size, not at --resolution; a passing override.cfg sets it
+if [[ -n "${SHOW_MOVIE:-}" ]]; then
+  [[ -e app/override.cfg ]] && { echo "app/override.cfg exists: not mine to replace" >&2; exit 2; }
+  W="${SHOW_SIZE:-1920x1200}"
+  printf '[display]\nwindow/size/window_width_override=%s\nwindow/size/window_height_override=%s\n' "${W%x*}" "${W#*x}" > app/override.cfg
+  OVERRIDE=app/override.cfg
+fi
 godot --headless --path app --import >/dev/null 2>&1 || true
 for step in "${@:-hero}"; do
   [[ -n "${SHOW_MOVIE:-}" ]] && mkdir -p "$SHOW_MOVIE/$step"
