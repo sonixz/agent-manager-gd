@@ -39,18 +39,6 @@
     setPause(); setSound();
   }
 
-  // ---------------------------------------------------------------- counters
-  document.querySelectorAll(".stats b[data-count]").forEach((b) => {
-    if (reduce) return;
-    const end = +b.dataset.count;
-    b.textContent = "0";
-    seen(b, () => {
-      const t0 = performance.now(), dur = 1300;
-      const step = (now) => { const p = Math.min(1, (now - t0) / dur); b.textContent = String(Math.round(end * (1 - Math.pow(1 - p, 3)))); if (p < 1) requestAnimationFrame(step); };
-      requestAnimationFrame(step);
-    }, "0px");
-  });
-
   // ---------------------------------------------------------------- the feature bar: sticky once past the index, follows the page
   const bar = document.querySelector(".featnav"), index = document.getElementById("features");
   if (bar && index) {

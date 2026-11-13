@@ -106,12 +106,10 @@ p { margin: 0 0 1em; }
 .tagline { font-size: clamp(1.25rem, 2.2vw, 1.6rem); font-weight: 600; margin-bottom: .6em; }
 .lead { color: var(--muted); font-size: 1.1rem; max-width: 560px; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 26px 0 30px; }
-.stats { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, auto); gap: 6px 26px; color: var(--muted); font-size: .9rem; }
-.stats b { display: block; color: var(--text); font-family: var(--mono); font-size: 1.35rem; }
 .ticker { display: flex; flex-direction: column; gap: 8px; margin: 0 0 6px; min-height: 40px; }
 .ticker .pill { align-self: flex-start; font-family: var(--mono); font-size: .86rem; background: rgba(31, 47, 66, .9); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; animation: rise .5s ease both; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@media (max-width: 980px) { .hero-grid { grid-template-columns: 1fr; } .hero h1 { font-size: clamp(1.6rem, 7.4vw, 3.2rem); } .stats { grid-template-columns: repeat(2, auto); } }
+@media (max-width: 980px) { .hero-grid { grid-template-columns: 1fr; } .hero h1 { font-size: clamp(1.6rem, 7.4vw, 3.2rem); } }
 
 /* Screens: a frame like the app's own window */
 .screen { margin: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--panel); box-shadow: 0 30px 80px rgba(0, 0, 0, .45), 0 0 0 1px rgba(143, 227, 239, .06); }
@@ -443,7 +441,6 @@ p { margin: 0 0 1em; }
 .hero-film .bar button:hover { border-color: var(--mint); }
 .hero-film .film-sound { color: var(--on-accent); background: var(--mint); border-color: var(--mint); font-weight: 600; }
 .hero-film .film-sound[aria-pressed="true"] { background: transparent; color: var(--mint); }
-.hero-note { position: relative; z-index: 1; text-align: center; color: var(--faint); font-size: .78rem; margin: 26px 16px 0; }
 @media (max-width: 980px) { .hero-film { transform: none; } }
 
 /* the eleven tiles */
@@ -673,7 +670,6 @@ p { margin: 0 0 1em; }
 @media (max-width: 600px) {
   .fx-grid { grid-template-columns: 1fr; }
   .hero-actions .btn { flex: 1 1 auto; justify-content: center; }
-  .stats { grid-template-columns: repeat(2, auto); }
   .legend { grid-template-columns: 1fr; }
   .loop-search input { min-width: 0; width: 100%; }
   .loop-search { flex: 1 1 100%; }
