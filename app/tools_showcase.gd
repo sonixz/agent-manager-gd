@@ -1113,13 +1113,13 @@ func _run() -> void:
 			await wait(2.5)
 			var over: Dictionary = await main.engine.call_api("GET", "/sandboxes", null, true, 60.0)
 			var inv: Dictionary = over["inventory"]
-			var life: Node = main.sbx_box.find_child("SandboxLife", true, false)
-			report.append("sandboxes: the inventory is on the page: %s | %s | at Fly.io: %s" % [life != null,
+			var life: Node = main.sbx_box.find_child("Sandbox_old-5e21", true, false)
+			report.append("sandboxes: one line per sandbox, the destroyed one too: %s | %s | at Fly.io: %s" % [life != null,
 				" ; ".join(SandboxView.order(inv["sandboxes"]).map(func(x: Dictionary) -> String: return "%s: %s, %d runs, %s, %s" % [SandboxView.name_of(x), SandboxView.state_of(x)["text"], x["runs"].size(), HostView.span(float(x["run_seconds"])), SandboxView.money(float(x["cost_usd"]))])),
 				" | ".join(SandboxView.tiles(inv).map(func(t: Dictionary) -> String: return "%s %s" % [t["label"], t["value"]]))])
 			var cards: Node = main.sbx_box.find_child("SandboxSizes", true, false)
 			report.append("sandboxes: sizes on the page: %s | %s" % [cards != null, " ; ".join(over["sizes"]["sizes"].map(func(x: Dictionary) -> String: return "%s $%.2f" % [x["id"], x["month"]]))])
-			report.append("sandboxes: the pointer on the destroyed one says: « %s »" % str(life._get_tooltip(Vector2(300, life.HEAD + life.ROW * 2.5))).replace("\n", " / ").left(170))
+			report.append("sandboxes: the destroyed one's line says: « %s »" % str((life.get_child(0).get_child(0).get_child(0) as Control).tooltip_text).replace("\n", " / ").left(170))
 			await shot("sandboxes")
 			# a size chosen on its card: the next sandboxes get it, and the estimate follows
 			(main.sbx_box.find_child("SandboxSizes", true, false)).picked.emit("shared-cpu-2x-2048")
@@ -1149,6 +1149,7 @@ func _run() -> void:
 			hl.store_string("MemTotal:        1009636 kB\nMemFree:          211208 kB\nMemAvailable:     604580 kB\n---\n0.42 0.31 0.12 1/97 2231\n---\n5123.40 9001.11\n---\nFilesystem      1-blocks       Used  Available Capacity Mounted on\n/dev/vdb     8350298112 2147483648 5771362304      28% /\n")
 			hl.close()
 			await main.refresh()
+			main.sbx_open["a1c4e9f2"] = true   # its line unfolded: its card, with its tunnel and ports
 			main.set_view("sandboxes")
 			await wait(3.0)
 			var sbid := "a1c4e9f2"

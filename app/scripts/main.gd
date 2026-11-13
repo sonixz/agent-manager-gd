@@ -3381,6 +3381,7 @@ func _sandboxes_view() -> Control:
 
 var sbx_live: Array = []  # [Label, running_since] pairs ticking every second
 var sbx_image_open := false # what the image holds is shown
+var sbx_open := {}          # a sandbox -> its line is unfolded
 var sbx_tunnels := {}     # a sandbox -> its connection as the engine last told it (state, ports, what listens, how it is doing)
 var sbx_tunnel_boxes := {} # a sandbox -> the box of its « Tunnel and ports » on the page
 var sbx_tunnel_names := {}
@@ -3418,9 +3419,8 @@ func _load_sandboxes() -> void:
 		var need := _wrap("First paste your Fly.io token in Keys (◐ → Keys…).")
 		need.add_theme_color_override("font_color", AmTheme.col("WARN"))
 		sbx_box.add_child(need)
-	# A dashboard (owner, 2026-11-12: « une interface un peu plus dense »): the tiles across, then two columns. On the
-	# left what one comes for: the sandboxes and their tunnels. On the right what one looks at aside: the inventory,
-	# the size of the next one, the costs, the image. A narrow window puts the right column under the left one.
+	# A dashboard (owner, 2026-11-12: « une interface un peu plus dense »): the tiles across, then two columns; a
+	# narrow window stacks them.
 	var inv: Dictionary = r.get("inventory", {})
 	if not inv.is_empty():
 		var tiles = RepoWidgets.Tiles.new(SandboxView.tiles(inv))
@@ -3432,52 +3432,49 @@ func _load_sandboxes() -> void:
 	cols.name = "SandboxColumns"
 	cols.add_theme_constant_override("separation", 14)
 	sbx_box.add_child(cols)
+	# On the left, what one does to make a sandbox, aligned: deploy (with its sizes), the costs, the image. On the
+	# right the sandboxes, one per line like the repositories, the running ones first, the destroyed ones kept;
+	# a line unfolds to everything about its sandbox (owner, 2026-11-12: « Même principe que les repos… que ça
+	# scale bien »).
 	var left := VBoxContainer.new()
 	left.name = "SandboxLeft"
 	left.add_theme_constant_override("separation", 10)
 	left.size_flags_horizontal = SIZE_EXPAND_FILL
-	left.size_flags_stretch_ratio = 1.3
 	cols.add_child(left)
 	var right := VBoxContainer.new()
 	right.name = "SandboxRight"
-	right.add_theme_constant_override("separation", 10)
+	right.add_theme_constant_override("separation", 6)
 	right.size_flags_horizontal = SIZE_EXPAND_FILL
+	right.size_flags_stretch_ratio = 1.4
 	cols.add_child(right)
-	var rows: Array = r.get("sandboxes", [])
-	var alive: Array = rows.filter(func(x): return int(x["destroyed"]) == 0)
-	left.add_child(_section_label("Your sandboxes (%d)" % alive.size()))
-	if alive.is_empty():
-		left.add_child(_muted("None runs or is paused. Deploy one on the right; the destroyed ones stay in the inventory."))
-	for sb in alive:
-		left.add_child(_sandbox_card(sb, r))
-	var finished: Array = alive.filter(func(x): return int(x["finished"]) == 1)
+	left.add_child(_sbx_deploy_step(r))
+	left.add_child(_sbx_costs(r))
+	left.add_child(_sbx_image_step(r))
+	var live := {}
+	for x in r.get("sandboxes", []):
+		live[str(x["id"])] = x
+	var lines: Array = SandboxView.order(inv.get("sandboxes", []))
+	var rh := HBoxContainer.new()
+	rh.add_theme_constant_override("separation", 10)
+	rh.add_child(_section_label("Sandboxes (%d)" % lines.size()))
+	var said := _muted("the destroyed ones stay · bars: the last %d days" % SandboxView.DAYS)
+	said.add_theme_font_size_override("font_size", 11)
+	said.size_flags_horizontal = SIZE_EXPAND_FILL
+	rh.add_child(said)
+	var finished: Array = (r.get("sandboxes", []) as Array).filter(func(x): return int(x["destroyed"]) == 0 and int(x["finished"]) == 1)
 	if not finished.is_empty():
-		var fb := _small("Destroy the finished ones (%d)…" % finished.size(), func() -> void:
+		rh.add_child(_small("Destroy the finished ones (%d)…" % finished.size(), func() -> void:
 			_confirm("Destroy %d finished sandbox(es): %s?\nTheir machines, files and keys are deleted for good." % [finished.size(), ", ".join(finished.map(func(x): return str(x["id"])))], func() -> void:
 				for x in finished:
 					await engine.call_api("POST", "/sandboxes/%s/destroy" % x["id"], {"confirmed": true}, true, 120.0)
 				await refresh()
-				await _load_sandboxes()))
-		fb.size_flags_horizontal = SIZE_SHRINK_BEGIN
-		left.add_child(fb)
-	if not inv.is_empty():
-		var ih := HBoxContainer.new()
-		ih.add_theme_constant_override("separation", 10)
-		ih.add_child(_section_label("Inventory"))
-		var said := _muted("every sandbox made here, the destroyed ones too · last %d days" % SandboxView.DAYS)
-		said.add_theme_font_size_override("font_size", 11)
-		ih.add_child(said)
-		right.add_child(ih)
-		if (inv.get("sandboxes", []) as Array).is_empty():
-			right.add_child(_muted("No sandbox was ever made from here."))
-		else:
-			var zone: Dictionary = Time.get_time_zone_from_system()
-			var life = SandboxWidgets.Life.new(inv, int(zone.get("bias", 0)))
-			life.name = "SandboxLife"
-			right.add_child(life)
-	right.add_child(_sbx_deploy_step(r))
-	right.add_child(_sbx_costs(r))
-	right.add_child(_sbx_image_step(r))
+				await _load_sandboxes())))
+	right.add_child(rh)
+	if lines.is_empty():
+		right.add_child(_muted("No sandbox was ever made from here. Deploy one on the left."))
+	var now := float(inv.get("now", Time.get_unix_time_from_system()))
+	for row in lines:
+		right.add_child(_sbx_line(row, live.get(str(row["id"]), {}), r, now))
 	_sbx_orphans(r)
 	# keep the view current while it is shown
 	get_tree().create_timer(30.0).timeout.connect(func() -> void:
@@ -3625,6 +3622,80 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 				_toast("A port is a number, like 5432")
 				return
 			_sbx_tunnel_do(sbid, "back/%d/open" % int(text.strip_edges()), {}, "")), "Without a rule, a sandbox reaches nothing of this computer but its way back to the Second Brain."))
+
+
+## One sandbox's line: its state's sign, its name, its size, its life as a bar, how long it ran, its cost, an arrow.
+## Unfolded (click its name or the arrow): its card, with its tunnel and ports, or for a destroyed one what is kept.
+func _sbx_line(row: Dictionary, sb: Dictionary, r: Dictionary, now: float) -> Control:
+	var sbid := str(row["id"])
+	var st: Dictionary = SandboxView.state_of(row)
+	var lv := str(st["level"])
+	var open: bool = sbx_open.get(sbid, false)
+	var box := VBoxContainer.new()
+	box.name = "Sandbox_" + sbid
+	box.add_theme_constant_override("separation", 0)
+	var panel := PanelContainer.new()
+	var edge: Color = {"ok": AmTheme.col("MINT"), "warn": AmTheme.col("WARN"), "bad": AmTheme.col("ERROR")}.get(lv, AmTheme.col("BORDER"))
+	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 8, Color(edge, 0.55) if lv != "off" else AmTheme.col("BORDER"), 1, 6))
+	box.add_child(panel)
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 8)
+	panel.add_child(inner)
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 8)
+	line.tooltip_text = SandboxView.tip(row, now, int(Time.get_time_zone_from_system().get("bias", 0)))
+	inner.add_child(line)
+	var mark := Label.new()
+	mark.text = {"ok": "●", "warn": "◌", "bad": "✗", "off": "⊖"}.get(lv, "●")
+	mark.custom_minimum_size.x = 18.0
+	mark.add_theme_color_override("font_color", edge if lv != "off" else AmTheme.col("FAINT"))
+	line.add_child(mark)
+	var toggle := func() -> void:
+		sbx_open[sbid] = not open
+		_load_sandboxes()
+	var name := Button.new()
+	name.text = SandboxView.name_of(row)
+	name.flat = true
+	name.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name.clip_text = true
+	name.custom_minimum_size.x = 150.0
+	name.add_theme_font_override("font", AmTheme.ui_font(400 if lv == "off" else 650))
+	name.pressed.connect(toggle)
+	line.add_child(name)
+	var state := _muted(str(st["text"]))
+	state.add_theme_font_size_override("font_size", 12)
+	state.custom_minimum_size.x = 84.0
+	if lv != "off":
+		state.add_theme_color_override("font_color", edge)
+	line.add_child(state)
+	var size := _muted(SandboxView.size_words(str(row.get("size", ""))))
+	size.add_theme_font_size_override("font_size", 11)
+	size.custom_minimum_size.x = 150.0
+	line.add_child(size)
+	var bar = SandboxWidgets.LifeBar.new(row, now, 120.0)
+	bar.size_flags_horizontal = SIZE_EXPAND_FILL
+	line.add_child(bar)
+	var ran := _muted("–" if int(row.get("run_seconds", 0)) <= 0 else HostView.span(float(row["run_seconds"])))
+	ran.add_theme_font_size_override("font_size", 12)
+	ran.custom_minimum_size.x = 64.0
+	ran.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	line.add_child(ran)
+	var cost := _muted(SandboxView.money(float(row.get("cost_usd", 0.0))))
+	cost.add_theme_font_size_override("font_size", 12)
+	cost.custom_minimum_size.x = 56.0
+	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	line.add_child(cost)
+	var arrow := _small("▾" if open else "▸", toggle, "Everything about this sandbox: its state, its actions, its tunnel and ports")
+	arrow.custom_minimum_size.x = 30.0
+	line.add_child(arrow)
+	if open:
+		if not sb.is_empty() and int(sb.get("destroyed", 0)) == 0:
+			inner.add_child(_sandbox_card(sb, r))
+		else:
+			var gone := _wrap(SandboxView.tip(row, now, int(Time.get_time_zone_from_system().get("bias", 0))).replace("\n", "  ·  "))
+			gone.add_theme_font_size_override("font_size", 12)
+			inner.add_child(gone)
+	return box
 
 
 func _sbx_second() -> void:

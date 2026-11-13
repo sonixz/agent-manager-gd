@@ -319,3 +319,43 @@ class Sizes extends Control:
 			draw_rect(Rect2(track.position, Vector2(track.size.x * float(r["month"]) / maxf(top, 0.01), 3.0)), AmTheme.col("WARM") if perf else AmTheme.col("MINT"))
 		draw_set_transform(Vector2.ZERO)
 
+
+## One sandbox's life over the last thirty days, as a thin bar for its line: filled where its machine ran, a mark
+## where it was made, a cross where it was destroyed; the end breathes while it runs.
+class LifeBar extends Control:
+	var row: Dictionary
+	var now: float
+
+	func _init(the_row: Dictionary, the_now: float, width: float) -> void:
+		row = the_row
+		now = the_now
+		custom_minimum_size = Vector2(width, 30)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_process(bool(row.get("running_now", false)))
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		var gone := bool(row.get("destroyed", false))
+		var b := Rect2(0, size.y / 2.0 - 4.0, size.x - 8.0, 8.0)
+		draw_rect(b, Color(AmTheme.col("BORDER"), 0.45))
+		for week in range(1, 4):
+			var wx := b.end.x - b.size.x * week * 7.0 / SandboxView.DAYS
+			draw_line(Vector2(wx, b.position.y - 2.0), Vector2(wx, b.end.y + 2.0), Color(AmTheme.col("BG"), 0.9), 1.0)
+		var life: Dictionary = SandboxView.life(row, now)
+		for r in life["runs"]:
+			var x0 := b.position.x + b.size.x * float(r[0])
+			var x1 := maxf(x0 + 2.0, b.position.x + b.size.x * float(r[1]))
+			draw_rect(Rect2(x0, b.position.y, x1 - x0, b.size.y), Color(AmTheme.col("MINT"), 0.45 if gone else 0.9))
+			if r[2]:
+				draw_circle(Vector2(b.end.x, b.position.y + b.size.y / 2.0), 5.0, Color(AmTheme.col("MINT"), 0.7 + 0.3 * sin(Time.get_ticks_msec() * 0.004)))
+		if float(life["made"]) >= 0.0:
+			var mx := b.position.x + b.size.x * float(life["made"])
+			draw_colored_polygon(PackedVector2Array([Vector2(mx, b.end.y + 2.0), Vector2(mx - 4.0, b.end.y + 8.0), Vector2(mx + 4.0, b.end.y + 8.0)]), AmTheme.col("MUTED"))
+		if float(life["ended"]) >= 0.0:
+			var ex := b.position.x + b.size.x * float(life["ended"])
+			var mid := b.position.y + b.size.y / 2.0
+			draw_line(Vector2(ex - 5.0, mid - 5.0), Vector2(ex + 5.0, mid + 5.0), AmTheme.col("TEXT"), 2.0, true)
+			draw_line(Vector2(ex - 5.0, mid + 5.0), Vector2(ex + 5.0, mid - 5.0), AmTheme.col("TEXT"), 2.0, true)
+

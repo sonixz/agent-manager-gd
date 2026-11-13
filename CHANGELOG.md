@@ -36,9 +36,10 @@ Newest first.
 - **Let the sandbox reach a port of this computer…**: a rule, for one port and one cloud sandbox. Without a rule a
   cloud sandbox reaches nothing of this computer but its way back to the Second Brain. The rule has its wire, with what is asked
   and answered, and stays until you close it.
-- The tab is denser: four tiles across, then two columns, the sandboxes and their tunnels on the left, the
-  inventory, the sizes, the costs and the image on the right; the image is one line once it is built, and the size
-  cards sit in even rows. In a narrow window the columns stack.
+- The tab is denser: four tiles across, then two columns. On the left what you use to make one: deploy with the
+  sizes, the costs, the image (one line once it is built). On the right the sandboxes, one per line like the
+  repositories, the destroyed ones too, each with its life over thirty days; a line unfolds to everything about
+  its sandbox, its tunnel and ports included. In a narrow window the columns stack.
 - The **☁ Sandboxes** tab opens on an **Inventory** that is always there: every sandbox made from this computer,
   the destroyed ones too. Before, a destroyed sandbox left the page, and with all of them destroyed the page listed
   nothing. Four tiles: running now, paused, destroyed and kept (with what was measured in all), and **At Fly.io
