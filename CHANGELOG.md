@@ -24,8 +24,8 @@ Newest first.
   the Second Brain when its terminal is closed; the block says who carries it.
 - A sandbox's terminal now checks the sandbox's host key too, against the one remembered at the first connection.
   Before, it accepted any.
-- **Clicks answer at once on the Sandboxes and Repos pages.** Unfolding a sandbox, opening the image's contents or
-  choosing a size waited for the engine to ask Fly.io again (up to a few seconds) before anything moved; they now
+- **Clicks answer at once on the Sandboxes and Repos pages.** Unfolding a cloud sandbox, opening the image's contents
+  or choosing a size waited for the engine to ask Fly.io again (up to a few seconds) before anything moved; they now
   draw at once. The engine keeps Fly.io's list of machines ten seconds and refreshes it aside. The tunnel block and
   the repository lines were rebuilt every few seconds, which swallowed a click that came meanwhile; now only their
   figures move, and they are rebuilt only when something they show changed. A tunnel action says « connecting… »
