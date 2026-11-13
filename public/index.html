@@ -10,7 +10,7 @@
   <meta property="og:description" content="Claude Code, Codex and your shells, side by side: isolated, observed, in your control. Open source, local-first.">
   <meta property="og:image" content="assets/video/showcase-poster.webp">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=2026-11-13e">
+  <link rel="stylesheet" href="css/style.css?v=2026-11-13f">
 </head>
 <body class="home">
   <a class="skip" href="#main">Skip to content</a>
@@ -26,12 +26,9 @@
       </button>
       <ul id="nav-links" class="nav-links">
         <li><a href="#features">Features</a></li>
-        <li><a href="#mcp">MCP</a></li>
-        <li><a href="#cloud">Cloud</a></li>
-        <li><a href="#lab">The lab</a></li>
-        <li><a href="#loops">Loops</a></li>
         <li><a href="howto.html">How-to</a></li>
         <li><a href="docs.html">Docs</a></li>
+        <li><a href="#loops">Loops</a></li>
         <li><a href="https://github.com/sonixz/agent-manager-gd" class="nav-cta" rel="noopener">GitHub</a></li>
       </ul>
     </nav>
@@ -416,10 +413,12 @@
               <li><b>Passed through <code>GIT_SSH_COMMAND</code></b>, with its own known_hosts: nothing written to your SSH config.</li>
             </ul>
           </div>
-          <figure class="screen loupe-fig" data-c="0.30 0.76 3">
-            <img src="assets/showcase/film-repos-metro.webp" width="1920" height="1080" loading="lazy" alt="The Repos page: GitHub and Azure DevOps repositories one per line with their key's state; acme-store unfolded with its public deploy key and the metro map of its branches: main, am/gift-cards with five commits and am/tax-rules, each with its worktree and session.">
-            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/film-repos-metro.webp)"></span>
-            <figcaption class="loupe-cap">The branches of acme-store, each in its worktree</figcaption>
+          <figure class="screen zoom-fig" data-zoom="0.31 0.76 3">
+            <div class="zoom-frame">
+              <img src="assets/showcase/film-repos-metro.webp" width="1920" height="1080" loading="lazy" alt="The Repos page: GitHub and Azure DevOps repositories one per line with their key's state; acme-store unfolded with its public deploy key and the metro map of its branches: main, am/gift-cards with five commits and am/tax-rules, each with its worktree and session.">
+              <span class="zoom-label" aria-hidden="true">The branches of acme-store, each in its worktree</span>
+              <button type="button" class="zoom-toggle" aria-pressed="false">🔍 Detail</button>
+            </div>
           </figure>
         </div>
         <div class="readline reveal">
@@ -456,10 +455,12 @@
               <li><b>Restart WSL…</b> from the same page when it gets heavy.</li>
             </ul>
           </div>
-          <figure class="screen loupe-fig" data-c="0.815 0.475 3">
-            <img src="assets/showcase/film-wsl.webp" width="1920" height="1080" loading="lazy" alt="The WSL page: setup check all green, tiles for memory in use, sessions running, processors and disk, then memory in use by session over the last hour as stacked bars, the pointer on one hour with a tooltip listing each session's memory.">
-            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/film-wsl.webp)"></span>
-            <figcaption class="loupe-cap">Each session's memory, under the pointer</figcaption>
+          <figure class="screen zoom-fig" data-zoom="0.815 0.475 3">
+            <div class="zoom-frame">
+              <img src="assets/showcase/film-wsl.webp" width="1920" height="1080" loading="lazy" alt="The WSL page: setup check all green, tiles for memory in use, sessions running, processors and disk, then memory in use by session over the last hour as stacked bars, the pointer on one hour with a tooltip listing each session's memory.">
+              <span class="zoom-label" aria-hidden="true">Each session's memory, under the pointer</span>
+              <button type="button" class="zoom-toggle" aria-pressed="false">🔍 Detail</button>
+            </div>
           </figure>
         </div>
       </div>
@@ -494,14 +495,20 @@
         </div>
 
         <div class="duo reveal">
-          <figure class="shot loupe-fig" data-c="0.34 0.37 2.6">
-            <img src="assets/showcase/film-sandbox-size.webp" width="1920" height="1080" loading="lazy" alt="The Sandboxes page: tiles for running, paused, destroyed and kept, and at Fly.io now; six size cards with Fly.io's published monthly and hourly prices, one chosen and the estimate updated; the inventory with each sandbox's life over thirty days; this month's costs as a chart with a budget.">
-            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/film-sandbox-size.webp)"></span>
+          <figure class="shot zoom-fig" data-zoom="0.34 0.37 2.6">
+            <div class="zoom-frame">
+              <img src="assets/showcase/film-sandbox-size.webp" width="1920" height="1080" loading="lazy" alt="The Sandboxes page: tiles for running, paused, destroyed and kept, and at Fly.io now; six size cards with Fly.io's published monthly and hourly prices, one chosen and the estimate updated; the inventory with each sandbox's life over thirty days; this month's costs as a chart with a budget.">
+              <span class="zoom-label" aria-hidden="true">A size, with Fly.io's published price</span>
+              <button type="button" class="zoom-toggle" aria-pressed="false">🔍 Detail</button>
+            </div>
             <figcaption class="shot-caption"><b>Before.</b> A size, its price, the estimate; costs measured, a budget that only pauses.</figcaption>
           </figure>
-          <figure class="shot loupe-fig" data-c="0.75 0.73 2.2">
-            <img src="assets/showcase/film-tunnel-wire.webp" width="1920" height="1080" loading="lazy" alt="A running sandbox: health charts for processors, memory, network and load, then « Tunnel and ports »: a wire for each port brought to this computer, with dots running each way for what is sent and received, a SOCKS proxy, and a rule that lets the sandbox reach one port of this computer.">
-            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/film-tunnel-wire.webp)"></span>
+          <figure class="shot zoom-fig" data-zoom="0.753 0.732 2.2">
+            <div class="zoom-frame">
+              <img src="assets/showcase/film-tunnel-wire.webp" width="1920" height="1080" loading="lazy" alt="A running sandbox: health charts for processors, memory, network and load, then « Tunnel and ports »: a wire for each port brought to this computer, with dots running each way for what is sent and received, a SOCKS proxy, and a rule that lets the sandbox reach one port of this computer.">
+              <span class="zoom-label" aria-hidden="true">A wire per port, with what runs each way</span>
+              <button type="button" class="zoom-toggle" aria-pressed="false">🔍 Detail</button>
+            </div>
             <figcaption class="shot-caption"><b>After.</b> Its health live, and a wire per port with what runs each way.</figcaption>
           </figure>
         </div>
@@ -548,10 +555,12 @@
               <li>Said plainly: an agent can read a secret it is given. The vault keeps a key from being everywhere; it is not a wall between agents.</li>
             </ul>
           </div>
-          <figure class="screen loupe-fig" data-c="0.74 0.45 2.2">
-            <img src="assets/showcase/keys-secrets.webp" width="1920" height="1200" loading="lazy" alt="Keys › Secrets: tiles for secrets kept, sessions holding one, given in the last 24 hours and given to no session; a card per secret (DOTENV_PRIVATE_KEY, ELEVENLABS_API_KEY, GITHUB_TOKEN, STRIPE_TEST_KEY) with its note, a chip per session that holds it, fourteen bars of handovers, and Give, Take back, Replace and Delete. Demonstration secrets with made-up values.">
-            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/keys-secrets.webp)"></span>
-            <figcaption class="loupe-cap">Who holds each secret (demonstration values)</figcaption>
+          <figure class="screen zoom-fig" data-zoom="0.41 0.36 2">
+            <div class="zoom-frame">
+              <img src="assets/showcase/keys-secrets.webp" width="1920" height="1200" loading="lazy" alt="Keys › Secrets: tiles for secrets kept, sessions holding one, given in the last 24 hours and given to no session; a card per secret (DOTENV_PRIVATE_KEY, ELEVENLABS_API_KEY, GITHUB_TOKEN, STRIPE_TEST_KEY) with its note, a chip per session that holds it, fourteen bars of handovers, and Give, Take back, Replace and Delete. Demonstration secrets with made-up values.">
+              <span class="zoom-label" aria-hidden="true">Who holds each secret (demonstration values)</span>
+              <button type="button" class="zoom-toggle" aria-pressed="false">🔍 Detail</button>
+            </div>
           </figure>
         </div>
 
@@ -691,7 +700,7 @@
       <span><a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
     </div>
   </footer>
-  <script src="js/main.js?v=2026-11-13e"></script>
-  <script src="js/home.js?v=2026-11-13e"></script>
+  <script src="js/main.js?v=2026-11-13f"></script>
+  <script src="js/home.js?v=2026-11-13f"></script>
 </body>
 </html>

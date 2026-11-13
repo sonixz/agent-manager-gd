@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "public" / "assets" / "howto"
 PAGE = ROOT / "public" / "howto.html"
-VERSION = "2026-11-09d"
+VERSION = "2026-11-13f"
 
 spec = importlib.util.spec_from_file_location("guides", ROOT / "tools" / "howto" / "guides.py")
 guides = importlib.util.module_from_spec(spec)
@@ -101,14 +101,10 @@ def page(done: list[dict], coming: list[tuple[str, str]]) -> str:
         <span class="sr-only">Menu</span><span aria-hidden="true">☰</span>
       </button>
       <ul id="nav-links" class="nav-links">
-        <li><a href="index.html#control-room">Control room</a></li>
-        <li><a href="index.html#brain">Second Brain</a></li>
-        <li><a href="index.html#mcp">MCP</a></li>
-        <li><a href="index.html#git">Git &amp; SSH</a></li>
-        <li><a href="index.html#voice">Voice</a></li>
-        <li><a href="index.html#cloud">Cloud</a></li>
+        <li><a href="index.html#features">Features</a></li>
         <li><a href="howto.html" aria-current="page">How-to</a></li>
         <li><a href="docs.html">Docs</a></li>
+        <li><a href="index.html#loops">Loops</a></li>
         <li><a href="https://github.com/sonixz/agent-manager-gd" class="nav-cta" rel="noopener">GitHub</a></li>
       </ul>
     </nav>

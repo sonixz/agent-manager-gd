@@ -545,21 +545,16 @@ p { margin: 0 0 1em; }
 .orch-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 26px; }
 @media (max-width: 860px) { .orch-steps { grid-template-columns: 1fr; } }
 
-/* loupes: a detail of the screenshot, and the lens under the pointer */
-.loupe-fig { position: relative; overflow: visible; }
-.shot.loupe-fig img { aspect-ratio: auto; object-fit: fill; }
-.loupe-fig > img { border-radius: inherit; }
-.loupe-detail { position: absolute; right: -18px; bottom: -22px; width: 42%; aspect-ratio: 16 / 10; border-radius: 12px; border: 2px solid var(--mint); background-repeat: no-repeat; background-size: 300% auto; background-position: var(--zx) var(--zy); box-shadow: 0 24px 60px rgba(0, 0, 0, .6), 0 0 0 6px rgba(143, 227, 239, .08); opacity: 0; transform: scale(.6) translate(10%, 10%); transform-origin: bottom right; transition: opacity .6s ease .2s, transform .8s cubic-bezier(.2, .9, .3, 1.2) .2s; pointer-events: none; z-index: 2; }
-.loupe-fig.zoomed .loupe-detail { opacity: 1; transform: none; }
-.loupe-fig:hover .loupe-detail { opacity: .15; }
-.loupe-cap { position: absolute; right: -18px; bottom: -48px; font-family: var(--mono); font-size: .72rem; color: var(--mint); z-index: 2; opacity: 0; transition: opacity .6s ease .6s; }
-.loupe-fig.zoomed .loupe-cap { opacity: 1; }
-.shot.loupe-fig { overflow: visible; }
-.shot.loupe-fig .loupe-detail { right: 12px; bottom: 64px; width: 46%; }
-.lens { position: absolute; width: 190px; height: 190px; border-radius: 50%; border: 2px solid var(--mint); background-repeat: no-repeat; box-shadow: 0 18px 50px rgba(0, 0, 0, .55), inset 0 0 0 4px rgba(13, 29, 38, .5); pointer-events: none; opacity: 0; transform: scale(.7); transition: opacity .15s ease, transform .15s ease; z-index: 3; }
-.lens.on { opacity: 1; transform: none; }
-.screen.loupe-fig { margin-bottom: 50px; }
-@media (max-width: 700px) { .loupe-detail, .loupe-cap { display: none; } .screen.loupe-fig { margin-bottom: 0; } }
+/* a screenshot that zooms inside its frame towards a detail, then comes back (js/home.js); the button switches by hand */
+.zoom-frame { position: relative; overflow: hidden; }
+.zoom-frame img { display: block; width: 100%; transform-origin: var(--ox, 50%) var(--oy, 50%); transition: transform 1.4s cubic-bezier(.5, .05, .2, 1); }
+.zoom-fig.zoomed .zoom-frame img { transform: scale(var(--z, 3)); }
+.shot.zoom-fig img { aspect-ratio: auto; object-fit: fill; }
+.zoom-label { position: absolute; left: 12px; bottom: 12px; max-width: calc(100% - 24px); font-family: var(--mono); font-size: .74rem; color: var(--on-accent); background: var(--mint); border-radius: 8px; padding: 4px 11px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); opacity: 0; transform: translateY(8px); transition: opacity .35s ease, transform .35s ease; pointer-events: none; }
+.zoom-fig.zoomed .zoom-label { opacity: 1; transform: none; transition-delay: 1s; }
+.zoom-toggle { position: absolute; right: 10px; top: 10px; font: inherit; font-size: .74rem; color: var(--text); background: rgba(13, 22, 32, .82); border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; cursor: pointer; backdrop-filter: blur(4px); transition: border-color .2s ease, color .2s ease; }
+.zoom-toggle:hover, .zoom-toggle:focus-visible { border-color: var(--mint); color: var(--mint); }
+.zoom-fig.zoomed .zoom-toggle { border-color: var(--mint); }
 
 /* the tunnel: three wires, each row lined up with its two ends */
 .tunnel { position: relative; display: grid; grid-template-columns: minmax(170px, 1fr) minmax(0, 2.3fr) minmax(170px, 1fr); gap: 10px 0; align-items: center; margin: 10px 0 40px; padding: 22px 26px 18px; background: radial-gradient(ellipse at 50% 50%, rgba(143, 227, 239, .07), transparent 70%), var(--panel); border: 1px solid var(--border); border-radius: 18px; }
@@ -639,7 +634,7 @@ p { margin: 0 0 1em; }
   .tagline-lab span, .hot i::after, .bridge-flow i, .tn-wire i { animation: none; }
   .tn-wire i { display: none; }
   .hero-film { transform: none; }
-  .loupe-detail, .loupe-cap { transition: none; }
+  .zoom-frame img, .zoom-label, .zoom-fig.zoomed .zoom-label { transition: none; }
 }
 .orch-steps .shot img { aspect-ratio: 4 / 3; }
 .orch-steps .pos-right img { object-position: 100% 0; }

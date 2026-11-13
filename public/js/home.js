@@ -1,4 +1,4 @@
-// The home page: the film in the hero, the feature bar, hotspots, the views and themes viewer, the loupes, the MCP
+// The home page: the film in the hero, the feature bar, hotspots, the views and themes viewer, the zooms, the MCP
 // map and the loops. No dependency, no network call. With reduced motion nothing moves by itself.
 (() => {
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -123,40 +123,35 @@
     }));
   });
 
-  // ---------------------------------------------------------------- loupes: a detail of the screenshot, and a lens under the pointer
-  document.querySelectorAll(".loupe-fig").forEach((fig) => {
-    const img = fig.querySelector("img"), det = fig.querySelector(".loupe-detail");
-    if (!img || !det) return;
-    // data-c="x y zoom": the point of the screenshot to show (fractions) and how much to enlarge it
-    const [cx, cy, z] = (fig.dataset.c || "0.5 0.5 3").split(" ").map(Number);
-    const place = () => {
-      const w = det.clientWidth, h = det.clientHeight, iw = img.naturalWidth || +img.getAttribute("width"), ih = img.naturalHeight || +img.getAttribute("height");
-      if (!w || !iw) return;
-      const bw = w * z, bh = bw * ih / iw;
-      det.style.backgroundSize = `${bw}px ${bh}px`;
-      det.style.backgroundPosition = `${Math.min(0, Math.max(w - bw, w / 2 - cx * bw))}px ${Math.min(0, Math.max(h - bh, h / 2 - cy * bh))}px`;
+  // ---------------------------------------------------------------- screenshots that zoom inside their frame towards a detail
+  // data-zoom="x y zoom": the detail's centre (fractions of the picture) and how much. The picture grows around the
+  // point that brings that centre to the middle of the frame, kept inside the picture so the frame stays full.
+  document.querySelectorAll(".zoom-fig").forEach((fig, idx) => {
+    const frame = fig.querySelector(".zoom-frame"), btn = fig.querySelector(".zoom-toggle");
+    if (!frame || !btn) return;
+    const [cx, cy, z = 3] = (fig.dataset.zoom || "0.5 0.5").split(" ").map(Number);
+    const origin = (c) => (Math.max(0, Math.min(1, (z * c - 0.5) / (z - 1))) * 100).toFixed(2) + "%";
+    fig.style.setProperty("--ox", origin(cx)); fig.style.setProperty("--oy", origin(cy)); fig.style.setProperty("--z", String(z));
+    let auto = !reduce, on = false, timer = 0, visible = false, first = true;
+    const set = (v) => {
+      on = v; fig.classList.toggle("zoomed", v);
+      btn.textContent = v ? "⤢ Whole picture" : "🔍 Detail"; btn.setAttribute("aria-pressed", String(v));
     };
-    if (img.complete) place(); else img.addEventListener("load", place);
-    window.addEventListener("resize", place);
-    seen(fig, () => { place(); fig.classList.add("zoomed"); });
-    if (!window.matchMedia("(hover: hover)").matches) return;
-    const lens = document.createElement("span");
-    lens.className = "lens";
-    lens.setAttribute("aria-hidden", "true");
-    lens.style.backgroundImage = `url(${img.getAttribute("src")})`;
-    fig.appendChild(lens);
-    fig.addEventListener("pointermove", (e) => {
-      const r = img.getBoundingClientRect();
-      const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
-      if (x < 0 || x > 1 || y < 0 || y > 1) { lens.classList.remove("on"); return; }
-      const Z = 2.6, size = lens.offsetWidth || 190;
-      lens.style.left = `${e.clientX - fig.getBoundingClientRect().left - size / 2}px`;
-      lens.style.top = `${e.clientY - fig.getBoundingClientRect().top - size / 2}px`;
-      lens.style.backgroundSize = `${r.width * Z}px ${r.height * Z}px`;
-      lens.style.backgroundPosition = `${-(x * r.width * Z - size / 2)}px ${-(y * r.height * Z - size / 2)}px`;
-      lens.classList.add("on");
-    });
-    fig.addEventListener("pointerleave", () => lens.classList.remove("on"));
+    // by itself while it is on screen: the whole picture, then the detail, then back
+    const tick = () => {
+      clearTimeout(timer);
+      if (!auto || !visible) return;
+      const wait = on ? 5200 : first ? 1300 + (idx % 2) * 1100 : 3400;
+      first = false;
+      timer = setTimeout(() => { set(!on); tick(); }, wait);
+    };
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver((es) => {
+        visible = es.some((e) => e.isIntersecting);
+        if (visible) tick(); else { clearTimeout(timer); if (auto) { set(false); first = true; } }
+      }, { threshold: 0.55 }).observe(frame);
+    }
+    btn.addEventListener("click", () => { auto = false; clearTimeout(timer); set(!on); });   // by hand from now on
   });
 
   // ---------------------------------------------------------------- the built-in MCP: a map of who calls what, played step by step
