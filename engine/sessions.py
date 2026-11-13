@@ -39,6 +39,8 @@ def host_path(path: str) -> str:
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hook.py")
 AGENTS_MCP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_agents.py")
 SANDBOX_ATTACH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sandbox_attach.py")
+SECRET_LAUNCH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "secret_launch.py")
+TICKET_LIFE = 90.0   # seconds a session's ticket for its secrets stays good (its program starts within it)
 CLAUDE_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop",
                  "SubagentStop", "PreCompact", "SessionEnd"]
 SHELLS = {"bash", "zsh", "fish", "sh", "dash", "pwsh", "nu"}
@@ -170,6 +172,8 @@ class Sessions:
         self.keys_store = Keys(self.home)
         from .vault import Vault
         self.vault = Vault(self.home, self.keys_store)   # named secrets, given session by session (Loop 39)
+        self._tickets: dict[str, tuple[str, float]] = {}  # single-use tickets a session's launcher trades for its secrets
+        self._tickets_lock = threading.Lock()
         from .sandboxes import Sandboxes
         self.sandboxes = Sandboxes(store.path, self.home, self.keys_store)
 
@@ -728,7 +732,7 @@ class Sessions:
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
                repo: str = "", host: str = "local", remote: bool | None = None, document: bool = False,
                level: str = "", model: str = "", role: str = "", access: str = "", extra_dirs: list | None = None,
-               os_sandbox: bool = False) -> dict:
+               os_sandbox: bool = False, secrets: list | None = None) -> dict:
         if host == "sandbox":
             return self.create_sandbox_session(name, tool, grp, repo, brain)
         if tool not in TOOLS:
@@ -758,7 +762,8 @@ class Sessions:
                              repo_id=repo)
         self.store.update(rec["id"], level=level, model=model, role=role, access=self.access_for(access or self._group_access(grp), parent),
                           extra_dirs=json.dumps(self._clean_dirs(extra_dirs or [])),
-                          os_sandbox=int(self.os_sandbox_for(os_sandbox, parent)))
+                          os_sandbox=int(self.os_sandbox_for(os_sandbox, parent)),
+                          secrets=json.dumps(self._clean_secrets(secrets or [])))
         rec = self.store.get(rec["id"])
         if remote is None:  # not said: a child follows its parent (the orchestrator's children too), else no
             remote = bool(parent and (self.store.get(parent) or {}).get("remote_control"))
@@ -776,12 +781,76 @@ class Sessions:
                 hint = " and search the Second Brain for this project if you need more" if self.store.get(rec["id"]).get("brain_client") else ""
                 cmd = cmd + [BRIEF_PROMPT.format(path=last[0]["path"], brain=hint)]
         try:
-            self.tmux.new_session(self.tmux_name(rec["id"]), cwd, cmd,
+            self.tmux.new_session(self.tmux_name(rec["id"]), cwd, self.with_secrets(rec["id"], cmd),
                                   env=self.session_env(rec["id"]), width=width, height=height)
         except Exception:
             self.store.delete(rec["id"])
             raise
         return self.get(rec["id"])
+
+    # ---------------------------------------------------------------- secrets given to a session (Loop 39)
+    def _clean_secrets(self, names: list) -> list[str]:
+        out = []
+        for n in names:
+            n = self.vault.check_name(str(n))
+            if not self.vault.exists(n):
+                raise ValueError(f"no secret named {n} in the vault")
+            if n not in out:
+                out.append(n)
+        return out[:32]
+
+    def secrets_of(self, sid: str, rec: dict | None = None) -> list[str]:
+        try:
+            return [str(x) for x in json.loads(((rec if rec is not None else self.store.get(sid)) or {}).get("secrets") or "[]")]
+        except ValueError:
+            return []
+
+    def set_secrets(self, sid: str, names: list) -> dict:
+        """The secrets this session is given, from its next start (a running program's environment cannot change)."""
+        rec = self.store.get(sid)
+        if not rec:
+            raise KeyError(sid)
+        if rec.get("cwd") == "/work":
+            raise ValueError("a session in a cloud sandbox gets no secret from this computer's vault")
+        clean = self._clean_secrets(names)
+        before = self.secrets_of(sid)
+        self.store.update(sid, secrets=json.dumps(clean))
+        self._log(sid, {"secrets": [before, clean]})
+        return {"id": sid, "secrets": clean, "from": "its next start"}
+
+    def with_secrets(self, sid: str, cmd: list[str]) -> list[str]:
+        """The command, behind the launcher that fetches this session's secrets with a single-use ticket; the
+        command as it is when the session has none."""
+        if not self.secrets_of(sid) or not self.port:
+            return cmd
+        if not cmd:   # a shell: tmux would start the login shell itself; the launcher starts the same one
+            cmd = [os.environ.get("SHELL") or "/bin/bash", "-l"]
+        import secrets as _rand
+        ticket = _rand.token_urlsafe(32)
+        with self._tickets_lock:
+            now = time.monotonic()
+            self._tickets = {t: v for t, v in self._tickets.items() if v[1] > now}
+            self._tickets[ticket] = (sid, now + TICKET_LIFE)
+        return [sys.executable or "python3", SECRET_LAUNCH, str(self.port), ticket, "--", *cmd]
+
+    def redeem_ticket(self, ticket: str) -> dict:
+        """The values for a ticket, once: the launcher's only way to them. An unknown, used or old ticket gets
+        nothing."""
+        with self._tickets_lock:
+            got = self._tickets.pop(str(ticket), None)
+        if not got or got[1] < time.monotonic():
+            raise PermissionError("no such ticket")
+        sid = got[0]
+        rec = self.store.get(sid) or {}
+        env, missing = {}, []
+        for n in self.secrets_of(sid):
+            v = self.vault.get(n)
+            if v:
+                env[n] = v
+                self.vault.log(n, "given", sid, rec.get("name", ""))
+            else:
+                missing.append(n)
+        return {"env": env, "missing": missing}
 
     def describe(self, rec: dict, live: dict | None = None) -> dict:
         live = self.tmux.sessions() if live is None else live
@@ -821,6 +890,7 @@ class Sessions:
                 "git_rights": self.git_rights(rec),
                 "access": self.access_of(rec), "extra_dirs": self.extra_dirs(rec),
                 "os_sandbox": bool(rec.get("os_sandbox")),
+                "secrets": self.secrets_of(rec["id"], rec),
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",
@@ -1077,6 +1147,7 @@ class Sessions:
             os.remove(os.path.join(self.home, "state", sid + ".json"))
         except OSError:
             pass
+        cmd = self.with_secrets(sid, cmd)
         if d["state"] == "missing":
             self.tmux.new_session(d["tmux"], d["cwd"], cmd, env=self.session_env(sid))
         else:
@@ -1167,6 +1238,8 @@ class Sessions:
         if there:   # its terminal reaches the sandbox, where tmux keeps the agent and its conversation
             cmd = there[0]
             d = {**d, "cwd": there[1]}
+        else:
+            cmd = self.with_secrets(d["id"], cmd)
         if d["state"] in ("missing", "archived") or d["tmux"] not in self.tmux.sessions():
             self.tmux.new_session(d["tmux"], d["cwd"], cmd, env=self.session_env(d["id"]))
         else:
@@ -1199,7 +1272,10 @@ class Sessions:
             self._connect_brain(rec)
             if d.get("brain_document"):  # a fork keeps documenting, with a key of its own
                 self.store.update(rec["id"], brain_document=1)
-        self.tmux.new_session(self.tmux_name(rec["id"]), rec["cwd"], self.command_for(rec, "fork", conv),
+        src = self.store.get(sid) or {}
+        if src.get("secrets", "[]") != "[]":   # the owner forks it: the fork keeps the secrets it was given
+            self.store.update(rec["id"], secrets=src["secrets"])
+        self.tmux.new_session(self.tmux_name(rec["id"]), rec["cwd"], self.with_secrets(rec["id"], self.command_for(rec, "fork", conv)),
                               env=self.session_env(rec["id"]))
         return self.get(rec["id"])
 

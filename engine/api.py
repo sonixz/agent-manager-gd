@@ -61,6 +61,11 @@ def make_handler(sessions: Sessions, token: str):
                 return self._reply(200, {"ok": True, "version": VERSION, "tmux": sessions.tmux.version()})
             if len(parts) >= 3 and parts[0] == "sandbox-brain":
                 return self._sandbox_brain(method, parts)
+            if parts == ["secret-ticket"] and method == "POST":   # a session's launcher: its ticket is its only right
+                try:
+                    return self._reply(200, sessions.redeem_ticket(str(self._body().get("ticket", ""))))
+                except (PermissionError, ValueError, json.JSONDecodeError):
+                    return self._reply(403, {"error": "no such ticket"})
             if not self._authorised():
                 return self._reply(401, {"error": "unauthorised"})
             try:
@@ -335,7 +340,7 @@ def make_handler(sessions: Sessions, token: str):
                                                             (bool(b["remote"]) if "remote" in b else None), bool(b.get("document", False)),
                                                             str(b.get("level", "")), str(b.get("model", "")), "",
                                                             str(b.get("access", "")), b.get("extra_dirs") or [],
-                                                            bool(b.get("os_sandbox", False))))
+                                                            bool(b.get("os_sandbox", False)), b.get("secrets") or []))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
@@ -425,6 +430,8 @@ def make_handler(sessions: Sessions, token: str):
                         b = self._body()
                         sessions.move(sid, str(b.get("group", "")), int(b.get("index", 0)))
                         return self._reply(200, sessions.tree())
+                    if method == "POST" and action == "secrets":   # Loop 39: from its next start
+                        return self._reply(200, sessions.set_secrets(sid, list(self._body().get("names") or [])))
                     if method == "POST" and action == "rename":
                         return self._reply(200, sessions.rename(sid, str(self._body().get("name", ""))))
                     if method == "DELETE" and action == "":
