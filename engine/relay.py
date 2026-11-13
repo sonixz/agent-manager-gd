@@ -56,6 +56,8 @@ class Channel:
         self.series: list[tuple[int, int, int]] = []   # (second, sent in it, received in it), the last KEEP seconds
         self.guard = None              # when set: HTTP only, and only the requests whose path it accepts pass
         self.denied = 0                # requests refused by the guard (counted, never kept)
+        self.wanted = port             # the port asked for on this computer (0: any)
+        self.moved = ""                # why it is not on the port asked for: « windows » or « here »
 
     def count(self, n: int, toward_target: bool) -> None:
         now = time.time()
@@ -84,7 +86,7 @@ class Channel:
                     "address": f"http://{LOOPBACK}:{self.port}", "state": self.state, "why": self.why,
                     "opened": self.opened, "closed": self.closed, "last": self.last,
                     "sent": self.sent, "received": self.received, "connections": self.connections, "refused": self.refused,
-                    "denied": self.denied, "guarded": self.guard is not None,
+                    "denied": self.denied, "guarded": self.guard is not None, "wanted": self.wanted, "moved": self.moved,
                     "open_now": len(self.live) // 2, "sent_rate": sum(x[1] for x in recent) / 10.0, "received_rate": sum(x[2] for x in recent) / 10.0,
                     "series": [list(x) for x in self.series[-120:]]}
 
@@ -103,23 +105,34 @@ class Relay:
         s.listen(64)
         return s
 
-    def open(self, target_port: int, port: int = 0, label: str = "", target_host: str = LOOPBACK, tries: int = 20, guard=None) -> dict:
+    def open(self, target_port: int, port: int = 0, label: str = "", target_host: str = LOOPBACK, tries: int = 20, guard=None,
+             taken_elsewhere=None) -> dict:
         """Opens a channel in front of `target_port`. `port` is the port wished for on this computer (usually the
         same number as in the sandbox, so a dashboard keeps its usual address): when it is taken, the next free one
-        is used; 0 lets the system choose."""
+        is used; 0 lets the system choose. `taken_elsewhere`, when given, says which ports are taken where this
+        side cannot see (Windows, for an engine in WSL): those are passed over too, and the channel says why it
+        moved."""
         server = None
+        moved = ""
+        elsewhere = set(taken_elsewhere() or ()) if (port and taken_elsewhere) else set()
         if port:
             for p in range(int(port), int(port) + max(1, tries)):
                 if p > 65535:
                     break
+                if p in elsewhere:
+                    moved = moved or "windows"
+                    continue
                 try:
                     server = self._listen(p)
                     break
                 except OSError:
+                    moved = moved or "here"
                     continue
         if server is None:
             server = self._listen(0)
         ch = Channel(target_port, server.getsockname()[1], label, target_host)
+        ch.wanted = int(port)
+        ch.moved = moved if (port and ch.port != int(port)) else ""
         ch.server = server
         ch.guard = guard
         with self.lock:

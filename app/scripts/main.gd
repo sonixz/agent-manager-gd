@@ -3665,10 +3665,10 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 		words.add_theme_font_size_override("font_size", 12)
 		words.size_flags_horizontal = SIZE_EXPAND_FILL
 		if x["open"]:
-			words.add_theme_color_override("font_color", AmTheme.col("TEXT"))
+			words.add_theme_color_override("font_color", AmTheme.col("WARN") if SandboxView.port_warns(x) else AmTheme.col("TEXT"))
 		line.add_child(words)
 		if not x["open"]:
-			line.add_child(_small("Bring it to my localhost", _sbx_tunnel_do.bind(sbid, "ports/%d/open" % port, {"label": str(x["program"])}, ""), "Opens it on 127.0.0.1 of this computer, on the same number when it is free. Nothing is made public."))
+			line.add_child(_small("Bring it to my localhost", _sbx_tunnel_do.bind(sbid, "ports/%d/open" % port, {"label": str(x["program"])}, ""), "Opens it on 127.0.0.1 of this computer, on the same number when nothing holds it there (in WSL or in Windows); else on the next free one, and the line says so. Nothing is made public."))
 			continue
 		var address := str(x["address"])
 		line.add_child(_small("Open in the browser", func() -> void: OS.shell_open(address), address))

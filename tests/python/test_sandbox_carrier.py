@@ -128,6 +128,7 @@ class CarrierTest(unittest.TestCase):
         self.sbx = FakeSandboxes(self.tmp)
         self.relay = Relay()
         self.carrier = Carrier(self.sbx, self.relay, self.tmp, ssh=os.path.join(HERE, "standins", "ssh"), flyctl=os.path.join(HERE, "standins", "flyctl"))
+        self.carrier.taken_elsewhere = lambda: set()   # the tests do not depend on what this Windows runs
 
     def tearDown(self):
         self.carrier.close_all()
@@ -178,6 +179,15 @@ class CarrierTest(unittest.TestCase):
         self.assertEqual(self.carrier.describe("sb1")["ports"], [])
         with self.assertRaises(ValueError):
             self.carrier.open_port("sb1", 2222)                                    # our own ports are not ones to open
+
+    def test_a_port_a_windows_program_holds_is_passed_over_and_said(self):
+        self.carrier.taken_elsewhere = lambda: {self.inside}
+        self.carrier.connect("sb1")
+        row = self.carrier.open_port("sb1", self.inside)
+        self.assertNotEqual(row["port"], self.inside)
+        self.assertEqual((row["remote_port"], row["wanted"], row["moved"]), (self.inside, self.inside, "windows"))
+        with urllib.request.urlopen(row["address"] + "/", timeout=10) as r:
+            self.assertIn(b"Sales", r.read())
 
     def test_without_ss_in_the_sandbox_the_kernel_list_is_read(self):
         proc = os.path.join(self.tmp, "proc_net.txt")

@@ -24,6 +24,7 @@ import threading
 import time
 from contextlib import closing
 
+from . import windows_ports
 from .relay import LOOPBACK, Relay, brain_paths
 
 OURS = {2222: "the sandbox's SSH server", 8765: "the way back to this computer"}   # never offered as ports to open
@@ -178,6 +179,7 @@ class Carrier:
         self.engine_port = engine_port   # the way back to the Second Brain leads there, through a guarded relay
         self.brain_port = 8765           # where the sandbox finds it (its MCP configuration says so)
         self.relay = relay
+        self.taken_elsewhere = windows_ports.taken   # ports Windows programs hold, which WSL cannot see
         self.home = home
         self.ssh = ssh
         self.flyctl = flyctl
@@ -359,7 +361,7 @@ class Carrier:
         rc, _, err = self._run(link, "-O", "forward", "-L", spec, "root@127.0.0.1")
         if rc != 0:
             raise ValueError("the port could not be brought here" + ((": " + err.strip()[-160:]) if err.strip() else ""))
-        ch = self.relay.open(inner, port=int(local) or port, label=label or f"port {port}")
+        ch = self.relay.open(inner, port=int(local) or port, label=label or f"port {port}", taken_elsewhere=self.taken_elsewhere)
         link["ports"][port] = {"kind": "in", "port": port, "inner": inner, "flag": "-L", "spec": spec, "channel": ch["id"], "label": ch["label"]}
         self._remember(sbid, "in", port, ch["port"], ch["label"])   # the same address next time: a bookmark keeps working
         return self._port_row(link, port)
@@ -375,7 +377,7 @@ class Carrier:
         rc, _, err = self._run(link, "-O", "forward", "-D", spec, "root@127.0.0.1")
         if rc != 0:
             raise ValueError(reason(err or "port forwarding failed"))
-        ch = self.relay.open(inner, port=int(local) or SOCKS_PORT, label="SOCKS proxy")
+        ch = self.relay.open(inner, port=int(local) or SOCKS_PORT, label="SOCKS proxy", taken_elsewhere=self.taken_elsewhere)
         link["ports"]["socks"] = {"kind": "socks", "port": 0, "inner": inner, "flag": "-D", "spec": spec, "channel": ch["id"], "label": "SOCKS proxy"}
         self._remember(sbid, "socks", 0, ch["port"], "SOCKS proxy")
         return self._port_row(link, "socks")

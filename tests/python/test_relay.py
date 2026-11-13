@@ -116,6 +116,47 @@ class RelayTest(unittest.TestCase):
         probe.close()
         self.assertEqual(self.relay.open(self.target, port=wished)["port"], wished)
 
+    def test_a_channel_says_why_it_is_not_on_the_port_asked_for(self):
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        wished = probe.getsockname()[1]
+        probe.close()
+        ch = self.relay.open(self.target, port=wished, taken_elsewhere=lambda: {wished})   # a Windows program holds it
+        self.assertNotEqual(ch["port"], wished)
+        self.assertEqual((ch["wanted"], ch["moved"]), (wished, "windows"))
+        self.assertEqual(self.talk(ch["port"], b"hi"), b"hi")
+        holder = socket.socket()
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        try:
+            ch = self.relay.open(self.target, port=holder.getsockname()[1], taken_elsewhere=lambda: set())
+            self.assertEqual(ch["moved"], "here")
+        finally:
+            holder.close()
+        free = self.relay.open(self.target, port=0, taken_elsewhere=lambda: set())
+        self.assertEqual((free["wanted"], free["moved"]), (0, ""))
+
+    def test_ports_windows_holds_are_read_from_its_netstat(self):
+        from engine.windows_ports import parse_netstat, parse_relays
+        netstat = """
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1620
+  TCP    127.0.0.1:8000         0.0.0.0:0              LISTENING       27304
+  TCP    127.0.0.1:9010         0.0.0.0:0              LISTENING       28828
+  TCP    192.168.2.212:8800     0.0.0.0:0              LISTENING       4896
+  TCP    127.0.0.1:9010         127.0.0.1:50000        ESTABLISHED     28828
+  TCP    [::1]:5173             [::]:0                 LISTENING       777
+  TCP    [::]:445               [::]:0                 LISTENING       4
+  UDP    0.0.0.0:5353           *:*                                    999
+"""
+        relays = parse_relays('"wslrelay.exe","27304","Console","1","11 748 K"\r\n')
+        self.assertEqual(relays, {"27304"})
+        # 8000 is WSL's own port seen through its bridge; 8800 is on the network address, not localhost
+        self.assertEqual(parse_netstat(netstat, relays), {135, 9010, 5173, 445})
+        self.assertEqual(parse_relays("INFO: No tasks are running which match the specified criteria."), set())
+
     def test_two_at_once_are_counted_together_and_shown_while_open(self):
         ch = self.relay.open(self.target)
         a = socket.create_connection(("127.0.0.1", ch["port"]))

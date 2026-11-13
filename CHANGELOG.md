@@ -6,6 +6,13 @@ Newest first.
 ## Unreleased: alpha
 
 ### Sandboxes: the inventory, always · Loop 38 (first steps)
+- **Bring it to my localhost** no longer takes a port a Windows program already holds (the engine runs in WSL and
+  could not see it: the browser landed on the Windows program). It reads Windows' listeners, read only, and takes
+  the next free number; the port's line then says why, in orange: « 8000 is held by a Windows program, so 8001 »
+  (or « taken on this computer »).
+- Fixed: a cloud sandbox listed no port at all, so no **Bring it to my localhost**: its image has no `ss`. The
+  ports are now read from the kernel's own list. Tried on a real Fly.io sandbox: a web server on 8000 reached from
+  Windows.
 - New, on a running sandbox: **Tunnel and ports**. **Connect** opens one lasting SSH connection to the sandbox,
   apart from its terminal. The block lists what listens in the sandbox (a web server, a dashboard) and
   **Bring it to my localhost** opens that port on `127.0.0.1` of this computer, on the same number when it is

@@ -189,7 +189,8 @@ static func port_rows(tunnel: Dictionary) -> Array:
 		var row: Dictionary = by.get(n, {"port": n, "program": "", "inside": true, "listening": false})
 		row.merge({"open": true, "state": str(p.get("state", "")), "address": str(p.get("address", "")), "local": int(p.get("port", 0)),
 			"sent": float(p.get("sent", 0)), "received": float(p.get("received", 0)), "sent_rate": float(p.get("sent_rate", 0.0)),
-			"received_rate": float(p.get("received_rate", 0.0)), "open_now": int(p.get("open_now", 0)), "label": str(p.get("label", ""))}, true)
+			"received_rate": float(p.get("received_rate", 0.0)), "open_now": int(p.get("open_now", 0)), "label": str(p.get("label", "")),
+			"wanted": int(p.get("wanted", 0)), "moved": str(p.get("moved", ""))}, true)
 		by[n] = row
 	var out := by.values()
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -203,11 +204,29 @@ static func port_words(row: Dictionary) -> String:
 	if not row["open"]:
 		return "%s listens on %d%s" % [what, row["port"], " (inside the sandbox only)" if row["inside"] else ""]
 	var out := "%s on %d is on your localhost:%d" % [what, row["port"], row["local"]]
+	out += moved_words(row["port"], row["local"], str(row.get("moved", "")))
 	if str(row["state"]) == "paused":
 		out += " · paused: it carries nothing"
 	if not bool(row.get("listening", true)):
 		out += " · nothing listens there any more"
 	return out
+
+
+## Why a port is not on the number asked for, said on its line (owner, 2026-11-12: « Je peux pas avoir deux
+## localhosts sur le port 8000 »). "" when it is on that number.
+static func moved_words(asked: int, local: int, moved: String) -> String:
+	if local == 0 or local == asked:
+		return ""
+	if moved == "windows":
+		return " · %d is held by a Windows program, so %d" % [asked, local]
+	if moved == "here":
+		return " · %d is taken on this computer, so %d" % [asked, local]
+	return " · kept on %d from before, so your bookmarks still work" % local
+
+
+## True when a port's line has something to warn about (a number moved, a pause, a program gone).
+static func port_warns(row: Dictionary) -> bool:
+	return bool(row.get("open", false)) and (int(row.get("local", 0)) != int(row["port"]) or str(row.get("state", "")) == "paused" or not bool(row.get("listening", true)))
 
 
 ## How the sandbox is doing, in three short figures.
@@ -232,7 +251,8 @@ static func extra_rows(tunnel: Dictionary) -> Array:
 		var kind := str(p.get("kind", "in"))
 		if kind == "socks":
 			out.append({"kind": kind, "port": 0, "address": str(p.get("address", "")), "state": str(p.get("state", "")),
-				"words": "A SOCKS proxy is on your localhost:%d: a program set on it reaches everything inside the sandbox, by one address" % int(p.get("port", 0))})
+				"words": "A SOCKS proxy is on your localhost:%d: a program set on it reaches everything inside the sandbox, by one address" % int(p.get("port", 0))
+					+ moved_words(1080, int(p.get("port", 0)), str(p.get("moved", "")))})
 		elif kind == "out":
 			out.append({"kind": kind, "port": int(p.get("local_port", 0)), "address": "", "state": str(p.get("state", "")),
 				"words": "A rule you made: the sandbox reaches this computer's port %d, on its own 127.0.0.1:%d" % [int(p.get("local_port", 0)), int(p.get("remote_port", 0))]})
