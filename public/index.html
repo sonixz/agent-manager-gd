@@ -10,7 +10,7 @@
   <meta property="og:description" content="Claude Code, Codex and your shells, side by side: isolated, observed, in your control. Open source, local-first.">
   <meta property="og:image" content="assets/video/showcase-poster.webp">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=2026-11-13d">
+  <link rel="stylesheet" href="css/style.css?v=2026-11-13e">
 </head>
 <body class="home">
   <a class="skip" href="#main">Skip to content</a>
@@ -177,11 +177,18 @@
           <figure class="screen viewer-screen">
             <img class="viewer-img" src="assets/showcase/focus-working.webp" width="1920" height="1200" loading="lazy" alt="Focus view: one Claude Code session full size, writing a gift card and its tests, with the session list on the left.">
           </figure>
-          <ul class="viewer-notes">
-            <li><b>Focus</b> one session, full size · <b>Grid</b> up to four live terminals · <b>Board</b> a tile per session · <b>Review</b> the diffs · <b>History</b> every conversation</li>
-            <li>Seven themes (Focus, Terminal, Neon, Evening, Forest, Morning, Paper); four shown here. A click changes the whole window.</li>
-            <li>Everything by keyboard: the palette (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>), a shortcut per view, your own bindings.</li>
-          </ul>
+          <div class="viewer-cards">
+            <article class="card"><h3><span class="icon">◧</span>Five views</h3>
+              <p><b>Focus</b> one session, full size · <b>Grid</b> up to four live terminals · <b>Board</b> a tile per
+                session · <b>Review</b> the diffs · <b>History</b> every conversation.</p></article>
+            <article class="card"><h3><span class="icon">◐</span>Seven themes</h3>
+              <p class="chips"><span>Focus</span><span>Terminal</span><span>Neon</span><span>Evening</span><span>Forest</span><span>Morning</span><span>Paper</span></p>
+              <p>The same as Second Brain's. A click changes the whole window, the terminal's colours with it.</p></article>
+            <article class="card"><h3><span class="icon">⌨</span>All by keyboard</h3>
+              <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> the palette: every action and session, by name.
+                With <kbd>Ctrl</kbd>+<kbd>Shift</kbd>: <kbd>F</kbd> <kbd>G</kbd> <kbd>B</kbd> <kbd>H</kbd> <kbd>R</kbd> the
+                views, <kbd>A</kbd> approves the first agent waiting. Change any of them.</p></article>
+          </div>
         </div>
       </div>
     </section>
@@ -249,6 +256,14 @@
             <figure class="screen stack-2"><img src="assets/showcase/review.webp" width="1920" height="1200" loading="lazy" alt="The Review view: the gift card change, file by file, with two comments on lines of code waiting to be sent to the agent."></figure>
           </div>
         </div>
+        <ol class="life reveal" aria-label="A session's life, from its start to the next session">
+          <li><span class="life-ic">▶</span><b>Start</b><span>A session, in its own tmux</span></li>
+          <li><span class="life-ic">✕</span><b>Close the app</b><span>The agents keep working</span></li>
+          <li><span class="life-ic">↺</span><b>Resume</b><span>Any conversation it ever had</span></li>
+          <li><span class="life-ic">⎇</span><b>Fork</b><span>A copy; the original stays as it was</span></li>
+          <li><span class="life-ic">✎</span><b>Wrap up</b><span>Its own summary, kept; the session archived</span></li>
+          <li><span class="life-ic">➜</span><b>Brief</b><span>The next session starts from that summary</span></li>
+        </ol>
       </div>
     </section>
 
@@ -407,6 +422,16 @@
             <figcaption class="loupe-cap">The branches of acme-store, each in its worktree</figcaption>
           </figure>
         </div>
+        <div class="readline reveal">
+          <p class="readline-title">How to read a line</p>
+          <ul>
+            <li><span class="sig"><i class="s-disc"></i><i class="s-diamond"></i><i class="s-ring"></i></span><b>Host</b><span>GitHub, Azure DevOps, another host</span></li>
+            <li><span class="sig"><i class="s-disc ok"></i><i class="s-ring wait"></i><i class="s-cross"></i></span><b>Key</b><span>works, waits to be added, does not work; checked again every ten minutes</span></li>
+            <li><span class="sig"><i class="s-sq"></i><i class="s-pile"></i></span><b>The key opens</b><span>this repository only, or your whole account</span></li>
+            <li><span class="sig"><em>main</em><i class="s-up"></i><i class="s-down"></i><i class="s-sq dim"></i></span><b>Folder</b><span>its branch, commits not pushed, commits behind, files changed</span></li>
+            <li><span class="sig"><i class="light working"></i><i class="light ok"></i><i class="light done"></i></span><b>Sessions</b><span>a dot per open session, in the colour of its state</span></li>
+          </ul>
+        </div>
       </div>
     </section>
 
@@ -420,8 +445,13 @@
             <p class="muted">The ground button's page reads this computer and WSL: memory, processors, the true room on
               the disk, and the memory each session holds, from the last hour to the last seven days. Hover a bar, and
               it tells you who weighs what.</p>
+            <ul class="btn-states" aria-label="The ground button's three states, for example">
+              <li><span class="pill-btn ok">● WSL <b>2.6 GB</b></span><span>everything stands; the memory in use</span></li>
+              <li><span class="pill-btn warn">! WSL <b>14.1 GB</b></span><span>something deserves a look: memory nearly gone, a disk nearly full</span></li>
+              <li><span class="pill-btn bad">✗ WSL</span><span>something the app needs is missing, or the engine does not answer</span></li>
+            </ul>
+            <p class="small muted" style="margin: 10px 0 0">The button in the top bar is alive, and its tooltip says why. On Linux it reads « Computer ».</p>
             <ul class="checks">
-              <li><b>A button that lives</b>: ● all is well, ! something deserves a look, ✗ something is missing; then the memory in use.</li>
               <li><b>The setup check</b> reads Windows, WSL, the distribution, then the programs and the engine, and gives the command to run yourself.</li>
               <li><b>Restart WSL…</b> from the same page when it gets heavy.</li>
             </ul>
@@ -661,7 +691,7 @@
       <span><a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
     </div>
   </footer>
-  <script src="js/main.js?v=2026-11-13d"></script>
-  <script src="js/home.js?v=2026-11-13d"></script>
+  <script src="js/main.js?v=2026-11-13e"></script>
+  <script src="js/home.js?v=2026-11-13e"></script>
 </body>
 </html>

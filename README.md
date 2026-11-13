@@ -4,8 +4,9 @@
 
 <h1 align="center">Agent Manager GD</h1>
 
-<p align="center"><b>Every coding agent. One control room.</b><br>
-Claude Code, Codex and your shells side by side, in real terminals that never die.</p>
+<p align="center"><b>Your agent lab.</b><br>
+Claude Code, Codex and your shells side by side: isolated, observed, in your control.<br>
+Every agent. Every environment. One control room.</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-8fe3ef" alt="MIT licence"></a>
@@ -19,7 +20,10 @@ Claude Code, Codex and your shells side by side, in real terminals that never di
 > (TCP/IP, TLS, authentication, infrastructure as code, DevOps). Read the [AI notice](AI-NOTICE.md).
 
 <p align="center">
-  <img src="public/assets/showcase/hero-grid.webp" alt="Agent Manager GD: four live terminals in a grid, the session tree on the left with each agent's state, and the queue of agents waiting for you." width="900">
+  <a href="https://sonixz.github.io/gd-project/agent-manager/">
+    <img src="public/assets/video/showcase-play.webp" alt="Watch the 48-second film of Agent Manager GD with Second Brain GD: four live terminals in a grid and the agents waiting for you, then approvals, WSL, repositories, cloud sandboxes, your own keys, and an agent documenting its work in the Second Brain." width="900">
+  </a><br>
+  <sub>▶ <a href="https://sonixz.github.io/gd-project/agent-manager/">Watch the 48-second film</a>, with sound, on the website. Filmed from the real apps, on a demonstration workspace.</sub>
 </p>
 
 You run several coding agents at once. Agent Manager GD puts them in one window and tells you, at a glance, who is
