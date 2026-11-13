@@ -218,9 +218,10 @@ class RealHistoryTest(unittest.TestCase):
         watch = host_history.Watch(os.path.join(self.tmp, "data", "h.sqlite3"), 1)
         self.sessions.host_watch = watch
         time.sleep(0.5)
-        watch.tick(self.sessions.store.all(), self.tmux.sessions())
+        t0 = int(time.time()) - 2   # its own seconds: WSL's wall clock steps back now and then, two readings could share one
+        watch.tick(self.sessions.store.all(), self.tmux.sessions(), now=t0)
         time.sleep(1.2)
-        got = watch.tick(self.sessions.store.all(), self.tmux.sessions())
+        got = watch.tick(self.sessions.store.all(), self.tmux.sessions(), now=t0 + 1)
         self.assertGreater(got["sessions"][busy["id"]], 0.5)     # a loop that never rests takes about one processor
         self.assertLess(got["sessions"][quiet["id"]], 0.2)
         self.assertGreater(got["engine"]["bytes"], 1_000_000)    # this very test, as the engine
