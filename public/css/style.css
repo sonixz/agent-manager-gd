@@ -489,10 +489,8 @@ p { margin: 0 0 1em; }
    each point (01), or under it (03). A tour lights one at a time; the pointer or the keyboard takes over. */
 .container.wide { max-width: 1380px; }
 .anno { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.3fr) minmax(0, 1fr); gap: clamp(26px, 3.4vw, 52px); align-items: stretch; }
-.anno.below { display: block; }
-.anno-col, .anno-row { list-style: none; margin: 0; padding: 0; }
+.anno-col { list-style: none; margin: 0; padding: 0; }
 .anno-col { display: flex; flex-direction: column; justify-content: space-around; gap: 16px; }
-.anno-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .anno-fig { margin: 0; align-self: center; }
 .anno-card { position: relative; z-index: 3; display: grid; grid-template-columns: auto 1fr; align-content: start; gap: 4px 11px; padding: 14px 16px 13px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; outline: none; transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease, background .3s ease; }
 .anno-n { grid-row: 1 / 4; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-family: var(--mono); font-size: .78rem; font-weight: 700; color: var(--mint); border: 1.5px solid var(--mint); background: var(--bg); transition: background .3s ease, color .3s ease; }
@@ -503,10 +501,8 @@ p { margin: 0 0 1em; }
 .anno-card.on, .anno-card:focus-visible { border-color: var(--mint); background: var(--panel-2); transform: translateY(-2px); box-shadow: 0 14px 36px rgba(0, 0, 0, .35), 0 0 0 3px rgba(143, 227, 239, .12); }
 .anno-card.on .anno-n { background: var(--mint); color: var(--on-accent); }
 .anno-card.on em { color: var(--mint); border-color: rgba(143, 227, 239, .5); }
-.anno-row .anno-card { padding: 11px 13px; }
-.anno-row .anno-card > span:not(.anno-n) { font-size: .83rem; }
 .anno-lines { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: visible; opacity: 0; transition: opacity .8s ease .4s; }
-.anno.in .anno-lines { opacity: 1; }
+.in .anno-lines, .anno.in .anno-lines { opacity: 1; }   /* the block that reveals may be the picture's own, or the viewer around it */
 .anno-lines path { fill: none; stroke: rgba(143, 227, 239, .4); stroke-width: 1.5; transition: stroke .3s ease, stroke-width .3s ease; }
 .anno-lines path.on { stroke: var(--mint); stroke-width: 2.5; filter: drop-shadow(0 0 5px rgba(143, 227, 239, .7)); }
 .hot-wrap { position: relative; }
@@ -518,14 +514,14 @@ p { margin: 0 0 1em; }
 /* the approvals picture has two states: each its own points and cards */
 .viewer [data-tab="1"], .viewer.alt [data-tab="0"] { display: none; }
 .viewer.alt .hot[data-tab="1"] { display: grid; }
-.viewer.alt .anno-card[data-tab="1"] { display: grid; grid-column: 1 / -1; }
+.viewer.alt .anno-card[data-tab="1"] { display: grid; }
 @media (max-width: 1040px) {
   .anno { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
   .anno-fig { grid-column: 1 / -1; order: -1; }
   .anno-lines { display: none; }
   .anno-col { justify-content: flex-start; gap: 12px; }
 }
-@media (max-width: 640px) { .anno { grid-template-columns: 1fr; } .anno-row { grid-template-columns: 1fr; } .hot { width: 20px; height: 20px; margin: -10px 0 0 -10px; font-size: .66rem; } }
+@media (max-width: 640px) { .anno { grid-template-columns: 1fr; } .hot { width: 20px; height: 20px; margin: -10px 0 0 -10px; font-size: .66rem; } }
 
 /* views and themes */
 .viewer-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
@@ -684,7 +680,6 @@ p { margin: 0 0 1em; }
   .stack { padding-bottom: 0; } .stack .screen:first-child { width: 100%; } .stack .stack-2 { position: static; width: 100%; margin-top: 12px; }
   .featnav { top: 57px; }
 }
-#control-room .viewer-bar { margin-bottom: 12px; }
 
 /* ---------------------------------------------------------------- 06 · the built-in MCP: a map, its calls, its tools (js/home.js) */
 .mcp-stage { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 18px; align-items: stretch; }
@@ -802,3 +797,9 @@ p { margin: 0 0 1em; }
 @media (max-width: 900px) { .viewer-cards { grid-template-columns: 1fr; } .readline ul { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .life { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 8px; } .life::before, .life::after { display: none; } .btn-states li { grid-template-columns: 1fr; row-gap: 4px; } }
 @media (prefers-reduced-motion: reduce) { .life::after { display: none; } .life li { transition: none; } }
+
+/* 03 · the control room, full width like 01: its two states above the picture, the states' legend and three facts under it */
+.viewer-bar.centred { justify-content: center; }
+.cr-foot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(20px, 4vw, 48px); align-items: center; max-width: 980px; margin: clamp(30px, 4vw, 48px) auto 0; }
+.cr-foot .legend, .cr-foot .checks { margin: 0; }
+@media (max-width: 760px) { .cr-foot { grid-template-columns: 1fr; } }
