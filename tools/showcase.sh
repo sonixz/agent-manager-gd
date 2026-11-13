@@ -20,6 +20,7 @@ cleanup() {
 trap 'cleanup; vdisplay_stop' EXIT
 godot --headless --path app --import >/dev/null 2>&1 || true
 for step in "${@:-hero}"; do
+  [[ -n "${SHOW_MOVIE:-}" ]] && mkdir -p "$SHOW_MOVIE/$step"
   # each step starts from nothing: a fresh fictional workspace, data folder and tmux server
   cleanup
   ROOT="$(mktemp -d -t agmgd-showcase-XXXX)"
@@ -33,6 +34,7 @@ for step in "${@:-hero}"; do
     AGMGD_DEMO_FLY="$ROOT/data/demo-fly.json" AGMGD_DEMO_FLY_DELAY="${AGMGD_DEMO_FLY_DELAY:-}" \
     AGMGD_VOICE_FAKE="${AGMGD_VOICE_FAKE:-}" AGMGD_VOICE_FAKE_DELAY="${AGMGD_VOICE_FAKE_DELAY:-}" AGMGD_VOICE_FAKE_WHOLE="${AGMGD_VOICE_FAKE_WHOLE:-}" AGMGD_VOICE_FAKE_WHOLE_DELAY="${AGMGD_VOICE_FAKE_WHOLE_DELAY:-}" SHOW_STEP="$step" SHOW_OUT="$OUT" SHOW_HOWTO="${SHOW_HOWTO:-$REPO/public/assets/howto}" SHOW_REPORTS="$REPORTS" \
     godot --display-driver x11 --audio-driver Dummy --rendering-driver opengl3 --resolution "${SHOW_SIZE:-1920x1200}" --path app \
+    ${SHOW_MOVIE:+--write-movie "$SHOW_MOVIE/$step/frame.png" --fixed-fps "${SHOW_FPS:-30}"} \
     --script res://tools_showcase.gd > "$ROOT/godot.log" 2>&1 || true   # a file, not a pipe: the engine outlives Godot
   grep -vE "^Godot Engine|^OpenGL|V-Sync|set_use_vsync|libspeechd|^$" "$ROOT/godot.log" || true
 done
