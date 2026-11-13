@@ -36,6 +36,11 @@ Newest first.
 - The loops: a dot per loop on a line, a filter by theme, a search, the latest six and « Show all »: it holds any
   number of loops.
 - README: the film's poster, linked to the website where it plays with sound.
+- A « Compare » band: « Others » on one row, Agent Manager GD going further on the next (Godot, themes, built-in MCP,
+  Second Brain, sandbox management, BYOK); no product named, no score kept.
+- The hero no longer shows its four figures nor the filming note; the footer says « part of the GD Project », with a
+  link, on the three pages.
+- Docs › Install: « Download the source (zip) » beside the clone, under « Linux, from the source ».
 
 ### Sandboxes: the inventory, always · Loop 38 (first steps)
 - **Bring it to my localhost** no longer takes a port a Windows program already holds (the engine runs in WSL and
