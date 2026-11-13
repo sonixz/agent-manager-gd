@@ -3380,6 +3380,7 @@ func _sandboxes_view() -> Control:
 
 
 var sbx_live: Array = []  # [Label, running_since] pairs ticking every second
+var sbx_image_open := false # what the image holds is shown
 var sbx_tunnels := {}     # a sandbox -> its connection as the engine last told it (state, ports, what listens, how it is doing)
 var sbx_tunnel_boxes := {} # a sandbox -> the box of its « Tunnel and ports » on the page
 var sbx_tunnel_names := {}
@@ -3417,32 +3418,38 @@ func _load_sandboxes() -> void:
 		var need := _wrap("First paste your Fly.io token in Keys (◐ → Keys…).")
 		need.add_theme_color_override("font_color", AmTheme.col("WARN"))
 		sbx_box.add_child(need)
-	# The inventory first, and always: every sandbox made from here, the destroyed ones too, and what Fly.io holds
-	# now. Before, a destroyed sandbox left the page (owner, 2026-11-12: « il faut toujours avoir l'inventaire »).
+	# A dashboard (owner, 2026-11-12: « une interface un peu plus dense »): the tiles across, then two columns. On the
+	# left what one comes for: the sandboxes and their tunnels. On the right what one looks at aside: the inventory,
+	# the size of the next one, the costs, the image. A narrow window puts the right column under the left one.
 	var inv: Dictionary = r.get("inventory", {})
 	if not inv.is_empty():
 		var tiles = RepoWidgets.Tiles.new(SandboxView.tiles(inv))
 		tiles.name = "SandboxTiles"
 		sbx_box.add_child(tiles)
-		sbx_box.add_child(_section_label("Inventory"))
-		var said := _wrap("Every sandbox made from here, the destroyed ones too: when its machine ran over the last %d days, how long in all, and what that cost at Fly.io's published price. Rest the pointer on a line for its dates and its machine." % SandboxView.DAYS)
-		said.add_theme_font_size_override("font_size", 12)
-		sbx_box.add_child(said)
-		if (inv.get("sandboxes", []) as Array).is_empty():
-			sbx_box.add_child(_muted("No sandbox was ever made from here."))
-		else:
-			var zone: Dictionary = Time.get_time_zone_from_system()
-			var life = SandboxWidgets.Life.new(inv, int(zone.get("bias", 0)))
-			life.name = "SandboxLife"
-			sbx_box.add_child(life)
-	# the sandboxes themselves come right under the inventory (their tunnels and ports are what one comes for); the
-	# steps to make one, and the costs, follow
+	var width := maxf(sbx_box.size.x, content.size.x - 30.0)
+	var two := width >= 1300.0
+	var cols: BoxContainer = HBoxContainer.new() if two else VBoxContainer.new()
+	cols.name = "SandboxColumns"
+	cols.add_theme_constant_override("separation", 14)
+	sbx_box.add_child(cols)
+	var left := VBoxContainer.new()
+	left.name = "SandboxLeft"
+	left.add_theme_constant_override("separation", 10)
+	left.size_flags_horizontal = SIZE_EXPAND_FILL
+	left.size_flags_stretch_ratio = 1.3
+	cols.add_child(left)
+	var right := VBoxContainer.new()
+	right.name = "SandboxRight"
+	right.add_theme_constant_override("separation", 10)
+	right.size_flags_horizontal = SIZE_EXPAND_FILL
+	cols.add_child(right)
 	var rows: Array = r.get("sandboxes", [])
 	var alive: Array = rows.filter(func(x): return int(x["destroyed"]) == 0)
-	if not alive.is_empty():
-		sbx_box.add_child(_section_label("Your sandboxes (%d)" % alive.size()))
+	left.add_child(_section_label("Your sandboxes (%d)" % alive.size()))
+	if alive.is_empty():
+		left.add_child(_muted("None runs or is paused. Deploy one on the right; the destroyed ones stay in the inventory."))
 	for sb in alive:
-		sbx_box.add_child(_sandbox_card(sb, r))
+		left.add_child(_sandbox_card(sb, r))
 	var finished: Array = alive.filter(func(x): return int(x["finished"]) == 1)
 	if not finished.is_empty():
 		var fb := _small("Destroy the finished ones (%d)…" % finished.size(), func() -> void:
@@ -3452,10 +3459,25 @@ func _load_sandboxes() -> void:
 				await refresh()
 				await _load_sandboxes()))
 		fb.size_flags_horizontal = SIZE_SHRINK_BEGIN
-		sbx_box.add_child(fb)
-	sbx_box.add_child(_sbx_image_step(r))
-	sbx_box.add_child(_sbx_deploy_step(r))
-	sbx_box.add_child(_sbx_costs(r))
+		left.add_child(fb)
+	if not inv.is_empty():
+		var ih := HBoxContainer.new()
+		ih.add_theme_constant_override("separation", 10)
+		ih.add_child(_section_label("Inventory"))
+		var said := _muted("every sandbox made here, the destroyed ones too · last %d days" % SandboxView.DAYS)
+		said.add_theme_font_size_override("font_size", 11)
+		ih.add_child(said)
+		right.add_child(ih)
+		if (inv.get("sandboxes", []) as Array).is_empty():
+			right.add_child(_muted("No sandbox was ever made from here."))
+		else:
+			var zone: Dictionary = Time.get_time_zone_from_system()
+			var life = SandboxWidgets.Life.new(inv, int(zone.get("bias", 0)))
+			life.name = "SandboxLife"
+			right.add_child(life)
+	right.add_child(_sbx_deploy_step(r))
+	right.add_child(_sbx_costs(r))
+	right.add_child(_sbx_image_step(r))
 	_sbx_orphans(r)
 	# keep the view current while it is shown
 	get_tree().create_timer(30.0).timeout.connect(func() -> void:
@@ -3664,13 +3686,18 @@ func _sbx_image_step(r: Dictionary) -> Control:
 	var info: Dictionary = r.get("image_info", {})
 	var ready := bool(info.get("ready", false))
 	var job: Dictionary = r.get("job", {})
-	var parts := _step_panel("1", "The image: what each sandbox starts from", ready)
+	var parts := _step_panel("1", "The image" if ready else "The image: what each sandbox starts from", ready)
 	var v: VBoxContainer = parts[1]
 	var h: HBoxContainer = parts[2]
 	var st := _muted(("ready · built " + _date(float(info.get("built", 0)))) if ready and float(info.get("built", 0)) > 0 else ("ready" if ready else "not deployed yet"))
 	st.size_flags_horizontal = SIZE_EXPAND_FILL
 	h.add_child(st)
+	if ready:  # once it is ready, the image is one line: what it holds is one click away
+		h.add_child(_small("Contents ▾" if sbx_image_open else "Contents ▸", func() -> void:
+			sbx_image_open = not sbx_image_open
+			_load_sandboxes()))
 	var grid := GridContainer.new()
+	grid.visible = sbx_image_open or not ready
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 18)
 	grid.add_theme_constant_override("v_separation", 4)
@@ -3683,6 +3710,15 @@ func _sbx_image_step(r: Dictionary) -> Control:
 		d.add_theme_font_size_override("font_size", 13)
 		grid.add_child(d)
 	v.add_child(grid)
+	if ready and not sbx_image_open:
+		var keep := _small("Rebuild", func() -> void:
+			_toast("Fly builds the image (about 2 minutes)…")
+			await engine.call_api("POST", "/sandboxes/prepare", {})
+			await _load_sandboxes())
+		keep.disabled = not (r.get("token", false) and r.get("flyctl", false)) or str(job.get("state", "")) == "preparing"
+		keep.tooltip_text = "Builds the image again, with the newest Claude Code and Codex (about 2 minutes)"
+		h.add_child(keep)
+		return parts[0]
 	v.add_child(_muted("We provide it: %s, built by Fly in your organisation's private registry (about 2 minutes, once)." % str(info.get("recipe", "sandbox/Dockerfile"))))
 	if str(job.get("state", "")) == "preparing":
 		v.add_child(_muted("⏳ " + str(job.get("message", "building…"))))
@@ -3806,7 +3842,7 @@ func _budget_panel(r: Dictionary) -> Control:
 	var b: Dictionary = r.get("budget", {})
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	var row := HBoxContainer.new()
+	var row := HFlowContainer.new()  # it wraps in a narrow column
 	row.add_theme_constant_override("separation", 8)
 	row.add_child(_muted("Monthly budget $"))
 	var amt := SpinBox.new()

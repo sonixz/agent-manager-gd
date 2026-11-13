@@ -1182,8 +1182,9 @@ func _run() -> void:
 			await wait(0.4)
 			report.append("ports: « %s » | %s | from inside the sandbox, this computer's program answers: « %s »" % [SandboxView.link_of(main.sbx_tunnels[sbid])["text"],
 				" ; ".join(SandboxView.extra_rows(main.sbx_tunnels[sbid]).map(func(e: Dictionary) -> String: return str(e["words"]).left(70))), "".join(from_inside).strip_edges()])
-			var scroller: ScrollContainer = main.sbx_box.get_parent()
-			scroller.scroll_vertical = int(maxf(0.0, (main.sbx_tunnel_boxes[sbid] as Control).global_position.y - main.sbx_box.global_position.y - 330.0))
+			var left_w: float = (main.sbx_box.find_child("SandboxLeft", true, false) as Control).size.x
+			var right_w: float = (main.sbx_box.find_child("SandboxRight", true, false) as Control).size.x
+			report.append("ports: the page in two columns: left %d px, right %d px, of %d | the page is no wider than its window: %s" % [int(left_w), int(right_w), int(main.sbx_box.size.x), main.sbx_box.get_combined_minimum_size().x <= main.sbx_box.size.x + 1.0])
 			await wait(0.4)
 			await shot("sandbox-ports")
 			# the connection falls (its process is killed): it is said, and it comes back by itself with what it carried

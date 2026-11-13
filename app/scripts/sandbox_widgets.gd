@@ -57,11 +57,21 @@ class Life extends Control:
 				hover = i
 				queue_redraw()
 
+	## Narrow (a column of the dashboard): the state is its sign alone and the size goes to the tooltip.
+	func narrow() -> bool:
+		return size.x < 1000.0
+
+	func state_w() -> float:
+		return 30.0 if narrow() else STATE_W
+
+	func size_w() -> float:
+		return 0.0 if narrow() else SIZE_W
+
 	func name_w() -> float:
-		return clampf(size.x * 0.2, 150.0, 300.0)
+		return clampf(size.x * 0.2, 130.0, 300.0)
 
 	func bar_rect(y: float) -> Rect2:
-		var x := STATE_W + name_w() + SIZE_W
+		var x := state_w() + name_w() + size_w()
 		return Rect2(x, y + ROW / 2.0 - 5.0, maxf(120.0, size.x - x - RAN_W - COST_W - 18.0), 10.0)
 
 	func _draw() -> void:
@@ -70,7 +80,7 @@ class Life extends Control:
 		var faint := AmTheme.col("FAINT")
 		var line := Color(AmTheme.col("BORDER"), 0.55)
 		var bar := bar_rect(0.0)
-		var heads := [[8.0, "State"], [STATE_W, "Sandbox"], [STATE_W + name_w(), "Size, region"]]
+		var heads := [[state_w(), "Sandbox"]] if narrow() else [[8.0, "State"], [STATE_W, "Sandbox"], [STATE_W + name_w(), "Size, region"]]
 		for h in heads:
 			draw_string(font, Vector2(float(h[0]), 18.0), str(h[1]), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, muted)
 		draw_string(font, Vector2(bar.position.x, 18.0), "%d days ago" % SandboxView.DAYS, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, muted)
@@ -100,15 +110,19 @@ class Life extends Control:
 			else:
 				draw_arc(c, 4.5, 0.0, TAU, 20, faint, 1.5, true)
 				draw_line(c + Vector2(-6, 0), c + Vector2(6, 0), faint, 1.5, true)
-			draw_string(font, Vector2(30.0, y + ROW / 2.0 + 5.0), str(st["text"]), HORIZONTAL_ALIGNMENT_LEFT, STATE_W - 36.0, 13, faint if gone else col)
-			draw_string(font if gone else bold, Vector2(STATE_W, y + ROW / 2.0 + 5.0), SandboxView.name_of(row), HORIZONTAL_ALIGNMENT_LEFT, name_w() - 12.0, 13, muted if gone else ink)
-			# its size as a chip, its region beside
+			if not narrow():
+				draw_string(font, Vector2(30.0, y + ROW / 2.0 + 5.0), str(st["text"]), HORIZONTAL_ALIGNMENT_LEFT, STATE_W - 36.0, 13, faint if gone else col)
+			draw_string(font if gone else bold, Vector2(state_w(), y + ROW / 2.0 + 5.0), SandboxView.name_of(row), HORIZONTAL_ALIGNMENT_LEFT, name_w() - 12.0, 13, muted if gone else ink)
+			# its size as a chip, its region beside (when there is room)
 			var words: String = SandboxView.size_words(str(row.get("size", "")))
 			var sx := STATE_W + name_w()
+			if narrow():
+				words = ""
 			var cw := minf(font.get_string_size(words, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 16.0, SIZE_W - 56.0)
-			draw_style_box(AmTheme.box(Color(AmTheme.col("PANEL_2"), 0.5 if gone else 1.0), 6, line, 1, 0), Rect2(sx, y + ROW / 2.0 - 10.0, cw, 20.0))
-			draw_string(font, Vector2(sx + 8.0, y + ROW / 2.0 + 4.0), words, HORIZONTAL_ALIGNMENT_LEFT, cw - 12.0, 11, muted)
-			draw_string(font, Vector2(sx + cw + 8.0, y + ROW / 2.0 + 4.0), str(row.get("region", "")), HORIZONTAL_ALIGNMENT_LEFT, 44.0, 11, faint)
+			if words != "":
+				draw_style_box(AmTheme.box(Color(AmTheme.col("PANEL_2"), 0.5 if gone else 1.0), 6, line, 1, 0), Rect2(sx, y + ROW / 2.0 - 10.0, cw, 20.0))
+				draw_string(font, Vector2(sx + 8.0, y + ROW / 2.0 + 4.0), words, HORIZONTAL_ALIGNMENT_LEFT, cw - 12.0, 11, muted)
+				draw_string(font, Vector2(sx + cw + 8.0, y + ROW / 2.0 + 4.0), str(row.get("region", "")), HORIZONTAL_ALIGNMENT_LEFT, 44.0, 11, faint)
 			# its life over thirty days
 			var b := bar_rect(y)
 			draw_rect(b, Color(AmTheme.col("BORDER"), 0.45))
@@ -233,27 +247,48 @@ class Sizes extends Control:
 			hover = -1
 			queue_redraw())
 
+	## The cards in even rows (6, 3, 2 or 1 a row: never five and a lonely one), each at least 150 px wide.
+	func cols() -> int:
+		var n := maxi(rows.size(), 1)
+		for c in range(n, 0, -1):
+			if n % c == 0 and (size.x - GAP * (c - 1)) / c >= 150.0:
+				return c
+		return 1
+
 	func card_w() -> float:
-		return (size.x - GAP * maxf(rows.size() - 1, 0)) / maxf(rows.size(), 1)
+		return (size.x - GAP * (cols() - 1)) / cols()
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			var lines := int(ceil(rows.size() / float(cols())))
+			custom_minimum_size.y = lines * H + maxf(0.0, lines - 1.0) * GAP
+
+	func cell(i: int) -> Vector2:
+		return Vector2((i % cols()) * (card_w() + GAP), (i / cols()) * (H + GAP))
+
+	func at_point(p: Vector2) -> int:
+		for i in rows.size():
+			if Rect2(cell(i), Vector2(card_w(), H)).has_point(p):
+				return i
+		return -1
 
 	func at(x: float) -> int:
-		var i := int(floor(x / (card_w() + GAP)))
-		return i if i >= 0 and i < rows.size() else -1
+		return at_point(Vector2(x, H / 2.0))
 
 	func _gui_input(e: InputEvent) -> void:
 		if e is InputEventMouseMotion:
-			var i := at(e.position.x)
+			var i := at_point(e.position)
 			if i != hover:
 				hover = i
 				mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if i >= 0 else Control.CURSOR_ARROW
 				queue_redraw()
 		elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
-			var i := at(e.position.x)
+			var i := at_point(e.position)
 			if i >= 0 and str(rows[i]["id"]) != chosen:
 				picked.emit(str(rows[i]["id"]))
 
 	func _get_tooltip(pos: Vector2) -> String:
-		var i := at(pos.x)
+		var i := at_point(pos)
 		if i < 0:
 			return ""
 		var r: Dictionary = rows[i]
@@ -268,9 +303,11 @@ class Sizes extends Control:
 		var w := card_w()
 		for i in rows.size():
 			var r: Dictionary = rows[i]
-			var x := i * (w + GAP)
+			var c := cell(i)
+			var x := c.x
 			var on := str(r["id"]) == chosen
 			var perf := str(r["kind"]) == "performance"
+			draw_set_transform(Vector2(0, c.y))
 			var edge := AmTheme.col("MINT") if on else (AmTheme.col("FOREST_LIGHT") if i == hover else AmTheme.col("BORDER"))
 			draw_style_box(AmTheme.box(AmTheme.col("PANEL_2") if on else AmTheme.col("PANEL"), 10, edge, 2 if on else 1, 0), Rect2(x, 0, w, H))
 			draw_string(font, Vector2(x + 12.0, 20.0), ("✓ " if on else "") + ("performance" if perf else "shared"), HORIZONTAL_ALIGNMENT_LEFT, w - 20.0, 11, AmTheme.col("WARM") if perf else AmTheme.col("MUTED"))
@@ -280,4 +317,5 @@ class Sizes extends Control:
 			var track := Rect2(x + 12.0, H - 9.0, w - 24.0, 3.0)
 			draw_rect(track, Color(AmTheme.col("BORDER"), 0.7))
 			draw_rect(Rect2(track.position, Vector2(track.size.x * float(r["month"]) / maxf(top, 0.01), 3.0)), AmTheme.col("WARM") if perf else AmTheme.col("MINT"))
+		draw_set_transform(Vector2.ZERO)
 
