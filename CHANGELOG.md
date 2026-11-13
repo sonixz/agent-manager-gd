@@ -5,6 +5,14 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Keys, step by step
+- New: a **⚷ Keys** button in the top bar, between WSL and Sandboxes.
+- The Keys page is now three numbered steps, each needed only for what it opens: **1 · Voice dictation** (the OpenAI
+  key, what F8 does with it, where to get one, what it costs), **2 · Cloud sandboxes** (the Fly.io token, the
+  Anthropic key for Claude Code inside a sandbox), **3 · Your projects' secrets, with dotenvx** (how dotenvx keeps a
+  `.env` encrypted, why its private key belongs in the vault rather than in a file of WSL, and what the vault does
+  not do). A step's disc fills with a ✓ when its key is there; a dashed disc is a step you can skip.
+
 ### Secrets for your projects, given session by session · Loop 39
 - New: **Keys › Secrets**. Keep the keys of your projects (an ElevenLabs key, a GitHub token, a dotenvx private key)
   under a name like `ELEVENLABS_API_KEY`, encrypted for your Windows user, never shown again. Each goes only to the

@@ -13,6 +13,7 @@ const SandboxView := preload("res://scripts/sandbox_view.gd")
 const SandboxWidgets := preload("res://scripts/sandbox_widgets.gd")
 const SecretView := preload("res://scripts/secret_view.gd")
 const SecretWidgets := preload("res://scripts/secret_widgets.gd")
+const KeyWidgets := preload("res://scripts/key_widgets.gd")
 const ACT_KEYS := ["working", "approval", "waiting", "done", "idle", "exited", "missing"]
 
 var engine: EngineClient
@@ -325,6 +326,7 @@ func _exit_tree() -> void:
 const SESSION_VIEWS := [["focus", "Focus"], ["grid", "Grid"], ["board", "Board"], ["history", "History"], ["review", "Review"]]
 const MANAGERS := [
 	["setup", "", "", ""],  # the ground: WSL on Windows, the computer on Linux. Its button is alive: see _render_ground_button
+	["keys", "⚷ Keys", "⚷", "Your keys, step by step: the voice (OpenAI), cloud sandboxes (Fly.io), your projects' secrets (dotenvx)"],
 	["sandboxes", "☁ Sandboxes", "☁", "Cloud sandboxes: the manager and their connections"],
 	["repos", "⎇ Repos", "⎇", "Connected repositories and their deploy keys"],
 ]
@@ -4396,23 +4398,15 @@ func _ticked_secrets() -> Array:
 
 
 ## Keys › Secrets (Loop 39): the tiles, a drawn card per secret with what can be done with it, and the form to add one.
-func _load_secrets() -> void:
+func _load_secrets(into: VBoxContainer) -> int:
 	var r := await engine.call_api("GET", "/secrets")
-	if keys_list == null or not is_instance_valid(keys_list):
-		return
-	var t := Label.new()
-	t.text = "Secrets"
-	t.add_theme_font_size_override("font_size", 15)
-	t.add_theme_font_override("font", AmTheme.ui_font(650))
-	keys_list.add_child(t)
-	var intro := _muted("Keys for your projects (an ElevenLabs key, a GitHub token, a dotenvx private key). Each goes only to the sessions you give it to, in its program's environment when it starts: not in a file, not to the other sessions. An agent can read what it is given.")
-	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	keys_list.add_child(intro)
+	if into == null or not is_instance_valid(into):
+		return 0
 	if r.has("error"):
-		keys_list.add_child(_muted(str(r["error"])))
-		return
+		into.add_child(_muted(str(r["error"])))
+		return 0
 	var now := Time.get_unix_time_from_system()
-	keys_list.add_child(RepoWidgets.Tiles.new(SecretView.tiles(r, sessions, now)))
+	into.add_child(RepoWidgets.Tiles.new(SecretView.tiles(r, sessions, now)))
 	var encrypted := str(r.get("protection", "")).begins_with("Windows")
 	for x in r.get("secrets", []):
 		var name := str(x["name"])
@@ -4482,7 +4476,7 @@ func _load_secrets() -> void:
 The sessions given it no longer get it from their next start; a program already running keeps what it had." % name, func() -> void:
 				await engine.call_api("DELETE", "/secrets/" + name)
 				await _load_keys())))
-		keys_list.add_child(card)
+		into.add_child(card)
 	# the form: a name, the value (hidden as it is typed), a note
 	var form := HBoxContainer.new()
 	form.add_theme_constant_override("separation", 8)
@@ -4521,8 +4515,9 @@ The sessions given it no longer get it from their next start; a program already 
 			return
 		_toast("Kept: %s (encrypted). Give it to a session, or tick it in New session." % fname.text)
 		await _load_keys()))
-	keys_list.add_child(form)
-	keys_list.add_child(hint)
+	into.add_child(form)
+	into.add_child(hint)
+	return (r.get("secrets", []) as Array).size()
 
 
 func _keys_view() -> Control:
@@ -4533,13 +4528,48 @@ func _keys_view() -> Control:
 	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_font_override("font", AmTheme.ui_font(650))
 	v.add_child(title)
-	var intro := _muted("Paste your own API keys here. They are encrypted on this computer, never shown again, never written to a log; Agent Manager reads one only when a feature needs it (the voice, cloud sandboxes).")
+	var intro := _muted("Three steps, each one only when you want what it opens. Every key is encrypted on this computer, never shown again, never written to a log, and read only when the feature that needs it runs.")
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(intro)
 	keys_list = VBoxContainer.new()
-	keys_list.add_theme_constant_override("separation", 10)
+	keys_list.add_theme_constant_override("separation", 0)
 	v.add_child(keys_list)
 	return v
+
+
+## One step of the Keys page: the rail (its number, done or waiting) on the left; its title, its pill, what it opens
+## and how to get the key on the right, then its body (the key cards, or the vault).
+func _key_step(n: int, state: String, last: bool, title: String, pill: String, lines: Array, body: Control) -> Control:
+	var row := HBoxContainer.new()
+	row.name = "KeyStep%d" % n
+	row.add_theme_constant_override("separation", 14)
+	row.add_child(KeyWidgets.StepRail.new(n, state, last))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	col.size_flags_horizontal = SIZE_EXPAND_FILL
+	row.add_child(col)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	col.add_child(top)
+	var t := Label.new()
+	t.text = title
+	t.add_theme_font_size_override("font_size", 17)
+	t.add_theme_font_override("font", AmTheme.ui_font(650))
+	top.add_child(t)
+	var p := Label.new()
+	p.text = pill
+	p.add_theme_font_size_override("font_size", 12)
+	p.add_theme_color_override("font_color", AmTheme.col("MINT") if state == "done" else AmTheme.col("FAINT"))
+	top.add_child(p)
+	for line in lines:
+		var l := _muted(str(line))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(l)
+	col.add_child(body)
+	var pad := Control.new()  # room before the next step, the rail's line runs through it
+	pad.custom_minimum_size = Vector2(0, 18)
+	col.add_child(pad)
+	return row
 
 
 func _load_keys() -> void:
@@ -4548,17 +4578,46 @@ func _load_keys() -> void:
 		return
 	for c in keys_list.get_children():
 		c.queue_free()
-	var prot := _muted("Protection: " + str(r.get("protection", "")))
+	var by := {}
+	for k in r["keys"]:
+		by[str(k["name"])] = k
+	var prot := _muted("Protection on this computer: " + str(r.get("protection", "")))
 	prot.add_theme_font_size_override("font_size", 12)
 	keys_list.add_child(prot)
-	await _load_secrets()
-	var api_t := Label.new()
-	api_t.text = "Agent Manager's own API keys"
-	api_t.add_theme_font_size_override("font_size", 15)
-	api_t.add_theme_font_override("font", AmTheme.ui_font(650))
-	keys_list.add_child(api_t)
-	for k in r["keys"]:
-		keys_list.add_child(_key_card(k))
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 10)
+	keys_list.add_child(gap)
+	# 1. the voice: the OpenAI key transcribes what you say
+	var b1 := VBoxContainer.new()
+	if by.has("openai"):
+		b1.add_child(_key_card(by["openai"]))
+	var s1 := KeyWidgets.step_state(by, ["openai"])
+	keys_list.add_child(_key_step(1, s1, false, "Voice dictation", "● ready" if s1 == "done" else "○ the voice waits for this key", [
+		"Hold %s and speak: when you let go, the sound goes to OpenAI with your own key, comes back as text and is written into the session. Hold %s for a voice command instead." % [key_text("dictate"), key_text("command")],
+		"Get a key on platform.openai.com › API keys, then paste it here. Each minute of speech is billed to your OpenAI account. Without it everything else works; only the voice waits. The same key lets Codex work in a cloud sandbox."], b1))
+	# 2. cloud sandboxes: the Fly.io token, and an Anthropic key if Claude Code should work in them
+	var b2 := VBoxContainer.new()
+	b2.add_theme_constant_override("separation", 8)
+	for n in ["fly", "anthropic"]:
+		if by.has(n):
+			b2.add_child(_key_card(by[n]))
+	var s2 := KeyWidgets.step_state(by, ["fly"], true)
+	keys_list.add_child(_key_step(2, s2, false, "Cloud sandboxes", "● ready" if s2 == "done" else "○ only if you want Sandboxes", [
+		"A cloud sandbox is a Fly.io machine for one session, an extension of your localhost: its ports come back to this computer through an SSH tunnel. It runs on your own Fly.io account, billed by Fly.io for the time it runs.",
+		"Make a token in your Fly.io dashboard (Tokens), or with « fly tokens create org », and paste it below. The Anthropic key is for Claude Code inside a sandbox; the OpenAI key from step 1 serves Codex there."], b2))
+	# 3. your projects' secrets, and dotenvx
+	var b3 := VBoxContainer.new()
+	b3.add_theme_constant_override("separation", 10)
+	var kept: int = await _load_secrets(b3)
+	if keys_list == null or not is_instance_valid(keys_list):
+		return
+	keys_list.add_child(_key_step(3, "done" if kept > 0 else "optional", true, "Your projects' secrets, with dotenvx", "an ElevenLabs key, a GitHub token, a dotenvx private key", [
+		"dotenvx keeps a project's .env encrypted: the file can be committed, and only its private key opens it. Keep that private key here as DOTENV_PRIVATE_KEY (or DOTENV_PRIVATE_KEY_PRODUCTION…), give it to a session, and « dotenvx run -- python script.py » works as it is. Agent Manager does not install dotenvx.",
+		"Why here and not in a file: a key in a file of WSL can be read by every agent. A secret kept here is %s and goes only to the sessions you give it to, in their program's environment when it starts: not in a file, not in tmux, not on a command line." % ("encrypted for your Windows user (DPAPI)" if str(r.get("protection", "")).begins_with("Windows") else "protected by its file's permissions only (no Windows here to encrypt it)"),
+		"What it does not do: an agent can read, and print, what it is given. The vault keeps a key from being everywhere; it is not a wall between agents."], b3))
+	var gap2 := Control.new()
+	gap2.custom_minimum_size = Vector2(0, 16)
+	keys_list.add_child(gap2)
 	await _load_brain_keys()
 
 

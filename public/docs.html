@@ -402,7 +402,7 @@
             Brain; hover it for its calls and proposals. The badge is checked every 10 seconds and opens a small panel:
             every session's light, the latest proposals and how they ended. Agent Manager reads these counts from the
             Brain and keeps only titles and numbers, never a key.</li>
-          <li><b>Keys</b>: <b>◐ › Keys</b> lists every Brain key Agent Manager made and what uses it; unused ones can be
+          <li><b>Keys</b>: <b>⚷ Keys</b> lists every Brain key Agent Manager made and what uses it; unused ones can be
             revoked, one by one or all at once, always confirmed.</li>
           <li><b>In the cloud</b>: a sandbox reaches the Brain through its SSH tunnel and the engine, with a secret of its
             own; the Brain's keys never leave your computer.</li>
@@ -587,7 +587,7 @@
           them.</div>
 
         <h2 id="keys">Keys and secrets</h2>
-        <p><b>◐ › Keys</b> holds your own API keys: OpenAI (voice dictation; Codex in sandboxes), Fly.io (sandboxes),
+        <p><b>⚷ Keys</b>, in the top bar between <b>WSL</b> and <b>Sandboxes</b> (or <b>◐ › Keys</b>), lays out three numbered steps, each needed only for what it opens: <b>1 · Voice dictation</b> (the OpenAI key: hold F8, the sound is transcribed with your key), <b>2 · Cloud sandboxes</b> (the Fly.io token, and an Anthropic key for Claude Code inside a sandbox), <b>3 · Your projects' secrets, with dotenvx</b> (the vault below). A step's disc fills with a ✓ when its key is there; a dashed disc is a step you can skip. It holds your own API keys: OpenAI (voice dictation; Codex in sandboxes), Fly.io (sandboxes),
           Anthropic (Claude Code in sandboxes). On Windows each one is encrypted with DPAPI for your Windows user; on
           Linux the file is protected by its permissions (0600), and the screen says so. A key is never shown again,
           never written to a log, and read only when a feature needs it. Below them, the
