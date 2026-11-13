@@ -1302,6 +1302,22 @@ for i in range(600):
 					worst = maxi(worst, now_ms - before)
 					before = now_ms
 				report.append("latency: %s drawn in %d ms; longest frame after it: %d ms" % [v, drawn_us / 1000, worst])
+			# a click on a session that has no terminal yet: the list and the header answer at once, a loader shows
+			var fresh: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Fresh one", "tool": "shell", "cwd": "~", "group": "Orbit API"})
+			await main.refresh()
+			await wait(1.0)
+			var at := Time.get_ticks_msec()
+			main.select(str(fresh["id"]))
+			var header_ms := Time.get_ticks_msec() - at
+			var loader: bool = main.content.get_children().any(func(n: Node) -> bool: return not n.is_queued_for_deletion() and "words" in n)   # the loader (an inner class: its script has no path of its own)
+			var named: bool = main.header_name.text.contains("Fresh one")
+			var shown := -1
+			for i in 300:
+				await process_frame
+				if main.terms.has(str(fresh["id"])) and is_instance_valid(main.terms[str(fresh["id"])]) and main.terms[str(fresh["id"])].is_inside_tree():
+					shown = Time.get_ticks_msec() - at
+					break
+			report.append("latency: a click on a session without a terminal: header named at once: %s (%d ms), a loader meanwhile: %s, the terminal in %d ms" % [named, header_ms, loader, shown])
 			main.set_view("sandboxes")
 			await wait(4.0)
 			var line: Node = main.sbx_box.find_child("Sandbox_a1c4e9f2", true, false)

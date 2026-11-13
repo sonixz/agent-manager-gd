@@ -471,3 +471,31 @@ class Health extends Control:
 		if procs.is_empty():
 			draw_string(font, Vector2(px, py + 40.0), "not read yet", HORIZONTAL_ALIGNMENT_LEFT, pw, 12, AmTheme.col("FAINT"))
 
+
+## A small sign that something is on its way: a turning arc and a few words. Shown at once where a page or a
+## terminal will be, so a click is answered at once even when what it asked for takes a moment.
+class Loading extends Control:
+	var words: String
+	var font: Font
+	var born := 0
+
+	func _init(text: String, height := 120.0) -> void:
+		words = text
+		font = AmTheme.ui_font(400)
+		born = Time.get_ticks_msec()
+		custom_minimum_size = Vector2(0, height)
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		size_flags_vertical = Control.SIZE_EXPAND_FILL
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_process(true)
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		var c := Vector2(size.x / 2.0, minf(size.y / 2.0, 80.0))
+		var a := (Time.get_ticks_msec() - born) * 0.006
+		draw_arc(c, 14.0, 0.0, TAU, 32, Color(AmTheme.col("BORDER"), 0.8), 3.0, true)
+		draw_arc(c, 14.0, a, a + 1.9, 24, AmTheme.col("MINT"), 3.0, true)
+		draw_string(font, Vector2(0, c.y + 40.0), words, HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, AmTheme.col("MUTED"))
+

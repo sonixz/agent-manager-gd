@@ -24,6 +24,10 @@ Newest first.
   the Second Brain when its terminal is closed; the block says who carries it.
 - A sandbox's terminal now checks the sandbox's host key too, against the one remembered at the first connection.
   Before, it accepted any.
+- **A click on a session answers at once.** The list marks it and the header names it straight away; where its
+  terminal will be, a small turning sign says « Opening … » while the terminal starts (a second or two on Windows).
+  Before, nothing moved until the terminal had started. The Sandboxes page shows « Asking Fly.io for your
+  sandboxes… » until its first answer, and the app asks Fly.io once at start, so the page usually opens at once.
 - **The Sandboxes page no longer piles up work.** Every time it was drawn it started a timer of its own that
   asked the engine again thirty seconds later; each click added one more, so eight clicks made ten reloads in
   thirty seconds, each one rebuilding the page. One clock now asks every thirty seconds. And the tunnel block's

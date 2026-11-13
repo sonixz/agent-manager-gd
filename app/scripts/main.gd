@@ -294,6 +294,7 @@ func _ready() -> void:
 	ground_timer.timeout.connect(_ground_poll)
 	add_child(ground_timer)
 	_ground_poll()
+	_load_sandboxes()  # aside, at start: Fly.io is asked once now, so the Sandboxes page shows at once when opened
 	# and the ground itself is read once, aside, a few seconds after the start (on Windows it takes three seconds
 	# of PowerShell): a disk nearly full or a missing program shows on the button without opening its page
 	get_tree().create_timer(5.0).timeout.connect(func() -> void:
@@ -2011,13 +2012,21 @@ func select(id: String) -> void:
 		view = "focus"  # picking a session opens it (Review follows the selected session)
 	if view == "review":
 		review_file = 0
-	await _ensure_terminal(id)
-	_layout_view()
-	if terms.has(id):
-		terms[id].grab_focus()
+	# The click is answered at once: the list marks the session and the header names it; where its terminal will be,
+	# a loader shows while the terminal starts (wsl.exe takes a second or two on Windows). Before, nothing moved
+	# until the terminal had started (owner, 2026-11-12: « Quand je clique les sessions, ça switch pas tout de suite »).
 	tree_sig = ""
 	_render_list()
 	_render_header()
+	var ready: bool = terms.has(id) and is_instance_valid(terms[id]) and terms[id].is_running()
+	if not ready:
+		_layout_view()
+	await _ensure_terminal(id)
+	if selected != id:
+		return  # another session was clicked meanwhile: that one is shown
+	_layout_view()
+	if terms.has(id):
+		terms[id].grab_focus()
 
 
 func _is_session_view(v: String) -> bool:
@@ -2285,6 +2294,8 @@ func _layout_view() -> void:
 			if terms.has(selected) and is_instance_valid(terms[selected]):
 				var frame := _frame(selected, false)
 				content.add_child(frame)
+			elif selected != "":
+				content.add_child(SandboxWidgets.Loading.new("Opening %s…" % str(_session(selected).get("name", "the session"))))
 		"grid":
 			var g := GridContainer.new()
 			g.columns = 1 if grid_ids.size() <= 1 else 2
@@ -3379,6 +3390,8 @@ func _sandboxes_view() -> Control:
 	sbx_box.size_flags_horizontal = SIZE_EXPAND_FILL
 	sbx_box.add_theme_constant_override("separation", 12)
 	scroll.add_child(sbx_box)
+	if sbx_last.is_empty():  # the first answer asks Fly.io: a moment. Something shows at once meanwhile
+		sbx_box.add_child(SandboxWidgets.Loading.new("Asking Fly.io for your sandboxes…", 300.0))
 	return scroll
 
 
