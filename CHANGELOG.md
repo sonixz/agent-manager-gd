@@ -5,6 +5,11 @@ Newest first.
 
 ## Unreleased: alpha
 
+## 0.39.1-alpha · 2026-11-13
+
+Download for Windows: `AgentManagerGD-0.39.1-alpha-win64.zip` on the
+[Releases page](https://github.com/sonixz/agent-manager-gd/releases). It holds everything below this line.
+
 ### Lighter on the processor
 - Fix: the app kept about two cores busy on Windows. The main cause: each call to the engine went through Godot's
   HTTPRequest in thread mode, whose thread loops with a one-microsecond pause while it waits for the answer, so every
