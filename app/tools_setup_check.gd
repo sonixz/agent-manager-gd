@@ -11,6 +11,8 @@ const Probe := preload("res://scripts/setup_probe.gd")
 const View := preload("res://scripts/host_view.gd")
 const Repo := preload("res://scripts/repo_view.gd")
 const Sbx := preload("res://scripts/sandbox_view.gd")
+const Sec := preload("res://scripts/secret_view.gd")
+const SecW := preload("res://scripts/secret_widgets.gd")
 
 var failed := 0
 var passed := 0
@@ -486,6 +488,25 @@ func _sandbox_cases() -> void:
 	inv["at_fly"]["reachable"] = false
 	check("sandboxes: Fly.io not reached is said, and nothing is claimed", Sbx.tiles(inv)[3]["value"] == "?" and Sbx.tiles(inv)[3]["level"] == "warn")
 	check("sandboxes: nothing running says that nothing is billed for running", Sbx.tiles({"sandboxes": [dead], "at_fly": {"reachable": true, "machines": 0, "unknown_here": 0}})[0]["note"].begins_with("none: nothing is billed"))
+	# --- the secrets vault (Loop 39)
+	check("secrets: a name typed freely takes the form of a secret's name", Sec.tidy_name(" elevenlabs api-key ") == "ELEVENLABS_API_KEY" and Sec.tidy_name("gh.token") == "GH_TOKEN")
+	check("secrets: a name that would change how programs run is refused, as the engine does", Sec.name_problem("PATH") != "" and Sec.name_problem("AGMGD_PORT") != "" and Sec.name_problem("1ABC") != "" and Sec.name_problem("GH_TOKEN") == "" and Sec.name_problem("") != "")
+	var snow := 1_800_000_000.0
+	var ssess := [{"id": "a", "name": "Voices", "state": "running", "secrets": ["ELEVENLABS_API_KEY"]}, {"id": "b", "name": "Docs", "state": "missing", "secrets": ["ELEVENLABS_API_KEY", "GH_TOKEN"]}, {"id": "c", "name": "Plain", "state": "running", "secrets": []}]
+	var sheld := Sec.holders("ELEVENLABS_API_KEY", ssess)
+	check("secrets: the sessions holding a secret, running ones first", sheld.map(func(h: Dictionary) -> String: return h["name"]) == ["Voices", "Docs"] and sheld[0]["running"] and Sec.holders("NOBODY", ssess).is_empty())
+	var sjr := [{"name": "GH_TOKEN", "event": "given", "ts": snow - 100.0}, {"name": "GH_TOKEN", "event": "given", "ts": snow - 86400.0 * 2 - 5.0}, {"name": "GH_TOKEN", "event": "added", "ts": snow - 50.0}, {"name": "X_Y", "event": "given", "ts": snow - 10.0}, {"name": "GH_TOKEN", "event": "given", "ts": snow + 30.0}]
+	var sd := Sec.days(sjr, "GH_TOKEN", snow)
+	check("secrets: handed over day by day, today last; another secret, another event do not count; a reading a little ahead (the clock stepped back) is today", sd.size() == 14 and sd[13] == 2 and sd[11] == 1 and sd.reduce(func(a, b): return a + b, 0) == 3)
+	var sdata := {"protection": "Windows DPAPI (encrypted for your Windows user)", "secrets": [{"name": "ELEVENLABS_API_KEY"}, {"name": "GH_TOKEN"}, {"name": "UNUSED_ONE"}], "journal": sjr}
+	var sst := Sec.tiles(sdata, ssess, snow)
+	check("secrets: the tiles say how many, how kept, who holds one, how many lately", sst.map(func(t: Dictionary) -> String: return "%s=%s" % [t["label"], t["value"]]) == ["Secrets kept=3", "Sessions holding one=2", "Given, last 24 hours=3", "Given to no session=1"] and sst[0]["level"] == "ok" and sst[1]["note"] == "1 running")
+	check("secrets: without Windows' encryption the first tile warns", Sec.tiles({"protection": "file permissions only (0600)", "secrets": [{"name": "A_B"}]}, [], snow)[0]["level"] == "warn")
+	check("secrets: a secret's line in words", Sec.words({"last_given": snow - 7200.0, "changed_at": snow - 86400.0 * 3}, sheld, snow) == "given to Voices, Docs · last handed over 2 h ago · value set 3 days ago" and Sec.words({}, [], snow) == "given to no session" and Sec.ago(-50.0) == "just now")
+	check("secrets: New session says who gets what", Sec.session_words([]).begins_with("No secret") and Sec.session_words(["GH_TOKEN"]).contains("Only this session gets GH_TOKEN"))
+	var scard = SecW.Card.new({"name": "GH_TOKEN", "note": "fine-grained"}, sheld, sd, true)
+	check("secrets: a card is drawn for a secret, and says how it is kept when the pointer rests on it", scard.tooltip_text.contains("DPAPI") and scard.custom_minimum_size.y > 0)
+	scard.free()
 	# --- tunnels and ports
 	check("ports: a rate and an amount in words", Sbx.rate(0.2) == "0" and Sbx.rate(850) == "850 B/s" and Sbx.rate(1234) == "1.2 kB/s" and Sbx.rate(3400000) == "3.4 MB/s" and Sbx.amount(0) == "0" and Sbx.amount(512) == "512 B" and Sbx.amount(12345) == "12 kB" and Sbx.amount(3400000) == "3.4 MB" and Sbx.amount(1200000000) == "1.2 GB")
 	var tun := {"state": "open", "ports": [{"remote_port": 8501, "port": 8501, "state": "open", "address": "http://127.0.0.1:8501", "sent": 1200, "received": 250000, "sent_rate": 40.0, "received_rate": 9000.0, "open_now": 2, "label": "dashboard"},
