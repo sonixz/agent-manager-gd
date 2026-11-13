@@ -34,7 +34,21 @@ MemAvailable:     604580 kB
 ---
 Filesystem      1-blocks       Used  Available Capacity Mounted on
 /dev/vdb     8350298112 2147483648 5771362304      28% /
+---
+cpu  1000 0 500 8500 0 0 0 0 0 0
+---
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo:  999999    100    0    0    0     0          0         0   999999    100    0    0    0     0       0          0
+  eth0: 1000000   2000    0    0    0     0          0         0   500000   1000    0    0    0     0       0          0
+---
+    412 streamlit       38.5 182340
+    300 claude           4.5 465788
+     41 sshd             0.0  7400
+---
+2
 """
+LATER = HEALTH.replace("cpu  1000 0 500 8500", "cpu  1600 0 700 9700").replace("eth0: 1000000", "eth0: 1250000").replace("   500000   1000", "   550000   1000")
 
 
 class Page(http.server.BaseHTTPRequestHandler):
@@ -157,6 +171,18 @@ class CarrierTest(unittest.TestCase):
         h = self.carrier.health("sb1")
         self.assertEqual((h["memory_total"], h["load"], h["disk_free"]), (1009636 * 1024, 0.42, 5771362304))
         self.assertGreaterEqual(h["round_trip_ms"], 0)
+        self.assertEqual((h["cpu"], h["rx_rate"]), (None, None))              # one reading cannot tell a rate
+        self.assertEqual([(p["name"], p["cpu"], p["rss"]) for p in h["procs"]][:2], [("streamlit", 38.5, 182340 * 1024), ("claude", 4.5, 465788 * 1024)])
+        self.assertEqual((h["cpus"], h["net_rx"], h["net_tx"]), (2, 1000000, 500000))   # the loopback is not counted
+        with open(os.environ["STANDIN_HEALTH"], "w") as f:
+            f.write(LATER)
+        self.carrier.links["sb1"]["health_prev"]["at"] -= 5.0                # as five seconds later
+        h = self.carrier.health("sb1")
+        self.assertAlmostEqual(h["cpu"], 800 / 2000)                          # 800 busy ticks of 2000
+        self.assertAlmostEqual(h["rx_rate"], 250000 / 5.0, delta=2000)
+        self.assertAlmostEqual(h["tx_rate"], 50000 / 5.0, delta=400)
+        self.assertEqual(len(h["history"]), 1)
+        self.assertEqual(set(h["history"][0]), {"t", "cpu", "mem", "rx", "tx", "load"})
 
     def test_closing_the_connection_closes_what_it_opened(self):
         self.carrier.connect("sb1")

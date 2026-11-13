@@ -359,3 +359,115 @@ class LifeBar extends Control:
 			draw_line(Vector2(ex - 5.0, mid - 5.0), Vector2(ex + 5.0, mid + 5.0), AmTheme.col("TEXT"), 2.0, true)
 			draw_line(Vector2(ex - 5.0, mid + 5.0), Vector2(ex + 5.0, mid - 5.0), AmTheme.col("TEXT"), 2.0, true)
 
+
+## How a running sandbox is doing, like htop: four small charts over the last fifteen minutes (its processors, its
+## memory, its network in and out, its load) with the figure of now on each, and its busiest programs with a bar for
+## the processor each takes and the memory it holds. Each chart's colour says how it is doing: calm, busy (amber),
+## nearly full (red), with a word beside the figure, never the colour alone.
+class Health extends Control:
+	const CH := 92.0
+	const GAP := 10.0
+	var h: Dictionary
+	var font: Font
+	var bold: Font
+
+	func _init(health: Dictionary) -> void:
+		h = health
+		font = AmTheme.ui_font(400)
+		bold = AmTheme.ui_font(650)
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_fit()
+
+	func wide() -> bool:
+		return size.x >= 760.0
+
+	func _fit() -> void:
+		var charts := CH * 2.0 + GAP
+		var procs := 26.0 + 22.0 * maxf((h.get("procs", []) as Array).size(), 1)
+		custom_minimum_size.y = maxf(charts, procs) if wide() else charts + GAP + procs
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			_fit()
+
+	func series(key: String) -> Array:
+		return (h.get("history", []) as Array).map(func(x: Dictionary) -> Variant: return x.get(key))
+
+	## A chart: its title, the figure of now with its word, and the curve (a soft area and a line).
+	func chart(r: Rect2, title: String, figure: String, values: Array, top: float, level: String, second: Array = []) -> void:
+		var col: Color = {"busy": AmTheme.col("WARN"), "full": AmTheme.col("ERROR")}.get(level, AmTheme.col("MINT"))
+		draw_style_box(AmTheme.box(AmTheme.col("PANEL_2"), 8, AmTheme.col("BORDER"), 1, 0), r)
+		draw_string(font, r.position + Vector2(10, 18), title, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20.0, 11, AmTheme.col("MUTED"))
+		var word: String = {"busy": "busy", "full": "nearly full"}.get(level, "")
+		draw_string(bold, r.position + Vector2(10, 40), figure, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20.0, 16, AmTheme.col("TEXT"))
+		if word != "":
+			draw_string(font, r.position + Vector2(r.size.x - 90.0, 18), word, HORIZONTAL_ALIGNMENT_RIGHT, 80.0, 11, col)
+		var plot := Rect2(r.position + Vector2(10, 48), Vector2(r.size.x - 20.0, r.size.y - 56.0))
+		draw_line(Vector2(plot.position.x, plot.end.y), plot.end, Color(AmTheme.col("BORDER"), 0.8), 1.0)
+		for pair in [[values, col], [second, AmTheme.col("INFO")]]:
+			var vals: Array = pair[0]
+			if vals.size() < 2 or top <= 0.0:
+				continue
+			var pts := PackedVector2Array()
+			for i in vals.size():
+				var v: float = 0.0 if vals[i] == null else float(vals[i])
+				pts.append(Vector2(plot.position.x + plot.size.x * i / float(vals.size() - 1), plot.end.y - plot.size.y * clampf(v / top, 0.0, 1.0)))
+			var area := PackedVector2Array(pts)
+			area.append(Vector2(plot.end.x, plot.end.y))
+			area.append(Vector2(plot.position.x, plot.end.y))
+			draw_colored_polygon(area, Color(pair[1], 0.12))
+			draw_polyline(pts, pair[1], 2.0, true)
+		if values.size() < 2:
+			draw_string(font, Vector2(plot.position.x, plot.end.y - 4.0), "the curve starts with the next readings", HORIZONTAL_ALIGNMENT_LEFT, plot.size.x, 10, AmTheme.col("FAINT"))
+
+	func _draw() -> void:
+		var cw := (size.x * (0.6 if wide() else 1.0) - GAP) / 2.0
+		var cpu: Variant = h.get("cpu")
+		var cpu_f := 0.0 if cpu == null else float(cpu)
+		var cpus := int(h.get("cpus", 0))
+		chart(Rect2(0, 0, cw, CH), "Processors%s" % ((" (%d)" % cpus) if cpus > 0 else ""), "…" if cpu == null else "%d %%" % int(round(cpu_f * 100.0)),
+			series("cpu"), 1.0, "full" if cpu_f > 0.9 else ("busy" if cpu_f > 0.6 else ""))
+		var total := float(h.get("memory_total", 0))
+		var used := float(h.get("memory_used", 0))
+		var share := used / total if total > 0.0 else 0.0
+		chart(Rect2(cw + GAP, 0, cw, CH), "Memory", "%s of %s" % [HostView.mem(used), HostView.mem(total)], series("mem"), total,
+			"full" if share > 0.9 else ("busy" if share > 0.75 else ""))
+		var rx: Array = series("rx")
+		var tx: Array = series("tx")
+		var top := 1.0
+		for v in rx + tx:
+			if v != null:
+				top = maxf(top, float(v))
+		var rx_now: Variant = h.get("rx_rate")
+		var tx_now: Variant = h.get("tx_rate")
+		chart(Rect2(0, CH + GAP, cw, CH), "Network: in (green), out (blue)", "…" if rx_now == null else "↓ %s  ↑ %s" % [SandboxView.rate(float(rx_now)), SandboxView.rate(float(tx_now))],
+			rx, HostView.nice(top * 1.15), "", tx)
+		var load := float(h.get("load", 0.0))
+		var ltop := maxf(float(maxi(cpus, 1)), 0.1)
+		for v in series("load"):
+			if v != null:
+				ltop = maxf(ltop, float(v))
+		chart(Rect2(cw + GAP, CH + GAP, cw, CH), "Load (programs wanting a processor)", "%.2f" % load, series("load"), ltop,
+			"full" if cpus > 0 and load > cpus * 1.5 else ("busy" if cpus > 0 and load > cpus else ""))
+		# the busiest programs, like htop
+		var px := size.x * 0.6 + GAP if wide() else 0.0
+		var py := 0.0 if wide() else CH * 2.0 + GAP * 2.0
+		var pw := size.x - px
+		draw_string(font, Vector2(px, py + 14.0), "Busiest programs", HORIZONTAL_ALIGNMENT_LEFT, pw * 0.5, 11, AmTheme.col("MUTED"))
+		draw_string(font, Vector2(px + pw - 150.0, py + 14.0), "processor", HORIZONTAL_ALIGNMENT_LEFT, 70.0, 11, AmTheme.col("MUTED"))
+		draw_string(font, Vector2(px + pw - 70.0, py + 14.0), "memory", HORIZONTAL_ALIGNMENT_RIGHT, 70.0, 11, AmTheme.col("MUTED"))
+		var procs: Array = h.get("procs", [])
+		for i in procs.size():
+			var p: Dictionary = procs[i]
+			var y := py + 26.0 + i * 22.0
+			draw_string(font, Vector2(px, y + 12.0), "%s" % str(p["name"]), HORIZONTAL_ALIGNMENT_LEFT, pw - 170.0, 12, AmTheme.col("TEXT"))
+			var bar := Rect2(px + pw - 150.0, y + 4.0, 60.0, 8.0)
+			draw_rect(bar, Color(AmTheme.col("BORDER"), 0.6))
+			var c := float(p["cpu"]) / (100.0 * maxf(float(cpus), 1.0))
+			draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(c * maxf(float(cpus), 1.0), 0.0, 1.0), bar.size.y)), AmTheme.col("WARN") if float(p["cpu"]) > 80.0 else AmTheme.col("MINT"))
+			draw_string(font, Vector2(bar.end.x + 4.0, y + 12.0), "%d%%" % int(round(float(p["cpu"]))), HORIZONTAL_ALIGNMENT_LEFT, 40.0, 10, AmTheme.col("MUTED"))
+			draw_string(font, Vector2(px + pw - 70.0, y + 12.0), HostView.mem(float(p["rss"])), HORIZONTAL_ALIGNMENT_RIGHT, 70.0, 11, AmTheme.col("MUTED"))
+		if procs.is_empty():
+			draw_string(font, Vector2(px, py + 40.0), "not read yet", HORIZONTAL_ALIGNMENT_LEFT, pw, 12, AmTheme.col("FAINT"))
+

@@ -24,6 +24,9 @@ Newest first.
   the Second Brain when its terminal is closed; the block says who carries it.
 - A sandbox's terminal now checks the sandbox's host key too, against the one remembered at the first connection.
   Before, it accepted any.
+- **A running sandbox's health, like htop**: in its card, four charts over the last fifteen minutes (processors,
+  memory, network in and out, load), each with the figure of now and a word when it is busy or nearly full, and its
+  busiest programs with their processor and memory. Read every five seconds through its lasting connection.
 - **The size of a sandbox is yours to choose**: one card per Fly.io size (shared 1 CPU from 256 MB to 1 GB, shared
   2 CPU with 2 GB, performance 1 and 2 CPU), each with its price a month and an hour and a bar against the dearest.
   The next sandboxes get the one chosen, and the estimate follows. Prices are Fly.io's published ones, read

@@ -81,6 +81,35 @@ def parse_health(text: str) -> dict:
     rows = [x.split() for x in (parts[3] if len(parts) > 3 else "").splitlines()[1:]]
     if rows and len(rows[-1]) >= 4 and rows[-1][1].isdigit() and rows[-1][3].isdigit():
         out["disk_total"], out["disk_free"] = int(rows[-1][1]), int(rows[-1][3])
+    # the processors' time so far (busy, all), from /proc/stat's first line
+    first = (parts[4] if len(parts) > 4 else "").split()
+    if first[:1] == ["cpu"]:
+        n = [int(x) for x in first[1:] if x.isdigit()]
+        if len(n) >= 4:
+            idle = n[3] + (n[4] if len(n) > 4 else 0)
+            out["cpu_busy"], out["cpu_all"] = sum(n) - idle, sum(n)
+    # the bytes in and out of every interface but the loopback, from /proc/net/dev
+    rx = tx = 0
+    for line in (parts[5] if len(parts) > 5 else "").splitlines():
+        name, _, rest = line.partition(":")
+        f = rest.split()
+        if rest and name.strip() != "lo" and len(f) >= 9 and f[0].isdigit() and f[8].isdigit():
+            rx, tx = rx + int(f[0]), tx + int(f[8])
+    out["net_rx"], out["net_tx"] = rx, tx
+    # the busiest programs, as `ps -eo pid=,comm=,pcpu=,rss= --sort=-pcpu` gives them
+    procs = []
+    for line in (parts[6] if len(parts) > 6 else "").splitlines():
+        f = line.split()
+        if len(f) >= 4 and f[0].isdigit() and f[-1].isdigit():
+            try:
+                procs.append({"pid": int(f[0]), "name": " ".join(f[1:-2]), "cpu": float(f[-2]), "rss": int(f[-1]) * 1024})
+            except ValueError:
+                continue
+    out["procs"] = procs[:8]
+    try:
+        out["cpus"] = int((parts[7] if len(parts) > 7 else "").split()[0])
+    except (IndexError, ValueError):
+        out["cpus"] = 0
     return out
 
 
@@ -398,15 +427,39 @@ class Carrier:
         mine = {row.get("there") for row in link["ports"].values() if row["kind"] == "out"}
         return [r for r in rows if r["port"] not in mine]
 
+    HEALTH_KEEP = 180   # readings kept per sandbox: fifteen minutes at one every five seconds
+
     def health(self, sbid: str, workdir: str = "/work") -> dict:
+        """How the sandbox is doing now (one command, through the connection), with what it did lately: the share
+        of its processors that was busy and the bytes in and out per second since the reading before, and the
+        readings of the last fifteen minutes for the curves."""
         link = self._link(sbid)
         began = time.monotonic()
         rc, out, _ = self._run(link, "root@127.0.0.1",
-                               "cat /proc/meminfo; echo ---; cat /proc/loadavg; echo ---; cat /proc/uptime; echo ---; df -B1 -P " + workdir + " 2>/dev/null")
+                               "cat /proc/meminfo; echo ---; cat /proc/loadavg; echo ---; cat /proc/uptime; echo ---; df -B1 -P " + workdir
+                               + " 2>/dev/null; echo ---; head -1 /proc/stat; echo ---; cat /proc/net/dev; echo ---;"
+                               " ps -eo pid=,comm=,pcpu=,rss= --sort=-pcpu | head -8; echo ---; nproc")
         took = time.monotonic() - began
         if rc != 0:
             return {}
-        return {**parse_health(out), "round_trip_ms": round(took * 1000)}
+        h = {**parse_health(out), "round_trip_ms": round(took * 1000)}
+        steady = time.monotonic()
+        before = link.get("health_prev")
+        h["cpu"] = None
+        h["rx_rate"] = h["tx_rate"] = None
+        if before and steady > before["at"]:
+            dt = steady - before["at"]
+            if h.get("cpu_all", 0) > before.get("cpu_all", 0):
+                h["cpu"] = max(0.0, min(1.0, (h["cpu_busy"] - before["cpu_busy"]) / (h["cpu_all"] - before["cpu_all"])))
+            if h["net_rx"] >= before["net_rx"] and h["net_tx"] >= before["net_tx"]:
+                h["rx_rate"], h["tx_rate"] = (h["net_rx"] - before["net_rx"]) / dt, (h["net_tx"] - before["net_tx"]) / dt
+        link["health_prev"] = {"at": steady, "cpu_busy": h.get("cpu_busy", 0), "cpu_all": h.get("cpu_all", 0), "net_rx": h["net_rx"], "net_tx": h["net_tx"]}
+        hist = link.setdefault("health_hist", [])
+        if h["cpu"] is not None and (not hist or steady - hist[-1]["at"] >= 2.0):
+            hist.append({"at": steady, "t": time.time(), "cpu": h["cpu"], "mem": h["memory_used"], "rx": h["rx_rate"], "tx": h["tx_rate"], "load": h["load"]})
+            del hist[:-self.HEALTH_KEEP]
+        h["history"] = [{k: v for k, v in x.items() if k != "at"} for x in hist]
+        return h
 
     def describe(self, sbid: str) -> dict:
         with self.lock:
@@ -437,6 +490,13 @@ class Carrier:
             self.disconnect(sbid, forget_lost=False)
             with self.lock:
                 self.lost[sbid] = {"why": "the connection fell", "tries": 0, "next": time.monotonic() + RETRY[0]}
+        with self.lock:
+            due_health = [sbid for sbid, link in self.links.items() if time.monotonic() - link.get("health_prev", {}).get("at", 0.0) >= 5.0]
+        for sbid in due_health:
+            try:
+                self.health(sbid)
+            except (ValueError, OSError):
+                pass
         with self.lock:
             waiting = [sbid for sbid, link in self.links.items() if link.get("back") and not link["back"]["held"]]
         for sbid in waiting:   # the terminal held the way back: take it over once it is free

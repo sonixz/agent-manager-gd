@@ -3550,12 +3550,17 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 		row.add_theme_constant_override("separation", 18)
 		box.add_child(row)
 		for f in figures:
+			if str(f[0]) in ["Memory", "Load"]:
+				continue  # drawn in the charts below
 			var l := _muted("%s  %s" % [f[0], f[1]])
 			l.add_theme_font_size_override("font_size", 12)
 			if f[2]:
 				l.text = "! " + l.text
 				l.add_theme_color_override("font_color", AmTheme.col("WARN"))
 			row.add_child(l)
+		var health = SandboxWidgets.Health.new(t.get("health", {}))
+		health.name = "Health_" + sbid
+		box.add_child(health)
 	var brain := _muted(SandboxView.brain_words(t))
 	brain.add_theme_font_size_override("font_size", 12)
 	if brain.text != "":

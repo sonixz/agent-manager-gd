@@ -1148,6 +1148,25 @@ func _run() -> void:
 			var hl := FileAccess.open(OS.get_environment("STANDIN_HEALTH"), FileAccess.WRITE)
 			hl.store_string("MemTotal:        1009636 kB\nMemFree:          211208 kB\nMemAvailable:     604580 kB\n---\n0.42 0.31 0.12 1/97 2231\n---\n5123.40 9001.11\n---\nFilesystem      1-blocks       Used  Available Capacity Mounted on\n/dev/vdb     8350298112 2147483648 5771362304      28% /\n")
 			hl.close()
+			# the stand-in sandbox moves: its processors, memory, network and programs change every second, as a
+			# real one at work would (only for the pictures: the reading and the drawing are the real ones)
+			var mover := OS.create_process("python3", ["-c", """
+import math, sys, time
+path = sys.argv[1]
+busy = idle = rx = tx = 0
+for i in range(600):
+    load = 0.35 + 0.3 * math.sin(i / 6.0) + (0.25 if 12 < i % 40 < 22 else 0.0)
+    busy += int(200 * load); idle += int(200 * (1 - load))
+    rx += int(40000 + 30000 * abs(math.sin(i / 4.0))); tx += int(6000 + 4000 * abs(math.cos(i / 5.0)))
+    used = int(380000 + 60000 * math.sin(i / 9.0))
+    text = (f"MemTotal: 1009636 kB\\nMemFree: 211208 kB\\nMemAvailable: {1009636 - used} kB\\n---\\n{load * 2:.2f} 0.31 0.12 1/97 2231\\n---\\n5123.40 9001.11\\n---\\n"
+            "Filesystem 1-blocks Used Available Capacity Mounted on\\n/dev/vdb 8350298112 2147483648 5771362304 28% /\\n---\\n"
+            f"cpu  {busy} 0 0 {idle} 0 0 0 0 0 0\\n---\\n  eth0: {rx} 1 0 0 0 0 0 0 {tx} 1 0 0 0 0 0 0\\n---\\n"
+            f"    412 streamlit       {60 * load:.1f} 182340\\n    300 claude           {12 * load:.1f} 465788\\n    655 python3          3.1  48120\\n     41 sshd             0.0  7400\\n---\\n2\\n")
+    open(path + ".tmp", "w").write(text)
+    import os; os.replace(path + ".tmp", path)
+    time.sleep(1.0)
+""", OS.get_environment("STANDIN_HEALTH")])
 			await main.refresh()
 			main.sbx_open["a1c4e9f2"] = true   # its line unfolded: its card, with its tunnel and ports
 			main.set_view("sandboxes")
@@ -1159,6 +1178,11 @@ func _run() -> void:
 			var seen: Array = SandboxView.port_rows(main.sbx_tunnels.get(sbid, {}))
 			report.append("ports: connected: « %s » | what listens there: %s | how it is doing: %s" % [SandboxView.link_of(main.sbx_tunnels[sbid])["text"],
 				" ; ".join(seen.map(func(x: Dictionary) -> String: return SandboxView.port_words(x))), ", ".join(SandboxView.health_words(main.sbx_tunnels[sbid].get("health", {})).map(func(f: Array) -> String: return "%s %s" % [f[0], f[1]]))])
+			await wait(30.0)   # the curves fill: a reading every few seconds
+			await main._sbx_tunnel_ask(sbid)
+			var hh: Dictionary = main.sbx_tunnels[sbid].get("health", {})
+			report.append("ports: health: %d readings in the curves | processors %s | in %s/s | busiest « %s » | drawn: %s" % [hh.get("history", []).size(), str(hh.get("cpu")), SandboxView.rate(float(hh.get("rx_rate", 0) if hh.get("rx_rate") != null else 0)),
+				str(hh.get("procs", [{}])[0].get("name", "")), main.content.find_child("Health_" + sbid, true, false) != null])
 			await main._sbx_tunnel_do(sbid, "ports/%d/open" % inside, {"label": "streamlit"})
 			await wait(0.5)
 			var brought: Dictionary = SandboxView.port_rows(main.sbx_tunnels[sbid])[0]
@@ -1215,6 +1239,7 @@ func _run() -> void:
 			report.append("ports: disconnected: « %s »" % SandboxView.link_of(main.sbx_tunnels.get(sbid, {}))["text"])
 			OS.kill(fetch)
 			OS.kill(web)
+			OS.kill(mover)
 		"palette":
 			main.select(made["Sparks"])
 			await wait(2.0)
