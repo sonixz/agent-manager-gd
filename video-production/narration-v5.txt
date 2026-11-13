@@ -1,0 +1,10 @@
+# Video V5 narration (English, ElevenLabs voice « Eric »), one line per scene: id | text
+v01 | Meet Agent Manager G.D. Your lab for coding agents.
+v02 | Manage live sessions, approve from one list, and watch what they weigh.
+v03 | Connect repositories, isolate branches, and manage SSH keys.
+v04 | Deploy isolated cloud sandboxes, with the price before you start.
+v05 | Bring their services to your localhost, through one secure tunnel.
+v06 | Your keys. Your logins. Your machine.
+v07 | Connect your agents to a persistent Second Brain: they document their work as they go.
+v08 | An archivist files and links what they learn, under your rules, so the next agent knows.
+v09 | Agent Manager G.D. Your agent lab.

@@ -43,7 +43,7 @@
       <canvas class="hero-matrix" aria-hidden="true"></canvas>
       <div class="hero-grid">
         <div class="hero-copy">
-          <p class="overline">Open source · Local-first · MIT</p>
+          <p class="overline">Open source · Bring your own keys · Local-first · MIT</p>
           <h1>AGENT MANAGER <span class="accent">GD</span></h1>
           <p class="tagline-lab"><span>Your agent lab.</span></p>
           <p class="lead">Claude Code, Codex and your shells, side by side: <b>isolated</b>, <b>observed</b>, <b>in your
@@ -63,20 +63,22 @@
           </ul>
         </div>
         <figure class="screen hero-film">
-          <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Agent Manager GD · the real app, 30 s<span class="bar-right"><button class="film-sound" type="button" aria-pressed="false">🔊 Sound</button><button class="film-pause" type="button" aria-pressed="false">❚❚</button></span></div>
+          <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Agent Manager GD + Second Brain GD · the real apps, 48 s<span class="bar-right"><button class="film-sound" type="button" aria-pressed="false">🔊 Sound</button><button class="film-pause" type="button" aria-pressed="false">❚❚</button></span></div>
           <video class="film" controls muted loop playsinline preload="none" poster="assets/video/showcase-poster.webp"
             width="1920" height="1080" aria-describedby="film-desc">
             <source src="assets/video/showcase.mp4" type="video/mp4">
-            <a href="assets/video/showcase.mp4">Download the 30-second video (MP4, 3.5 MB)</a>.
+            <a href="assets/video/showcase.mp4">Download the 48-second video (MP4, 3.5 MB)</a>.
           </video>
-          <figcaption id="film-desc" class="sr-only">The real Agent Manager GD, filmed on a private virtual display with a
-            demonstration workspace: six agents in Grid and Board, the WSL page with each session's memory, repositories on
-            GitHub and Azure DevOps with their branches, choosing a cloud sandbox with its price, and a running sandbox's
-            tunnel bringing a port to your localhost, with a SOCKS proxy. Fly.io and the sandboxes are stand-ins here:
-            nothing was deployed or billed. English narration, off until you turn the sound on.</figcaption>
+          <figcaption id="film-desc" class="sr-only">The real Agent Manager GD and Second Brain GD, filmed on private virtual
+            displays with a demonstration workspace: agents in Grid and Board, one approved from the list, the WSL page,
+            repositories and their branches, choosing a cloud sandbox with its price, a running sandbox's tunnel to your
+            localhost, Keys › Secrets, then a session started with the Second Brain: the user's own Claude Code edits the
+            project and proposes the decision to a demonstration Second Brain, which shows it waiting for approval; once
+            approved, its archivist files it in Projects › Acme Store, and the item is shown. Fly.io and the sandboxes are
+            stand-ins: nothing was deployed or billed. English narration, off until you turn the sound on.</figcaption>
         </figure>
       </div>
-      <p class="hero-note">Filmed from the real app on a demonstration workspace · Fly.io is a stand-in in the film, nothing was billed</p>
+      <p class="hero-note">Filmed from the real apps on a demonstration workspace · a real Claude Code and a real archivist · Fly.io is a stand-in, nothing was billed</p>
     </section>
 
     <!-- FEATURE INDEX: one tile per feature; the bar below it follows you down the page -->
@@ -93,7 +95,7 @@
           <li><a href="#interface"><span class="fx-n">02</span><span class="fx-i">◧</span><b>A beautiful interface</b><small>Five views, seven themes, our own terminal</small></a></li>
           <li><a href="#control-room"><span class="fx-n">03</span><span class="fx-i">◉</span><b>The control room</b><small>Who works, who waits, who asks</small></a></li>
           <li><a href="#continuity"><span class="fx-n">04</span><span class="fx-i">⟲</span><b>Nothing is lost</b><small>History, resume, fork, review, wrap up</small></a></li>
-          <li><a href="#brain"><span class="fx-n">05</span><span class="fx-i">✦</span><b>Second Brain inside</b><small>One memory for every session</small></a></li>
+          <li><a href="#brain"><span class="fx-n">05</span><span class="fx-i">✦</span><b>Preserve what they learn</b><small>Second Brain, through MCP</small></a></li>
           <li><a href="#mcp"><span class="fx-n">06</span><span class="fx-i">⇄</span><b>Built-in MCP</b><small>Agents pilot agents; the orchestrator</small></a></li>
           <li><a href="#git"><span class="fx-n">07</span><span class="fx-i">⎇</span><b>Repos and keys</b><small>One key per repository, branches mapped</small></a></li>
           <li><a href="#machine"><span class="fx-n">08</span><span class="fx-i">▦</span><b>Your machine, in sight</b><small>WSL memory, by session, over time</small></a></li>
@@ -255,9 +257,10 @@
       <div class="container">
         <div class="section-head center reveal">
           <p class="feat-num">05 · Better together</p>
-          <h2>Your Second Brain, in every session</h2>
-          <p>Agents forget everything when their window closes. Agent Manager wires each one to <b>Second Brain GD</b>, its
-            companion app, so what one agent learns, the next one knows, and so do you.</p>
+          <h2>Build with agents. Preserve what they learn.</h2>
+          <p>Agents forget everything when their window closes. Agent Manager connects each one to <b>Second Brain GD</b>,
+            a separate app of the GD projects, through MCP: the agent reads the project's memory and proposes what it learned,
+            and the Brain's archivist files it, under your rules and with your OK. The next agent knows, and so do you.</p>
         </div>
 
         <div class="together reveal">
@@ -529,6 +532,7 @@
               <a href="https://github.com/sonixz/agent-manager-gd/blob/main/AI-NOTICE.md" rel="noopener">The AI notice →</a></p>
           </div>
           <ul class="principles-list">
+            <li><b>Bring your own keys</b><span>Your agents run with your own login; the voice, the cloud and your projects use your own keys, encrypted here. No account, no middleman.</span></li>
             <li><b>Local-first</b><span>Nothing leaves your computer unless you ask.</span></li>
             <li><b>Your own agents</b><span>Claude Code and Codex as you installed them, with your login.</span></li>
             <li><b>No admin, no surprises</b><span>Installs for your user; third-party binaries only with your OK, pinned and checked.</span></li>

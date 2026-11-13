@@ -1551,6 +1551,140 @@ for i in range(600):
 			await wait(1.0)
 			await main.engine.call_api("POST", "/sandboxes/size", {"size": "shared-cpu-1x-1024"})
 			_mark("end")
+		"film-brain":  # video V5: New session with the Second Brain, the REAL Claude Code (SHOWCASE_REAL_AGENT) documents its work to a real demo Second Brain (SHOW_BRAIN_HOME), approvals from the list
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			await main.refresh_brain()
+			await wait(1.5)
+			_mark("start")
+			await main._open_new("", "claude")
+			await wait(0.8)
+			main.f_name.text = "Gift cards"
+			main.f_cwd.text = "~/code/acme-store"
+			main.f_brain.button_pressed = true
+			main.f_document.button_pressed = true
+			main.f_remote.button_pressed = false   # nothing goes to a Claude account's Remote Control from a demo
+			await wait(1.2)
+			_mark("dialog", main.new_dialog)
+			var before := {}
+			for s in main.sessions:
+				before[str(s["id"])] = true
+			main.new_dialog.get_ok_button().pressed.emit()
+			var sid := ""
+			for i in 80:
+				await wait(0.1)
+				await main.refresh()
+				for s in main.sessions:
+					if not before.has(str(s["id"])):
+						sid = str(s["id"])
+				if sid != "":
+					break
+			_map(sid, "real")
+			report.append("film-brain: session %s" % sid)
+			main.select(sid)
+			# a folder Claude Code has not seen asks to be trusted first, with « No, exit » highlighted: Down, Enter
+			for i in 60:
+				await wait(0.5)
+				var pv: Dictionary = await main.engine.call_api("GET", "/sessions/%s/preview?lines=40" % sid)
+				var txt := str(pv.get("text", ""))
+				if txt.contains("trust this folder"):
+					await main.engine.call_api("POST", "/sessions/%s/keys" % sid, {"keys": ["Down", "Enter"]})
+					await wait(2.0)
+					break
+				if txt.contains("? for shortcuts") or txt.contains("for shortcuts"):
+					break
+			await wait(3.0)
+			_mark("ready")
+			var pv0: Dictionary = await main.engine.call_api("GET", "/sessions/%s/preview?lines=30" % sid)
+			report.append("film-brain: screen at ready:\n" + str(pv0.get("text", "")))
+			await main.engine.call_api("POST", "/sessions/%s/send" % sid, {"text": "In README.md, add a short « Gift cards » section: a gift card never pays more than its balance, and what is left stays on the card. Then propose this decision to the Second Brain (propose_item) with your reason, and stop."})
+			_mark("sent")
+			var approvals := 0
+			var proposed := false
+			for i in int(OS.get_environment("FILM_WAIT") if OS.get_environment("FILM_WAIT") != "" else "600"):
+				await wait(0.5)
+				await main.refresh()
+				var s: Dictionary = main._session(sid)
+				var act := str(s.get("activity", ""))
+				if act == "approval":
+					var ap := _find_button(main.queue_box, "Approve")
+					await wait(1.2)
+					if ap:
+						approvals += 1
+						_mark("approve-%d" % approvals, ap)
+						ap.pressed.emit()
+						await wait(1.5)
+				var pv2: Dictionary = await main.engine.call_api("GET", "/sessions/%s/preview?lines=60" % sid)
+				if not proposed and (str(pv2.get("text", "")).contains("propose_item (MCP)") or (i > 4 and str(pv2.get("text", "")).contains("Called second-brain"))):
+					proposed = true
+					_mark("propose")
+				if (act == "done" or (proposed and act in ["ready", "idle"])) and i > 20:
+					break
+				if i % 40 == 39:
+					report.append("film-brain: t=%ds activity=%s\n%s" % [i / 2, act, str(pv2.get("text", "")).right(1500)])
+			_mark("done")
+			var pv3: Dictionary = await main.engine.call_api("GET", "/sessions/%s/preview?lines=80" % sid)
+			report.append("film-brain: screen at done (%s):\n%s" % [str(main._session(sid).get("activity", "")), str(pv3.get("text", ""))])
+			await wait(2.0)
+			await main.refresh_brain()
+			await main._show_brain_panel()
+			await wait(3.0)
+			_mark("panel")
+			await wait(2.0)
+			main._toggle_brain_panel()
+			_mark("end")
+		"film-approvals":  # video V5: an agent waits for an OK, its question in its terminal, Approve from the list
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			await wait(2.5)
+			_mark("start")
+			await wait(1.0)
+			main.select(made["Flaky tests"])
+			await wait(1.8)
+			_mark("wait", main.queue_box)
+			await wait(2.2)
+			var fa := _find_button(main.queue_box, "Approve")
+			_mark("approve", fa)
+			if fa:
+				fa.pressed.emit()
+			await wait(2.5)
+			_mark("end")
+		"film-keys":  # video V5: Keys › Secrets with demonstration secrets (made-up values, a made-up journal of handovers)
+			var gk := {"ELEVENLABS_API_KEY": ["Sparks"], "GITHUB_TOKEN": ["Checkout flow", "Flaky tests"], "DOTENV_PRIVATE_KEY": ["Rate limiter"], "STRIPE_TEST_KEY": []}
+			var nk := {"ELEVENLABS_API_KEY": "voice for the demo video", "GITHUB_TOKEN": "read-only, acme-store", "DOTENV_PRIVATE_KEY": "orbit-api's .env.keys", "STRIPE_TEST_KEY": "test mode only"}
+			for name in gk:
+				await main.engine.call_api("POST", "/secrets", {"name": name, "value": "demo-%s-not-a-real-key" % name.to_lower(), "note": nk[name]})
+			for name in gk:
+				for who in gk[name]:
+					var hk: Array = (main._session(made[who]).get("secrets", []) as Array).duplicate()
+					hk.append(name)
+					await main.engine.call_api("POST", "/sessions/%s/secrets" % made[who], {"names": hk})
+			var jk := FileAccess.open(OS.get_environment("AGMGD_HOME").path_join("keys/secrets/journal.jsonl"), FileAccess.READ_WRITE)
+			if jk != null:
+				jk.seek_end()
+				var nowk := Time.get_unix_time_from_system()
+				var rk := RandomNumberGenerator.new()
+				rk.seed = 39
+				var lk := []
+				for name in gk:
+					for who in gk[name]:
+						for day in 14:
+							for k in rk.randi_range(0, 1 if day > 2 else 2):
+								lk.append({"ts": nowk - day * 86400 - rk.randi_range(600, 80000), "name": name, "event": "given", "sid": made[who], "session": who})
+				lk.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["ts"]) < float(b["ts"]))
+				for e in lk.slice(maxi(0, lk.size() - 46)):
+					jk.store_line(JSON.stringify(e))
+				jk.close()
+			await main.refresh()
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			await wait(2.0)
+			_mark("before")
+			main.set_view("keys")
+			await wait(1.5)
+			_mark("page", main.keys_list)
+			await wait(4.0)
+			_mark("end")
 		"film-tunnel":  # a running sandbox's health, its tunnel: a port brought to localhost, a SOCKS proxy, a way back (stand-ins for Fly.io, ssh and the sandbox; the relay is the real one)
 			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
 			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})

@@ -33,14 +33,16 @@ for step in "${@:-hero}"; do
   cleanup
   ROOT="$(mktemp -d -t agmgd-showcase-XXXX)"
   DEV_HOME="$(tools/showcase/make_workspace.sh "$ROOT")"
-  python3 tools/showcase/fake_brain.py "$ROOT/brain" "$ROOT/brain-repo" 18792 &
+  # SHOW_BRAIN_HOME / SHOW_BRAIN_REPO: a real Second Brain to use instead of the stand-in (the video V5: a demo copy, never the owner's)
+  BRAIN_HOME="${SHOW_BRAIN_HOME:-$ROOT/brain}"; BRAIN_REPO="${SHOW_BRAIN_REPO:-$ROOT/brain-repo}"
+  [[ -z "${SHOW_BRAIN_HOME:-}" ]] && python3 tools/showcase/fake_brain.py "$ROOT/brain" "$ROOT/brain-repo" 18792 &
   env -i PATH="$REPO/tools/showcase/bin:/usr/local/bin:/usr/bin:/bin:$(dirname "$(command -v godot)")" \
     HOME="$DEV_HOME" USER=dev LANG=C.UTF-8 TERM=xterm-256color DISPLAY="$VDISPLAY" \
     SHOWCASE_SCENES="$REPO/tools/showcase/scenes" SHOWCASE_MAP="$ROOT/map" SHOWCASE_REMOTES="$ROOT/remote" \
-    AGMGD_HOME="$ROOT/data" AGMGD_PORT=18791 AGMGD_TMUX_SOCKET=agmgd-showcase AGMGD_BRAIN_HOME="$ROOT/brain" AGMGD_BRAIN_REPO="$ROOT/brain-repo" AGMGD_KEYS_PLAIN=1 AGMGD_HOST_SAMPLE=2 \
+    AGMGD_HOME="$ROOT/data" AGMGD_PORT=18791 AGMGD_TMUX_SOCKET=agmgd-showcase AGMGD_BRAIN_HOME="$BRAIN_HOME" AGMGD_BRAIN_REPO="$BRAIN_REPO" SHOWCASE_REAL_AGENT="${SHOWCASE_REAL_AGENT:-}" SHOWCASE_REAL_HOME="${SHOWCASE_REAL_HOME:-}" SHOWCASE_SBGD_HOME="${SHOW_BRAIN_HOME:-}" AGMGD_KEYS_PLAIN=1 AGMGD_HOST_SAMPLE=2 \
     AGMGD_CARRIER_SSH="$REPO/tests/python/standins/ssh" AGMGD_FLYCTL="$REPO/tests/python/standins/flyctl" STANDIN_SS="$ROOT/ss.txt" STANDIN_HEALTH="$ROOT/health.txt" STANDIN_HOST_KEY=key-one \
     AGMGD_DEMO_FLY="$ROOT/data/demo-fly.json" AGMGD_DEMO_FLY_DELAY="${AGMGD_DEMO_FLY_DELAY:-}" \
-    AGMGD_VOICE_FAKE="${AGMGD_VOICE_FAKE:-}" AGMGD_VOICE_FAKE_DELAY="${AGMGD_VOICE_FAKE_DELAY:-}" AGMGD_VOICE_FAKE_WHOLE="${AGMGD_VOICE_FAKE_WHOLE:-}" AGMGD_VOICE_FAKE_WHOLE_DELAY="${AGMGD_VOICE_FAKE_WHOLE_DELAY:-}" SHOW_STEP="$step" SHOW_OUT="$OUT" SHOW_HOWTO="${SHOW_HOWTO:-$REPO/public/assets/howto}" SHOW_REPORTS="$REPORTS" \
+    AGMGD_VOICE_FAKE="${AGMGD_VOICE_FAKE:-}" AGMGD_VOICE_FAKE_DELAY="${AGMGD_VOICE_FAKE_DELAY:-}" AGMGD_VOICE_FAKE_WHOLE="${AGMGD_VOICE_FAKE_WHOLE:-}" AGMGD_VOICE_FAKE_WHOLE_DELAY="${AGMGD_VOICE_FAKE_WHOLE_DELAY:-}" FILM_WAIT="${FILM_WAIT:-}" SHOW_STEP="$step" SHOW_OUT="$OUT" SHOW_HOWTO="${SHOW_HOWTO:-$REPO/public/assets/howto}" SHOW_REPORTS="$REPORTS" \
     godot --display-driver x11 --audio-driver Dummy --rendering-driver opengl3 --resolution "${SHOW_SIZE:-1920x1200}" --path app \
     ${SHOW_MOVIE:+--write-movie "$SHOW_MOVIE/$step/frame.png" --fixed-fps "${SHOW_FPS:-30}"} \
     --script res://tools_showcase.gd > "$ROOT/godot.log" 2>&1 || true   # a file, not a pipe: the engine outlives Godot

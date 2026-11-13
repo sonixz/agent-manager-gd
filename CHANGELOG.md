@@ -18,11 +18,13 @@ Newest first.
   a wall between agents.
 
 ### Website: « Your agent lab », a new home page
-- The home page opens on a 30-second film of the real app, muted and in a loop, with a **Sound** button that plays
-  it from the start with its English narration: the control room with six agents, the WSL page and each session's
-  memory, repositories and their branches, choosing a cloud sandbox with its price, and a running sandbox's tunnel.
-  Filmed on a private virtual display with the demonstration workspace; Fly.io and the sandboxes are stand-ins there,
-  nothing was deployed. How it is made and remade: `video-production/README.md`.
+- The home page opens on a 48-second film of the real apps, muted and in a loop, with a **Sound** button that plays
+  it from the start with its English narration: the control room, an approval from the list, WSL, repositories,
+  cloud sandboxes and their tunnel, your own keys, then Agent Manager with **Second Brain GD**: a real Claude Code
+  session proposes a decision, the Brain shows it waiting for your approval, its archivist files it in a project.
+  Filmed on private virtual displays with demonstration data; Fly.io and the sandboxes are stand-ins there, nothing
+  was deployed. How it is made and remade: `video-production/README.md`.
+- « Bring your own keys » up front: your agents' own logins, your keys for the voice, the cloud and your projects.
 - Then one section per feature, with new screenshots: launching an agent ready to work (a connected repository and its
   key, its own branch, its rights, the Second Brain, a secret), the views and themes to try in place, the control
   room, continuity, the Second Brain, the built-in MCP server and the orchestrator built on it, repositories, the

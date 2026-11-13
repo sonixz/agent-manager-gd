@@ -16,6 +16,17 @@ for _ in range(150):
         break
     time.sleep(0.1)
 
+# The showcase video V5 only: a session whose map says « real » runs the user's own installed agent CLI, with the
+# user's own home (their login, their config), never read here. Its MCP servers are only the ones Agent Manager gives
+# it (--strict-mcp-config), so nothing reaches the owner's own MCP servers. Off unless SHOWCASE_REAL_AGENT is set.
+if scene == "real" and os.environ.get("SHOWCASE_REAL_AGENT") and os.environ.get("SHOWCASE_REAL_HOME"):
+    # the Brain's relay finds its Brain through SBGD_HOME: always the demo Brain here, never a default location
+    if not os.environ.get("SHOWCASE_SBGD_HOME"):
+        sys.exit("agent-replay: a real agent needs SHOWCASE_SBGD_HOME (the demo Brain)")
+    env = dict(os.environ, HOME=os.environ["SHOWCASE_REAL_HOME"], SBGD_HOME=os.environ["SHOWCASE_SBGD_HOME"])
+    extra = ["--strict-mcp-config"] if tool == "claude" else []
+    os.execve(os.environ["SHOWCASE_REAL_AGENT"], [os.environ["SHOWCASE_REAL_AGENT"]] + sys.argv[2:] + extra, env)
+
 
 def variants(name):
     found = []

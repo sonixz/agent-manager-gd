@@ -86,3 +86,29 @@ ElevenLabs API (voice, music, effects), Edge headless (page check).
 - The film's clock: Godot films slower than real time (about 20 %), so processes outside Godot (the replayed
   terminals, the stand-in readings) move faster in the film than in reality. Nothing on screen depends on it.
 - The website check's 10 MB limit sets the web encode at about 820 kb/s (two passes); the master is kept locally.
+
+# V5 (2026-11-13): Agent Manager GD with Second Brain GD, 48.25 s
+
+**Genuinely executed** (established): a session started from Agent Manager's New session with « Share the Second Brain »
+and « Document this session »; the user's own Claude Code (v2.1.323, Opus 5.5, auto mode) edited README.md of the
+demo project and proposed the decision through the Second Brain's MCP (`propose_item`); the demo Second Brain (a copy
+of Second Brain GD, a temporary home, its showcase Brain) showed « 1 proposals wait for your approval »; its own
+Approve button was pressed by the film script, as the owner would; the real archivist (OpenAI) filed it as « Acme
+Store gift card balance and remainder rule » in Projects › Acme Store, a place it created; the item is shown in the
+graph. Both apps were filmed at the same time; the side-by-side shot uses both films of that moment.
+
+**Illustration, not footage**: the frames around the two apps and the light that travels between them in the side-by-side
+shot; the titles; the closing card.
+
+**Stand-ins** (as in V1): Fly.io, ssh and the sandbox (nothing deployed, nothing billed); the other agents' terminals
+replay recorded screens; Keys › Secrets shows made-up values and a made-up journal of handovers.
+
+**Approvals**: tested before for real (a Claude Code session in « Ask before acting »: Enter approved, Escape refused);
+the film's approval is the app's own Approve button on a replayed agent.
+
+**Limits found**: Second Brain's timeline shows a French line in the English interface (« Avant les changements de… »,
+a restore point's label): left out of the cut, to report to the Second Brain project. A folder Claude Code does not
+trust yet asks first with « No, exit » highlighted and no hook fires: the film step answers it (Down, Enter) off camera.
+
+**Licences**: Agent Manager GD and Second Brain GD are both MIT and public (GitHub, checked 2026-11-13). Audio: ElevenLabs
+(voice Eric, Music, effects) on the owner's account; the plan, and so the commercial use, is still to confirm.

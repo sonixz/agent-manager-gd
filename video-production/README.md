@@ -52,3 +52,21 @@ Four screenshots of the home page are single frames of these films (1920x1080, W
 `film-repos` 520 → `film-repos-metro.webp`, `film-sandbox` 380 → `film-sandbox-size.webp`, `film-tunnel` 1030 →
 `film-tunnel-wire.webp`. `tools/site.sh` does not remake them; after
 a new film, take them again with ffmpeg (`-i frame.png -c:v libwebp -quality 80 out.webp`).
+
+## V5 (48 s): Agent Manager with Second Brain — « Your agent lab »
+
+Storyboard as cut: `storyboard-v5.md`. Narration: `narration-v5.txt`. Audio: `assets/audio/v5/`.
+
+1. Films of Agent Manager (as above, `SHOW_MOVIE=$(pwd)/video-production/captures SHOW_SIZE=1920x1080`): the V1 steps
+   plus `film-approvals` and `film-keys`.
+2. The Second Brain scene, both apps at once: `video-production/scripts/film_v5_brain.sh` (about 15 minutes). It opens
+   a **copy** of Second Brain GD (`scripts/brain_up.sh`: rsync without `.git` and `.env`, a temporary home, its English
+   showcase Brain, the real archivist with the OpenAI key from the Second Brain's `.env` through dotenvx) and films it
+   with `scripts/brain_film.gd`; then Agent Manager's step `film-brain`, where one session runs the user's own Claude
+   Code (`SHOWCASE_REAL_AGENT`, their own home and login, never read; `--strict-mcp-config` and `SBGD_HOME` so it only
+   reaches the demo Brain). Costs: a few hundred Claude tokens and a few OpenAI calls (archivist, search by meaning).
+3. Voice and music (ElevenLabs, through dotenvx): each line of `narration-v5.txt` with `scripts/elevenlabs.py say`
+   (voice Eric), `music assets/audio/v5/music-prompt.txt 50000`, three `sfx` (whoosh, bell, impact).
+4. The cut: `python3 video-production/scripts/compose_v5.py` → `output/agent-manager-showcase-v5.mp4`.
+5. The web encode: `MASTER=output/agent-manager-showcase-v5.mp4 VBR=500k ABR=64k video-production/scripts/render.sh`
+   (3.5 MB, so `public/` stays under 10 MB).
