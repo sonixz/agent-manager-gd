@@ -358,6 +358,24 @@ class SandboxesTest(unittest.TestCase):
             time.sleep(0.02)
         self.assertEqual(asked(), n + 1)
 
+    def test_a_sandbox_session_started_again_reaches_its_sandbox_not_a_shell_here(self):
+        self.s.sandboxes.prepare()
+        for tool in ("shell", "claude"):
+            d = self.s.create("Cloud " + tool, tool, "", host="sandbox")
+            sb = self.s.sandboxes.by_session(d["id"])
+            self.tmux.kill(d["tmux"])                                       # as after WSL was restarted
+            self.assertEqual(self.s.get(d["id"])["state"], "missing")
+            started = []
+            real = self.tmux.new_session
+            self.tmux.new_session = lambda name, cwd, cmd, env=None: (started.append((cwd, cmd)), real(name, cwd, cmd, env=env))[1]
+            try:
+                (self.s.restart if tool == "shell" else self.s.resume)(d["id"])
+            finally:
+                self.tmux.new_session = real
+            cwd, cmd = started[-1]
+            self.assertEqual(cmd[1:], [sessions_mod.SANDBOX_ATTACH, sb["id"]], tool)   # the terminal of the sandbox
+            self.assertNotEqual(cwd, "/work")
+
     def test_the_owner_routes_answer_over_http(self):
         """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
         tok = load_token(self.tmp)

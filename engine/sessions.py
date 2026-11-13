@@ -1050,10 +1050,27 @@ class Sessions:
         self.tmux.run("send-keys", "-t", self.tmux_name(sid), *keys)
         self._answered[sid] = (time.time(), time.monotonic())
 
+    def _in_sandbox(self, d: dict) -> tuple[list[str], str] | None:
+        """For a session that lives in a cloud sandbox: its terminal's command (which reaches the sandbox) and the
+        folder to start it in. Before, starting such a session again (after WSL restarted, or « Resume ») ran the
+        tool here, in a shell of this computer, while the session still said « in a cloud sandbox »."""
+        sb = self.sandboxes.by_session(d["id"]) if d.get("cwd") == "/work" else None
+        if not sb or sb.get("destroyed"):
+            return None
+        return [sys.executable or "python3", SANDBOX_ATTACH, sb["id"]], self.home
+
     def restart(self, sid: str) -> dict:
         """Starts the tool again in the same session (fresh conversation); recreates the tmux session if it is gone."""
         d = self.get(sid)
         cmd = self.command_for(d)
+        there = self._in_sandbox(d)
+        if there:
+            cmd, folder = there
+            if d["state"] == "missing":
+                self.tmux.new_session(d["tmux"], folder, cmd, env=self.session_env(sid))
+            else:
+                self.tmux.respawn(d["tmux"], folder, cmd)
+            return self.get(sid)
         try:
             os.remove(os.path.join(self.home, "state", sid + ".json"))
         except OSError:
@@ -1144,6 +1161,10 @@ class Sessions:
             os.remove(os.path.join(self.home, "state", d["id"] + ".json"))
         except OSError:
             pass
+        there = self._in_sandbox(d)
+        if there:   # its terminal reaches the sandbox, where tmux keeps the agent and its conversation
+            cmd = there[0]
+            d = {**d, "cwd": there[1]}
         if d["state"] in ("missing", "archived") or d["tmux"] not in self.tmux.sessions():
             self.tmux.new_session(d["tmux"], d["cwd"], cmd, env=self.session_env(d["id"]))
         else:

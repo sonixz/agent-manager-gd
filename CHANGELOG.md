@@ -24,6 +24,9 @@ Newest first.
   the Second Brain when its terminal is closed; the block says who carries it.
 - A sandbox's terminal now checks the sandbox's host key too, against the one remembered at the first connection.
   Before, it accepted any.
+- Fixed: a cloud sandbox's session started again (after WSL was restarted, or with Restart or Resume) ran a shell
+  of this computer instead of reaching its cloud sandbox, while it still said « in a cloud sandbox ». It now
+  reaches its cloud sandbox, where tmux kept the agent and its conversation.
 - **A click on a session answers at once.** The list marks it and the header names it straight away; where its
   terminal will be, a small turning sign says « Opening … » while the terminal starts (a second or two on Windows).
   Before, nothing moved until the terminal had started. The Sandboxes page shows « Asking Fly.io for your
