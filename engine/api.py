@@ -105,6 +105,19 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, sessions.keys_store.set(str(b.get("name", "")), str(b.get("value", ""))))
                 if len(parts) == 2 and parts[0] == "keys" and method == "DELETE":
                     return self._reply(200, sessions.keys_store.delete(parts[1]))
+                # the secrets vault (Loop 39): names, notes, dates and the journal; a value goes in, never out
+                if parts == ["secrets"] and method == "GET":
+                    return self._reply(200, sessions.vault.all())
+                if parts == ["secrets"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.vault.set(str(b.get("name", "")), str(b.get("value", "")), str(b.get("note", ""))))
+                if len(parts) == 3 and parts[0] == "secrets" and parts[2] == "note" and method == "POST":
+                    try:
+                        return self._reply(200, sessions.vault.note(parts[1], str(self._body().get("note", ""))))
+                    except KeyError:
+                        return self._reply(404, {"error": "no such secret"})
+                if len(parts) == 2 and parts[0] == "secrets" and method == "DELETE":
+                    return self._reply(200, sessions.vault.delete(parts[1]))
                 if parts == ["voice", "transcribe"] and method == "POST":
                     import base64 as _b64
                     from . import voice

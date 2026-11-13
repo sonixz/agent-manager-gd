@@ -168,6 +168,8 @@ class Sessions:
         from .keys import Keys
         self.repos = Repos(store.path, self.home)
         self.keys_store = Keys(self.home)
+        from .vault import Vault
+        self.vault = Vault(self.home, self.keys_store)   # named secrets, given session by session (Loop 39)
         from .sandboxes import Sandboxes
         self.sandboxes = Sandboxes(store.path, self.home, self.keys_store)
 
