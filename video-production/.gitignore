@@ -1,5 +1,3 @@
-# raw film frames, intermediate renders and generated audio stay out of git (re-made by the scripts)
 captures/
 work/
-output/*.mp4
-!output/agent-manager-showcase-web.mp4
+output/

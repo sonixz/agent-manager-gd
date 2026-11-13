@@ -1379,6 +1379,219 @@ for i in range(600):
 			main.set_view("focus")
 			await wait(2.0)
 			await frames.call("focus, after the sandboxes", 6.0)
+		# ---- the showcase video (video-production/): steps filmed with SHOW_MOVIE, each mark is « mark <name> <frame> [x y w h] »
+		"film-control":  # the control room: six sessions at work, in Grid, then Board, then Focus
+			main.grid_ids = [made["Checkout flow"], made["Flaky tests"], made["Rate limiter"], made["Test runner"]]
+			main.selected = made["Checkout flow"]
+			main.set_view("grid")
+			await wait(2.0)
+			await main.refresh()
+			_mark("grid")
+			await wait(5.0)
+			main.set_view("board")
+			await wait(0.6)
+			await main.refresh()
+			_mark("board")
+			await wait(4.0)
+			main.set_view("focus")
+			main.select(made["Checkout flow"])
+			_mark("focus")
+			await wait(4.0)
+			_mark("end")
+		"film-wsl":  # the computer's page: memory held by WSL and each session, the pointer goes over the bars
+			main.select(made["Checkout flow"])
+			await wait(1.0)
+			var rec := ProjectSettings.globalize_path("res://").path_join("../tools/setup/recorded")
+			var win := FileAccess.get_file_as_string(rec.path_join("windows-en.txt"))
+			var doc := FileAccess.get_file_as_string(rec.path_join("doctor.txt"))
+			main.setup_probe.on_windows = true
+			main.setup_probe.runner = func(a: Array) -> Dictionary:
+				return {"code": 0, "out": win if str(a[0]) == "powershell.exe" else doc}
+			main._setup_read()
+			while main.setup_thread != null:
+				await process_frame
+			await wait(0.6)
+			var moment := int(Time.get_unix_time_from_system())
+			main.setup_host = _made_up_host(moment)
+			main._render_ground_button()
+			await wait(1.0)
+			_mark("focus", main.view_buttons["setup"])
+			await wait(1.5)
+			main.view_buttons["setup"].pressed.emit()
+			while main.setup_thread != null:
+				await process_frame
+			await wait(0.3)
+			main.setup_dash._timer.stop()
+			main.setup_dash.bias = 0
+			main.setup_host = _made_up_host(moment)
+			main.setup_hist = _made_up_hour(moment)
+			main._layout_view()
+			main._render_ground_button()
+			await wait(0.2)
+			_mark("page")
+			await wait(2.0)
+			var chart: Control = null
+			for n in main.content.find_children("*", "Control", true, false):
+				if "hover_seg" in n:
+					chart = n
+			if chart != null:
+				_mark("chart", chart)
+				var r: Rect2 = chart.plot()
+				var steps := 75
+				for i in steps:  # the pointer slides along the bars, a little above their middle
+					var mm := InputEventMouseMotion.new()
+					var x: float = r.position.x + r.size.x * (0.35 + 0.55 * float(i) / steps)
+					var col := int(floor((x - r.position.x) / (r.size.x / maxf(1.0, chart.bars.size()))))
+					var list: Array = chart.pieces(clampi(col, 0, chart.bars.size() - 1))
+					var y: float = r.end.y - 20.0
+					if list.size() > 1:
+						var box: Rect2 = list[1][0]
+						y = box.get_center().y
+					mm.position = Vector2(x, y)
+					chart._gui_input(mm)
+					await process_frame
+				_mark("hovered", chart)
+				await wait(2.0)
+			_mark("end")
+		"film-repos":  # repositories: GitHub and Azure DevOps, keys, branches in worktrees drawn as a metro map
+			var remotes := OS.get_environment("SHOWCASE_REMOTES")
+			OS.execute("git", ["clone", "-q", "--bare", remotes.path_join("acme-store.git"), remotes.path_join("client-portal")])
+			var ids := {}
+			for p in ["acme-store", "orbit-api"]:
+				var r: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/%s.git" % p, "local_path": code.path_join(p)})
+				await main.engine.call_api("POST", "/repos/%s/check" % r["id"], {})
+				ids[p] = str(r["id"])
+			var az: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@ssh.dev.azure.com:v3/acme/Client%20Portal/client-portal", "local_path": ""})
+			await main.engine.call_api("POST", "/repos/%s/check" % az["id"], {})
+			await main.engine.call_api("POST", "/repos", {"url": "git@ssh.dev.azure.com:v3/acme/Back%20Office/billing-api", "local_path": ""})
+			var gh_new: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/pixel-forge.git", "local_path": code.path_join("pixel-forge")})
+			for made_on in [["acme-store", "Gift cards", "claude", true], ["acme-store", "Tax rules", "claude", true], ["acme-store", "A look around", "shell", false], ["orbit-api", "Retry budget", "codex", false]]:
+				await main.engine.call_api("POST", "/sessions", {"name": made_on[1], "tool": made_on[2], "repo": ids[made_on[0]], "group": "Repositories", "brain": false, "worktree": made_on[3]})
+			var first_map: Dictionary = await main.engine.call_api("GET", "/repos/%s/branches" % ids["acme-store"])
+			var commit := func(folder: String, message: String) -> void:
+				if folder != "" and folder.begins_with(code.get_base_dir()) and DirAccess.dir_exists_absolute(folder):
+					OS.execute("git", ["-C", folder, "-c", "user.name=dev", "-c", "user.email=dev@example.com", "commit", "-q", "--allow-empty", "-m", message])
+			for br in first_map.get("branches", []):
+				if str(br["name"]).contains("gift"):
+					for i in 5:
+						commit.call(str(br["worktree"]), "Gift card redemption, step %d" % (i + 1))
+				elif str(br["name"]).contains("tax"):
+					commit.call(str(br["worktree"]), "Tax rules per region")
+			for m in ["Bump the test runner", "Fix a typo in the README"]:
+				commit.call(code.path_join("acme-store"), m)
+			OS.execute("git", ["-C", code.path_join("acme-store"), "branch", "spike/checkout-v2", "HEAD~2"])
+			OS.execute("git", ["-C", code.path_join("acme-store"), "-c", "user.name=dev", "-c", "user.email=dev@example.com", "commit", "-q", "--allow-empty", "-m", "Release notes"])
+			await wait(2.0)
+			await main.refresh()
+			main.repos_open[str(gh_new["id"])] = false
+			main.select(made["Checkout flow"])
+			await wait(1.0)
+			_mark("before", main.view_buttons["repos"])
+			main.view_buttons["repos"].pressed.emit()
+			for i in 60:
+				await wait(0.25)
+				if not main.repos_cache.is_empty() and main.repos_cache.all(func(x: Dictionary) -> bool: return (x["busy"] as Array).is_empty()):
+					break
+			await wait(0.5)
+			_mark("list")
+			await wait(3.0)
+			var name_btn: Button = null
+			for b in main.repos_list.find_children("*", "Button", true, false):
+				if (b as Button).text == "acme-store":
+					name_btn = b
+			name_btn.pressed.emit()
+			for i in 40:
+				await wait(0.25)
+				if main.repos_branches.has(ids["acme-store"]):
+					break
+			await wait(0.3)
+			var row: Control = main.repos_list.find_child("Repo_" + ids["acme-store"], true, false)
+			_mark("unfolded", row)
+			var metro: Control = main.repos_list.find_child("Metro_" + ids["acme-store"], true, false)
+			if metro != null:
+				_mark("metro", metro)
+			await wait(4.0)
+			_mark("end")
+		"film-sandbox":  # cloud sandboxes (Fly.io and the sandboxes are stand-ins: nothing is deployed, nothing is billed)
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
+			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
+			_map(str(a["id"]), "limiter-question")
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), OS.get_environment("AGMGD_HOME"), str(a["id"]), str(b["id"])], [])
+			await main.refresh()
+			main.select(made["Checkout flow"])
+			await wait(1.0)
+			_mark("before", main.view_buttons["sandboxes"])
+			main.view_buttons["sandboxes"].pressed.emit()
+			await wait(1.0)
+			await main._load_sandboxes()
+			await wait(0.5)
+			_mark("page")
+			await wait(2.5)
+			var cards: Control = main.sbx_box.find_child("SandboxSizes", true, false)
+			_mark("sizes", cards)
+			await wait(1.0)
+			cards.picked.emit("shared-cpu-2x-2048")
+			await wait(0.3)
+			_mark("picked", cards)
+			await wait(2.0)
+			var deploy: Button = _find_button(main.content, "Deploy + agentic coding session")
+			if deploy == null:
+				deploy = _find_button(main.content, "☁ Deploy + agentic coding session")
+			_mark("deploy", deploy)
+			await wait(1.0)
+			await main.engine.call_api("POST", "/sandboxes/size", {"size": "shared-cpu-1x-1024"})
+			_mark("end")
+		"film-tunnel":  # a running sandbox's health, its tunnel: a port brought to localhost, a SOCKS proxy, a way back (stand-ins for Fly.io, ssh and the sandbox; the relay is the real one)
+			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
+			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), OS.get_environment("AGMGD_HOME"), str(pa["id"]), str(pb["id"])], [])
+			var site := OS.get_environment("STANDIN_SS").get_base_dir().path_join("dashboard")
+			DirAccess.make_dir_recursive_absolute(site)
+			var page := FileAccess.open(site.path_join("index.html"), FileAccess.WRITE)
+			page.store_string("<title>Sales, this week</title><h1>Sales, this week</h1>" + "<p>a line of the dashboard</p>".repeat(300))
+			page.close()
+			var inside := 18501
+			var web := OS.create_process("python3", ["-m", "http.server", str(inside), "--bind", "127.0.0.1", "--directory", site])
+			var ss := FileAccess.open(OS.get_environment("STANDIN_SS"), FileAccess.WRITE)
+			ss.store_string("LISTEN 0 128 0.0.0.0:2222 0.0.0.0:* users:((\"sshd\",pid=41,fd=3))\nLISTEN 0 5 127.0.0.1:8765 0.0.0.0:* users:((\"sshd\",pid=77,fd=9))\nLISTEN 0 511 0.0.0.0:%d 0.0.0.0:* users:((\"streamlit\",pid=412,fd=6))\nLISTEN 0 5 127.0.0.1:8000 0.0.0.0:* users:((\"python3\",pid=500,fd=3))\n" % inside)
+			ss.close()
+			var mover := OS.create_process("python3", [ProjectSettings.globalize_path("res://").path_join("../video-production/scripts/standin_health.py"), OS.get_environment("STANDIN_HEALTH")])
+			await wait(1.0)
+			await main.refresh()
+			main.sbx_open["a1c4e9f2"] = true
+			main.set_view("sandboxes")
+			await wait(2.0)
+			var sbid := "a1c4e9f2"
+			await main._sbx_tunnel_do(sbid, "tunnel/connect")
+			await wait(12.0)   # the curves fill (game seconds; the stand-in moves in real seconds)
+			await main._sbx_tunnel_ask(sbid)
+			await wait(0.5)
+			_mark("health", main.content.find_child("Health_" + sbid, true, false))
+			await wait(3.0)
+			await main._sbx_tunnel_do(sbid, "ports/%d/open" % inside, {"label": "streamlit"})
+			await wait(0.5)
+			var brought: Dictionary = SandboxView.port_rows(main.sbx_tunnels[sbid])[0]
+			var fetch := OS.create_process("python3", ["-c", "import time, urllib.request\nfor i in range(400):\n    urllib.request.urlopen('%s/', timeout=5).read()\n    time.sleep(0.15)\n" % str(brought["address"])])
+			await wait(1.0)
+			await main._sbx_tunnel_ask(sbid)
+			_mark("port", main.sbx_tunnel_boxes.get(sbid))
+			await wait(2.5)
+			await main._sbx_tunnel_do(sbid, "socks/open")
+			var service := OS.create_process("python3", ["-m", "http.server", "18600", "--bind", "127.0.0.1", "--directory", site])
+			await wait(0.6)
+			await main.engine.call_api("POST", "/sandboxes/%s/back/18600/open" % sbid, {"there": 18601, "label": "my local service"})
+			await main._sbx_tunnel_ask(sbid)
+			await wait(0.4)
+			_mark("socks", main.sbx_tunnel_boxes.get(sbid))
+			var wire: Control = main.content.find_child("Wire_" + sbid, true, false)
+			if wire != null:
+				_mark("wire", wire)
+			for i in 10:
+				await wait(0.5)
+				await main._sbx_tunnel_ask(sbid)
+			_mark("end")
+			for pid in [fetch, web, mover, service]:
+				OS.kill(pid)
 		"palette":
 			main.select(made["Sparks"])
 			await wait(2.0)
@@ -2054,3 +2267,13 @@ func _made_up_week(now: int) -> Dictionary:
 		_made_up_series("j", "Onboarding", n, read, first + 5 * 86400, first + 6 * 86400, daily.call(240.0, [3])),
 		_made_up_series("k", "Changelog", n, read, first + 5 * 86400 + 3600, first + 6 * 86400, daily.call(120.0, [3]))]
 	return _made_up_span("7d", now, read, sessions, marks)
+
+
+## A mark for the showcase video's cutting: the frame drawn now, and where a node is on the screen (video-production/).
+func _mark(name: String, node: Variant = null) -> void:
+	var line := "mark %s %d" % [name, Engine.get_frames_drawn()]
+	if node is Control and is_instance_valid(node):
+		var r: Rect2 = (node as Control).get_global_rect()
+		line += " %d %d %d %d" % [int(r.position.x), int(r.position.y), int(r.size.x), int(r.size.y)]
+	report.append(line)
+	print(line)

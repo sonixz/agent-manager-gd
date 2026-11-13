@@ -1,0 +1,7 @@
+# One line per scene: <id>|<spoken text>. "G.D." is written with dots so the voice says the two letters.
+01-intro|Meet Agent Manager G.D. One control room for your coding agents.
+02-sessions|Manage live sessions, monitor activity, and track usage.
+03-repos|Connect repositories, isolate branches, and manage SSH keys.
+04-sandboxes|Deploy isolated cloud sandboxes, with costs in sight.
+05-bridge|Bridge cloud environments and local development workflows.
+06-close|Agent Manager G.D. Built for AI Builders.
