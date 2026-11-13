@@ -8,9 +8,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ "${1:-}" != "--check" ]]; then
   # the home page's screenshots, then one run per How-to guide
-  tools/showcase.sh hero new-session agents repos brain-keys brain-visible orchestrator permissions-overview review voice sandboxes palette
+  tools/showcase.sh hero keys-secrets agents repos brain-visible orchestrator permissions-overview review voice sandboxes palette
   tools/showcase.sh $(python3 tools/howto/guides.py --ids | tr ' ' '\n' | sed 's/^/howto-/')
   python3 tools/howto/build_page.py
+  # a step makes a few pictures for checks; the ones no page shows are not published (the site's weight)
+  for f in public/assets/showcase/*.webp; do grep -q "showcase/$(basename "$f")" public/*.html || rm -f "$f"; done
 fi
 fail=0
 echo "== every How-to step has its screenshot"

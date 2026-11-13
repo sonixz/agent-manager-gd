@@ -17,12 +17,19 @@ Newest first.
 - Said plainly: an agent can read a secret it is given. The vault keeps a key from being everywhere in WSL; it is not
   a wall between agents.
 
-### Website: the showcase video
-- The home page opens with a 30-second video of the real app, narrated in English: the control room with six agents,
-  the WSL page and each session's memory, repositories and their branches, choosing a cloud sandbox with its price,
-  and a running sandbox's tunnel bringing a port to your localhost. « Built for AI Builders. » and the MIT licence
-  sit with it. Filmed on a private virtual display with the demonstration workspace; Fly.io and the sandboxes are
-  stand-ins there, nothing was deployed. How it is made and remade: `video-production/README.md`.
+### Website: « Your agent lab », a new home page
+- The home page opens on a 30-second film of the real app, muted and in a loop, with a **Sound** button that plays
+  it from the start with its English narration: the control room with six agents, the WSL page and each session's
+  memory, repositories and their branches, choosing a cloud sandbox with its price, and a running sandbox's tunnel.
+  Filmed on a private virtual display with the demonstration workspace; Fly.io and the sandboxes are stand-ins there,
+  nothing was deployed. How it is made and remade: `video-production/README.md`.
+- Then one section per feature, with new screenshots: launching an agent ready to work (a connected repository and its
+  key, its own branch, its rights, the Second Brain, a secret), the views and themes to try in place, the control
+  room, continuity, the Second Brain, the built-in MCP server and the orchestrator built on it, repositories, the
+  machine and WSL, cloud sandboxes and their tunnel, voice, and keys, secrets and safety (Keys › Secrets, Loop 39).
+  Points on a screenshot show what matters, a loupe enlarges a detail, a bar follows you down the page.
+- The loops: a dot per loop on a line, a filter by theme, a search, the latest six and « Show all »: it holds any
+  number of loops.
 
 ### Sandboxes: the inventory, always · Loop 38 (first steps)
 - **Bring it to my localhost** no longer takes a port a Windows program already holds (the engine runs in WSL and

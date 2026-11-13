@@ -1592,6 +1592,60 @@ for i in range(600):
 			_mark("end")
 			for pid in [fetch, web, mover, service]:
 				OS.kill(pid)
+		"keys-secrets":  # Loop 39: Keys › Secrets. Demonstration secrets (made-up values, never real keys) and a made-up journal of handovers over fourteen days
+			var given := {"ELEVENLABS_API_KEY": ["Sparks"], "GITHUB_TOKEN": ["Checkout flow", "Flaky tests"], "DOTENV_PRIVATE_KEY": ["Rate limiter"], "STRIPE_TEST_KEY": []}
+			var notes := {"ELEVENLABS_API_KEY": "voice for the demo video", "GITHUB_TOKEN": "read-only, acme-store", "DOTENV_PRIVATE_KEY": "orbit-api's .env.keys", "STRIPE_TEST_KEY": "test mode only"}
+			for name in given:
+				await main.engine.call_api("POST", "/secrets", {"name": name, "value": "demo-%s-not-a-real-key" % name.to_lower(), "note": notes[name]})
+			for name in given:
+				for who in given[name]:
+					var held: Array = (main._session(made[who]).get("secrets", []) as Array).duplicate()
+					held.append(name)
+					await main.engine.call_api("POST", "/sessions/%s/secrets" % made[who], {"names": held})
+			var jf := FileAccess.open(OS.get_environment("AGMGD_HOME").path_join("keys/secrets/journal.jsonl"), FileAccess.READ_WRITE)
+			if jf != null:
+				jf.seek_end()
+				var now := Time.get_unix_time_from_system()
+				var rng := RandomNumberGenerator.new()
+				rng.seed = 39
+				var lines := []   # the page reads the latest 50 lines: about forty, oldest first, as the vault writes them
+				for name in given:
+					for who in given[name]:
+						for day in 14:
+							for k in rng.randi_range(0, 1 if day > 2 else 2):
+								lines.append({"ts": now - day * 86400 - rng.randi_range(600, 80000), "name": name, "event": "given", "sid": made[who], "session": who})
+				lines.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["ts"]) < float(b["ts"]))
+				for e in lines.slice(maxi(0, lines.size() - 46)):
+					jf.store_line(JSON.stringify(e))
+				jf.close()
+			await main.refresh()
+			main.set_view("keys")
+			await wait(3.0)
+			await shot("keys-secrets")
+			# New session from a connected repository: its folder and its key come with it, a secret ticked, the Brain, a branch of its own
+			var rp: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/acme-store.git", "local_path": code.path_join("acme-store")})
+			await main.engine.call_api("POST", "/repos/%s/check" % rp["id"], {})
+			await main.refresh()
+			main.select(made["Checkout flow"])
+			main.set_view("focus")
+			await wait(1.5)
+			await main._open_new("", "claude")
+			await wait(1.0)
+			main.f_name.text = "Gift cards, second pass"
+			for i in main.f_repo.item_count:
+				if str(main.f_repo.get_item_metadata(i)) == str(rp["id"]):
+					main.f_repo.select(i)
+					main.f_repo.item_selected.emit(i)
+			main.f_cwd.text = "~/code/acme-store"   # the same folder, written as the user would see it (not the capture's temporary home)
+			main.f_brain.button_pressed = true
+			main.f_document.button_pressed = true
+			main.f_worktree.button_pressed = true
+			for c in main.f_secrets.get_children():
+				if c is CheckBox and (c as CheckBox).text == "GITHUB_TOKEN":
+					(c as CheckBox).button_pressed = true
+			await wait(0.8)
+			await shot("new-session-lab")
+			main.new_dialog.hide()
 		"palette":
 			main.select(made["Sparks"])
 			await wait(2.0)

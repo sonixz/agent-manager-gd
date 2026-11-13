@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Agent Manager GD</title>
-  <meta name="description" content="Agent Manager GD: every AI coding agent in one control room. Claude Code, Codex and shells in real terminals that never die, live states, an MCP server so agents pilot agents, a git manager with automatic deploy keys, native voice, cloud sandboxes, and your Second Brain in every session.">
+  <title>Agent Manager GD · Your agent lab</title>
+  <meta name="description" content="Agent Manager GD, your agent lab: Claude Code, Codex and your shells side by side, isolated, observed, in your control. Agents launched ready to work (a repository and its key, a branch, permissions, the Second Brain, secrets), a built-in MCP server and an orchestrator, WSL and cloud sandboxes in sight. Open source, local-first, MIT.">
   <meta name="theme-color" content="#172331">
-  <meta property="og:title" content="Agent Manager GD">
-  <meta property="og:description" content="Every coding agent. One control room. Your Second Brain in every session.">
-  <meta property="og:image" content="assets/showcase/hero-grid.webp">
+  <meta property="og:title" content="Agent Manager GD · Your agent lab">
+  <meta property="og:description" content="Claude Code, Codex and your shells, side by side: isolated, observed, in your control. Open source, local-first.">
+  <meta property="og:image" content="assets/video/showcase-poster.webp">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=2026-11-12v">
+  <link rel="stylesheet" href="css/style.css?v=2026-11-13a">
 </head>
-<body>
+<body class="home">
   <a class="skip" href="#main">Skip to content</a>
 
   <header class="site-header">
@@ -25,12 +25,11 @@
         <span class="sr-only">Menu</span><span aria-hidden="true">☰</span>
       </button>
       <ul id="nav-links" class="nav-links">
-        <li><a href="#control-room">Control room</a></li>
-        <li><a href="#brain">Second Brain</a></li>
+        <li><a href="#features">Features</a></li>
         <li><a href="#mcp">MCP</a></li>
-        <li><a href="#git">Git &amp; SSH</a></li>
-        <li><a href="#voice">Voice</a></li>
         <li><a href="#cloud">Cloud</a></li>
+        <li><a href="#lab">The lab</a></li>
+        <li><a href="#loops">Loops</a></li>
         <li><a href="howto.html">How-to</a></li>
         <li><a href="docs.html">Docs</a></li>
         <li><a href="https://github.com/sonixz/agent-manager-gd" class="nav-cta" rel="noopener">GitHub</a></li>
@@ -39,176 +38,249 @@
   </header>
 
   <main id="main">
-    <!-- HERO -->
-    <section class="hero" id="top">
+    <!-- HERO: the 30-second film of the real app, muted, in a loop (video-production/: how it is made) -->
+    <section class="hero hero-lab" id="top">
       <canvas class="hero-matrix" aria-hidden="true"></canvas>
       <div class="hero-grid">
-        <div>
-          <p class="overline">AI-native · Voice · Local-first · Open source</p>
+        <div class="hero-copy">
+          <p class="overline">Open source · Local-first · MIT</p>
           <h1>AGENT MANAGER <span class="accent">GD</span></h1>
-          <p class="tagline">Every coding agent. One control room.</p>
-          <p class="lead">Run Claude Code, Codex and your shells side by side in real terminals that never die. See at a
-            glance who is working, who waits for your OK and who has a question. Agents start agents, git handles its
-            own keys, you talk to it, and your Second Brain is in every session.</p>
-          <div class="ticker" aria-live="off"></div>
+          <p class="tagline-lab"><span>Your agent lab.</span></p>
+          <p class="lead">Claude Code, Codex and your shells, side by side: <b>isolated</b>, <b>observed</b>, <b>in your
+            control</b>. Launch an agent already set up for its project, watch every one of them, and give the risky work
+            a branch, a sandbox or a machine of its own.</p>
+          <p class="subline">Every agent. Every environment. One control room.</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="docs.html#install">Get started</a>
-            <a class="btn" href="howto.html">How-to guides</a>
+            <a class="btn" href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub repository</a>
+            <a class="btn btn-ghost" href="#features">Explore features ↓</a>
           </div>
           <ul class="stats" aria-label="Project facts">
-            <li><b>76</b> engine tests</li>
-            <li><b>33</b> loops shipped</li>
-            <li><b>6</b> MCP tools</li>
-            <li><b>7</b> themes</li>
+            <li><b data-count="39">39</b> loops shipped</li>
+            <li><b data-count="173">173</b> engine tests</li>
+            <li><b data-count="6">6</b> MCP tools</li>
+            <li><b data-count="7">7</b> themes</li>
           </ul>
         </div>
-        <figure class="screen live-wrap">
-          <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Agent Manager GD<span class="bar-right"><button class="live-pause" type="button" aria-pressed="false">❚❚ Pause</button></span></div>
-          <div class="live" role="img" aria-label="Agent Manager at work: Claude Code sessions in groups change state live; one waits for your OK and is approved from the list, another asks a question and gets an answer, a lead agent starts two helpers, and a finished session proposes its journal to the Second Brain.">
-            <div class="lv-app" aria-hidden="true">
-              <aside class="lv-side">
-                <div class="lv-brand"><b>◆ AGENT MANAGER</b><span>GD</span></div>
-                <div class="lv-queue"></div>
-                <div class="lv-tree"></div>
-                <div class="lv-brain"><i>✦</i><span><b>Second Brain <em>● connected</em></b><small><span class="lv-linked">5 of 5</span> agents linked · <span class="lv-today">2</span> proposals today</small></span></div>
-              </aside>
-              <section class="lv-main">
-                <div class="lv-top"><div class="lv-head"></div><div class="lv-views"><span class="on" data-v="focus">Focus</span><span data-v="grid">Grid</span><span data-v="board">Board</span><span data-v="review">Review</span></div></div>
-                <div class="lv-term"></div>
-                <div class="lv-grid"></div>
-                <div class="lv-voice"><span class="mic">🎙</span><span class="lv-meter"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="lv-vt">Listening to you for « Checkout flow »… <small>release F8 to write it</small></span><b class="said"></b></div>
-              </section>
-              <div class="lv-toasts"></div>
-              <svg class="lv-cursor" viewBox="0 0 16 22" width="16" height="22"><path d="M1 1l0 17 4.5-4 3 7 3-1.4-3-6.8 6-.3z" fill="#fff" stroke="#0d1d26" stroke-width="1.3" stroke-linejoin="round"/></svg>
-            </div>
-          </div>
-          <figcaption class="live-cap">A live reconstruction with the agents' real screens. <a href="assets/showcase/hero-grid.webp" class="live-real">The real app, full size →</a></figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <!-- SHOWCASE VIDEO (video-production/: how it is made and remade) -->
-    <section id="showcase" class="section showcase">
-      <div class="container">
-        <div class="section-head center reveal">
-          <p class="overline">Built for AI Builders.</p>
-          <h2>Every agent. Every environment. One control room.</h2>
-          <p>An open-source control room for building with AI agents: your coding agents and shells, your machine and WSL,
-            your repositories and keys, and cloud sandboxes reached through their own tunnel. Thirty seconds of the real app.</p>
-        </div>
-        <figure class="showcase-player reveal">
-          <video controls playsinline preload="none" poster="assets/video/showcase-poster.webp" width="1920" height="1080"
-            aria-describedby="showcase-desc">
+        <figure class="screen hero-film">
+          <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Agent Manager GD · the real app, 30 s<span class="bar-right"><button class="film-sound" type="button" aria-pressed="false">🔊 Sound</button><button class="film-pause" type="button" aria-pressed="false">❚❚</button></span></div>
+          <video class="film" controls muted loop playsinline preload="none" poster="assets/video/showcase-poster.webp"
+            width="1920" height="1080" aria-describedby="film-desc">
             <source src="assets/video/showcase.mp4" type="video/mp4">
             <a href="assets/video/showcase.mp4">Download the 30-second video (MP4, 3.5 MB)</a>.
           </video>
-          <figcaption id="showcase-desc">The real Agent Manager GD, filmed on a private virtual display with a demonstration
-            workspace: six agents in Grid and Board, the WSL page with each session's memory, repositories on GitHub and
-            Azure DevOps with their branches, choosing a cloud sandbox with its price, and a running sandbox's tunnel bringing
-            a port to your localhost, with a SOCKS proxy. Fly.io and the sandboxes are stand-ins here: nothing was deployed or
-            billed. English narration.</figcaption>
+          <figcaption id="film-desc" class="sr-only">The real Agent Manager GD, filmed on a private virtual display with a
+            demonstration workspace: six agents in Grid and Board, the WSL page with each session's memory, repositories on
+            GitHub and Azure DevOps with their branches, choosing a cloud sandbox with its price, and a running sandbox's
+            tunnel bringing a port to your localhost, with a SOCKS proxy. Fly.io and the sandboxes are stand-ins here:
+            nothing was deployed or billed. English narration, off until you turn the sound on.</figcaption>
         </figure>
-        <div class="showcase-foot reveal">
-          <p class="license-line">Open Source · MIT Licensed</p>
-          <div class="hero-actions">
-            <a class="btn btn-primary" href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub repository</a>
-            <a class="btn" href="#control-room">Explore features</a>
-          </div>
-        </div>
       </div>
+      <p class="hero-note">Filmed from the real app on a demonstration workspace · Fly.io is a stand-in in the film, nothing was billed</p>
     </section>
 
-    <!-- CONTROL ROOM -->
-    <section id="control-room" class="section section-alt">
-      <div class="container">
-        <div class="section-head reveal">
-          <p class="overline">The control room</p>
-          <h2>Ten agents, and you still know who needs you</h2>
-          <p>Every session is a real terminal (the Ghostty terminal engine, drawn by Godot) running in its own tmux:
-            close the app, reboot, come back, and every agent is where you left it.</p>
-        </div>
-
-        <div class="feature reveal">
-          <div>
-            <span class="tag">Live states</span>
-            <h3>They wait for you, on top</h3>
-            <p>Claude Code and Codex report what they are doing, through their own hooks. Agent Manager turns it into
-              lights you read from across the room.</p>
-            <ul>
-              <li><span class="light working"></span><b>working</b> · <span class="light ok"></span><b>waits for your OK</b> · <span class="light asks"></span><b>asks you something</b> · <span class="light done"></span><b>done</b></li>
-              <li><b>Approve</b>, <b>Refuse</b> or <b>Reply…</b> from the list, without opening the session.</li>
-              <li>A toast when someone starts waiting; <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> approves the first one.</li>
-              <li><b>One session per line</b>: twenty sessions fit where eight tiles did. The tiles, which say more, are one click away in <b>◐</b>.</li>
-            </ul>
-          </div>
-          <figure class="screen">
-            <img src="assets/showcase/focus-working.webp" width="1920" height="1200" loading="lazy" alt="Focus view: a Claude Code session writing tests for a gift card, its state « working » in the header; the left column shows two sessions waiting, one for an OK and one for an answer.">
-          </figure>
-        </div>
-
-        <div class="feature flip reveal">
-          <div>
-            <span class="tag">Views</span>
-            <h3>Focus, Grid, Board</h3>
-            <p>One terminal full screen, four side by side, or a live tile per session with a preview of its screen.
-              Groups by project, drag to reorder, fold what you are not watching.</p>
-            <ul>
-              <li><b>Command palette</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>): every action, by name.</li>
-              <li><b>Seven themes</b> for the interface and the terminal colours.</li>
-              <li><b>Never lose a conversation</b>: Resume, Fork…, History of every session ever made.</li>
-            </ul>
-          </div>
-          <figure class="screen">
-            <img src="assets/showcase/board.webp" width="1920" height="1200" loading="lazy" alt="Board view: a tile per session with a live preview of its terminal and its state.">
-          </figure>
-        </div>
-      </div>
-    </section>
-
-    <!-- SECOND BRAIN -->
-    <section id="brain" class="section">
+    <!-- FEATURE INDEX: one tile per feature; the bar below it follows you down the page -->
+    <section id="features" class="section features-index">
       <div class="container">
         <div class="section-head center reveal">
-          <p class="overline">Better together</p>
+          <p class="overline">What is in the lab</p>
+          <h2>Eleven things it does for you</h2>
+          <p>From the moment you launch an agent to the cloud machine it borrows. Every picture below is the real app,
+            captured on a private virtual display with a fictional workspace.</p>
+        </div>
+        <ol class="fx-grid reveal">
+          <li><a href="#launch"><span class="fx-n">01</span><span class="fx-i">▶</span><b>Launch, ready to work</b><small>Repository, key, branch, rights, Brain, secrets</small></a></li>
+          <li><a href="#interface"><span class="fx-n">02</span><span class="fx-i">◧</span><b>A beautiful interface</b><small>Five views, seven themes, our own terminal</small></a></li>
+          <li><a href="#control-room"><span class="fx-n">03</span><span class="fx-i">◉</span><b>The control room</b><small>Who works, who waits, who asks</small></a></li>
+          <li><a href="#continuity"><span class="fx-n">04</span><span class="fx-i">⟲</span><b>Nothing is lost</b><small>History, resume, fork, review, wrap up</small></a></li>
+          <li><a href="#brain"><span class="fx-n">05</span><span class="fx-i">✦</span><b>Second Brain inside</b><small>One memory for every session</small></a></li>
+          <li><a href="#mcp"><span class="fx-n">06</span><span class="fx-i">⇄</span><b>Built-in MCP</b><small>Agents pilot agents; the orchestrator</small></a></li>
+          <li><a href="#git"><span class="fx-n">07</span><span class="fx-i">⎇</span><b>Repos and keys</b><small>One key per repository, branches mapped</small></a></li>
+          <li><a href="#machine"><span class="fx-n">08</span><span class="fx-i">▦</span><b>Your machine, in sight</b><small>WSL memory, by session, over time</small></a></li>
+          <li><a href="#cloud"><span class="fx-n">09</span><span class="fx-i">☁</span><b>Cloud sandboxes</b><small>A price before, a tunnel after</small></a></li>
+          <li><a href="#voice"><span class="fx-n">10</span><span class="fx-i">🎙</span><b>Voice and mobile</b><small>Hold F8 and talk; follow it on your phone</small></a></li>
+          <li><a href="#safety"><span class="fx-n">11</span><span class="fx-i">⚿</span><b>Keys, secrets, safety</b><small>Given to one session, never shown again</small></a></li>
+        </ol>
+      </div>
+    </section>
+
+    <nav class="featnav" aria-label="Features">
+      <div class="featnav-in">
+        <a href="#launch">01 Launch</a><a href="#interface">02 Interface</a><a href="#control-room">03 Control room</a><a href="#continuity">04 Continuity</a><a href="#brain">05 Brain</a><a href="#mcp">06 MCP</a><a href="#git">07 Repos</a><a href="#machine">08 Machine</a><a href="#cloud">09 Cloud</a><a href="#voice">10 Voice</a><a href="#safety">11 Safety</a><a href="#loops">Loops</a>
+      </div>
+      <span class="featnav-progress" aria-hidden="true"></span>
+    </nav>
+
+    <!-- 01 LAUNCH -->
+    <section id="launch" class="section feat-sec">
+      <div class="container">
+        <div class="feat reveal">
+          <div class="feat-text">
+            <p class="feat-num">01 · Session manager</p>
+            <h2>Launch an agent that already knows its job</h2>
+            <p class="muted">Claude Code, Codex or a plain shell, in a real terminal that keeps running in tmux when you
+              close the window. What Agent Manager adds is everything set up <i>before</i> the first prompt.</p>
+            <ul class="checks">
+              <li><b>From a connected repository</b>: its folder and its own SSH key come with it. Git just works, your personal key never leaves <code>~/.ssh</code>.</li>
+              <li><b>A branch of its own</b>: a worktree <code>am/&lt;name&gt;</code>, so ten agents share a repository without stepping on each other.</li>
+              <li><b>Its rights</b>: a permission level, a file access, git push and merge or not.</li>
+              <li><b>Its MCP servers, plugged in</b>: Agent Manager's own and your Second Brain, with a key for this session.</li>
+              <li><b>Its secrets</b>: the GitHub token or API key it needs, in its environment only.</li>
+              <li><b>Remote Control</b>, a journal in the Brain, a brief from the last session in this folder.</li>
+            </ul>
+          </div>
+          <figure class="screen shot-hot" data-hot>
+            <div class="bar"><span class="dots"><i></i><i></i><i></i></span>New session</div>
+            <div class="hot-wrap">
+              <img src="assets/showcase/new-session-lab.webp" width="1920" height="1200" loading="lazy" alt="The New session dialog: name « Gift cards, second pass », Claude Code, group Acme Store, this computer, the connected repository acme-store with its folder, « In its own git branch » ticked, the permission level and file access, the Second Brain shared and documenting, Remote Control, and four secrets with GITHUB_TOKEN ticked: « Only this session gets GITHUB_TOKEN, in its program's environment ».">
+              <span class="hot" style="--x:62%;--y:39.3%"><i></i><em>A connected repository: its folder and its key</em></span>
+              <span class="hot" style="--x:62%;--y:46.8%"><i></i><em>A worktree and a branch of its own</em></span>
+              <span class="hot" style="--x:62%;--y:50.4%"><i></i><em>What it may do, before it starts</em></span>
+              <span class="hot" style="--x:62%;--y:57.7%"><i></i><em>The Second Brain, with its own key</em></span>
+              <span class="hot" style="--x:62%;--y:69%"><i></i><em>Follow it from your phone</em></span>
+              <span class="hot" style="--x:47%;--y:76%"><i></i><em>One secret, for this session only</em></span>
+            </div>
+          </figure>
+        </div>
+        <p class="planned reveal"><span class="badge-soon">Planned</span> Launch presets: keep a set of these choices under a
+          name and start from it in one click. Today a group already carries its default permission level.</p>
+      </div>
+    </section>
+
+    <!-- 02 INTERFACE -->
+    <section id="interface" class="section section-alt feat-sec">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="feat-num">02 · Interface, views, themes</p>
+          <h2>Drawn, alive, and yours</h2>
+          <p>Not columns of text: pages drawn like instruments, a terminal of our own (Ghostty's core, drawn by Godot), five
+            ways to look at your sessions and seven themes shared with Second Brain. Try them.</p>
+        </div>
+        <div class="viewer reveal" data-viewer>
+          <div class="viewer-bar">
+            <div class="seg" role="tablist" aria-label="Views">
+              <button type="button" role="tab" aria-selected="true" data-src="assets/showcase/focus-working.webp" data-alt="Focus view: one Claude Code session full size, writing a gift card and its tests, with the session list on the left.">Focus</button>
+              <button type="button" role="tab" aria-selected="false" data-src="assets/showcase/hero-grid.webp" data-alt="Grid view: four live terminals side by side, the session tree on the left with each agent's state.">Grid</button>
+              <button type="button" role="tab" aria-selected="false" data-src="assets/showcase/board.webp" data-alt="Board view: a tile per session with a live preview of its terminal and its state.">Board</button>
+              <button type="button" role="tab" aria-selected="false" data-src="assets/showcase/review.webp" data-alt="Review view: the gift card change, file by file, with two comments on lines of code waiting to be sent to the agent.">Review</button>
+              <button type="button" role="tab" aria-selected="false" data-src="assets/howto/history/02.webp" data-alt="History: every session ever made, archived ones too, with their conversations, searched for « acme ».">History</button>
+            </div>
+            <div class="swatches" role="group" aria-label="Themes">
+              <button type="button" class="sw sw-focus on" data-src="assets/showcase/hero-grid.webp" data-alt="The Focus theme, in Grid view." title="Focus"><span class="sr-only">Focus theme</span></button>
+              <button type="button" class="sw sw-terminal" data-src="assets/showcase/theme-terminal.webp" data-alt="The Terminal theme: green phosphor on black, in Grid view." title="Terminal"><span class="sr-only">Terminal theme</span></button>
+              <button type="button" class="sw sw-neon" data-src="assets/showcase/theme-neon.webp" data-alt="The Neon theme: deep violet with pink and cyan, in Grid view." title="Neon"><span class="sr-only">Neon theme</span></button>
+              <button type="button" class="sw sw-paper" data-src="assets/showcase/theme-paper.webp" data-alt="The Paper theme: warm paper and ink blue, in Grid view." title="Paper"><span class="sr-only">Paper theme</span></button>
+            </div>
+          </div>
+          <figure class="screen viewer-screen">
+            <img class="viewer-img" src="assets/showcase/focus-working.webp" width="1920" height="1200" loading="lazy" alt="Focus view: one Claude Code session full size, writing a gift card and its tests, with the session list on the left.">
+          </figure>
+          <ul class="viewer-notes">
+            <li><b>Focus</b> one session, full size · <b>Grid</b> up to four live terminals · <b>Board</b> a tile per session · <b>Review</b> the diffs · <b>History</b> every conversation</li>
+            <li>Seven themes (Focus, Terminal, Neon, Evening, Forest, Morning, Paper); four shown here. A click changes the whole window.</li>
+            <li>Everything by keyboard: the palette (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>), a shortcut per view, your own bindings.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 CONTROL ROOM (the live reconstruction, js/live.js) -->
+    <section id="control-room" class="section feat-sec">
+      <div class="container">
+        <div class="feat reveal">
+          <div class="feat-text">
+            <p class="feat-num">03 · The control room</p>
+            <h2>Ten agents, and you still know who needs you</h2>
+            <p class="muted">Claude Code and Codex report what they do through their own hooks; Agent Manager turns it into
+              lights you read from across the room. The ones that need you come first.</p>
+            <ul class="legend">
+              <li><span class="light working"></span><b>working</b> the agent is on a turn</li>
+              <li><span class="light ok"></span><b>waits for your OK</b> a command, a file</li>
+              <li><span class="light asks"></span><b>asks you something</b> a question for you</li>
+              <li><span class="light done"></span><b>done</b> the turn is over</li>
+            </ul>
+            <ul class="checks">
+              <li><b>Approve</b>, <b>Refuse</b> or <b>Reply…</b> from the list, without opening the session; <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> approves the first one.</li>
+              <li>A soft sound and a toast when someone starts waiting.</li>
+              <li>One session per line: twenty fit where eight tiles did.</li>
+            </ul>
+          </div>
+          <figure class="screen live-wrap">
+            <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Agent Manager GD<span class="bar-right"><button class="live-pause" type="button" aria-pressed="false">❚❚ Pause</button></span></div>
+            <div class="live" role="img" aria-label="Agent Manager at work: Claude Code sessions in groups change state live; one waits for your OK and is approved from the list, another asks a question and gets an answer, a lead agent starts two helpers, and a finished session proposes its journal to the Second Brain.">
+              <div class="lv-app" aria-hidden="true">
+                <aside class="lv-side">
+                  <div class="lv-brand"><b>◆ AGENT MANAGER</b><span>GD</span></div>
+                  <div class="lv-queue"></div>
+                  <div class="lv-tree"></div>
+                  <div class="lv-brain"><i>✦</i><span><b>Second Brain <em>● connected</em></b><small><span class="lv-linked">5 of 5</span> agents linked · <span class="lv-today">2</span> proposals today</small></span></div>
+                </aside>
+                <section class="lv-main">
+                  <div class="lv-top"><div class="lv-head"></div><div class="lv-views"><span class="on" data-v="focus">Focus</span><span data-v="grid">Grid</span><span data-v="board">Board</span><span data-v="review">Review</span></div></div>
+                  <div class="lv-term"></div>
+                  <div class="lv-grid"></div>
+                  <div class="lv-voice"><span class="mic">🎙</span><span class="lv-meter"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="lv-vt">Listening to you for « Checkout flow »… <small>release F8 to write it</small></span><b class="said"></b></div>
+                </section>
+                <div class="lv-toasts"></div>
+                <svg class="lv-cursor" viewBox="0 0 16 22" width="16" height="22"><path d="M1 1l0 17 4.5-4 3 7 3-1.4-3-6.8 6-.3z" fill="#fff" stroke="#0d1d26" stroke-width="1.3" stroke-linejoin="round"/></svg>
+              </div>
+            </div>
+            <figcaption class="live-cap">A live reconstruction with the agents' real screens. <a href="assets/showcase/hero-grid.webp" class="live-real">The real app, full size →</a></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 CONTINUITY -->
+    <section id="continuity" class="section section-alt feat-sec">
+      <div class="container">
+        <div class="feat flip reveal">
+          <div class="feat-text">
+            <p class="feat-num">04 · Continuity</p>
+            <h2>Close it, reboot, come back: nothing is lost</h2>
+            <p class="muted">Every session keeps every conversation it ever had. Agents live in a private tmux server, so
+              the app can close and the work goes on.</p>
+            <ul class="checks">
+              <li><b>Resume</b> any conversation, <b>Fork…</b> a copy, <b>Archive</b> and <b>Restore</b>: History lists every session ever made.</li>
+              <li><b>Review</b> what an agent did, file by file; click a line to comment it; <b>Send review</b> hands it one numbered request.</li>
+              <li><b>Wrap up</b> asks the agent for its own summary; the next session in that folder starts from it with <b>Brief</b>.</li>
+              <li><b>Finish its git branch…</b> shows what is ahead, merges it (a conflict is undone), removes the worktree.</li>
+            </ul>
+          </div>
+          <div class="stack">
+            <figure class="screen"><img src="assets/howto/history/03.webp" width="1280" height="800" loading="lazy" alt="« Checkout flow (fork) » open in Focus: a new session on a copy of the conversation, listed beside its original, which stays as it was."></figure>
+            <figure class="screen stack-2"><img src="assets/showcase/review.webp" width="1920" height="1200" loading="lazy" alt="The Review view: the gift card change, file by file, with two comments on lines of code waiting to be sent to the agent."></figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 SECOND BRAIN -->
+    <section id="brain" class="section feat-sec">
+      <div class="container">
+        <div class="section-head center reveal">
+          <p class="feat-num">05 · Better together</p>
           <h2>Your Second Brain, in every session</h2>
-          <p>Agents forget everything when their window closes. Agent Manager wires each one to
-            <b>Second Brain GD</b>, its companion app, so what one agent
-            learns, the next one knows, and so do you.</p>
+          <p>Agents forget everything when their window closes. Agent Manager wires each one to <b>Second Brain GD</b>, its
+            companion app, so what one agent learns, the next one knows, and so do you.</p>
         </div>
 
         <div class="together reveal">
           <div class="side">
             <h3>◆ Agent Manager GD</h3>
-            <p class="muted">Runs the agents. Gives each one its own Brain key at launch, says how to document the
-              work, and keeps each session's summary.</p>
+            <p class="muted">Runs the agents. Gives each one its own Brain key at launch, says how to document the work,
+              and keeps each session's summary.</p>
           </div>
           <div class="bridge" aria-hidden="true">
             <span>MCP · one key per session</span>
-            <span>⇄</span>
+            <span class="bridge-flow"><i></i><i></i><i></i></span>
             <span>proposals · never writes</span>
           </div>
           <div class="side brain">
             <h3>✦ Second Brain GD</h3>
-            <p class="muted">Keeps the project: vision, decisions, the owner's words, where things stand. Its
-              archivist files every proposal with your rules, and you see who proposed what.</p>
+            <p class="muted">Keeps the project: vision, decisions, the owner's words, where things stand. Its archivist
+              files every proposal with your rules, and you see who proposed what.</p>
           </div>
-        </div>
-
-        <div class="cards reveal" style="margin-top: 28px">
-          <article class="card"><h3><span class="icon">✦</span>A key per session</h3>
-            <p>Each Claude Code or Codex session gets its own MCP key, named after it, at the « propose » level: it
-              reads and searches your Brain, and what it proposes waits for the archivist. A fork gets its own key;
-              removing the session revokes it.</p></article>
-          <article class="card"><h3><span class="icon">↳</span>Sessions that document themselves</h3>
-            <p>Tick « Document this session in the Brain »: the agent orients in the Brain first (project card,
-              last journal, open questions), checks it against <code>git log</code>, then proposes your words,
-              decisions and a session journal at each milestone.</p></article>
-          <article class="card"><h3><span class="icon">⟲</span>Context that survives</h3>
-            <p><b>Wrap up</b> asks the agent for its own summary (done, decisions, files, what is left, how to
-              continue), proposed to the Brain. The next session in that folder starts from it in one click.</p></article>
-          <article class="card"><h3><span class="icon">☁</span>Even in the cloud</h3>
-            <p>A cloud sandbox reaches your Brain through its SSH tunnel and the engine, with a secret of its own.
-              The Brain's keys never leave your computer.</p></article>
         </div>
 
         <ol class="cycle reveal" aria-label="How a session and the Brain work together">
@@ -220,288 +292,253 @@
 
         <div class="duo reveal">
           <figure class="shot">
-            <img src="assets/showcase/brain-panel.webp" width="1920" height="1200" loading="lazy" alt="Agent Manager with its Second Brain panel open above the badge at the bottom left (« Second Brain ● connected, 5 of 5 agents linked, 4 proposals today »): each session with its ✦ light, whether it documents, its calls and proposals, then the latest proposals with their outcome. Each session card and the header carry a ✦ light too.">
-            <figcaption class="shot-caption"><b>In Agent Manager.</b> The badge at the bottom left says the Brain is
-              there and what it got today; every session carries a ✦ light: its own key, whether it documents, a pulse
-              when it just used the Brain. One click shows who proposed what.</figcaption>
+            <img src="assets/showcase/brain-panel.webp" width="1920" height="1200" loading="lazy" alt="Agent Manager with its Second Brain panel open above the badge at the bottom left (« Second Brain ● connected, 5 of 5 agents linked, 4 proposals today »): each session with its ✦ light, whether it documents, its calls and proposals, then the latest proposals with their outcome.">
+            <figcaption class="shot-caption"><b>In Agent Manager.</b> The badge says the Brain is there and what it got
+              today; every session carries a ✦ light that pulses when it uses the Brain.</figcaption>
           </figure>
           <figure class="shot">
             <img src="assets/brain/mcp-proposals.webp" width="1280" height="800" loading="lazy" alt="Second Brain's « AI tools and your Brain » window: two proposals from an agent wait for approval, each with Approve and Reject, and the tools allowed to read the Brain with their level.">
             <figcaption class="shot-caption"><b>In your Second Brain.</b> What agents propose waits for you, with who
-              proposed it and why. You choose each tool's level: read only, or suggest changes.</figcaption>
-          </figure>
-        </div>
-
-        <div class="feature reveal" style="margin-top: clamp(48px, 7vw, 80px)">
-          <div>
-            <span class="tag">New session</span>
-            <h3>Two ticks, and the agent knows the project</h3>
-            <p>Name it, pick the tool and the folder (or a connected repository), and choose what it gets: the
-              Second Brain, a journal of its own work, its own git branch, Remote Control from your phone.</p>
-            <p class="small muted">Everything goes through the Brain's archivist. Nothing is written behind your back,
-              nothing is ever erased.</p>
-          </div>
-          <figure class="screen">
-            <img src="assets/showcase/new-session.webp" width="1920" height="1200" loading="lazy" alt="The New session dialog: name, tool (Claude Code), folder, « Share the Second Brain » and « Document this session in the Brain as it works » ticked, « In its own git branch », Remote Control.">
+              proposed it and why. A cloud sandbox reaches it through its tunnel; the keys never leave your computer.</figcaption>
           </figure>
         </div>
       </div>
     </section>
 
-    <!-- MCP -->
-    <section id="mcp" class="section section-alt">
+    <!-- 06 BUILT-IN MCP + ORCHESTRATOR -->
+    <section id="mcp" class="section section-alt feat-sec">
       <div class="container">
-        <div class="feature reveal">
-          <div>
-            <p class="overline">MCP server</p>
+        <div class="feat reveal">
+          <div class="feat-text">
+            <p class="feat-num">06 · Built-in MCP</p>
             <h2>Agents pilot agents</h2>
-            <p class="muted">Every agent session is offered Agent Manager's own MCP server. A lead agent can look at
-              any session and start helpers of its own: they show up in your list, « ↳ Lead », in real terminals you
-              can take over at any time.</p>
-            <div class="term" role="img" aria-label="The six MCP tools"><span class="c"># agent-manager, offered to every agent</span>
-<span class="k">list_sessions</span>     every session and its state
-<span class="k">session_status</span>    working, waits, asks, done
-<span class="k">read_screen</span>       what a terminal shows now
-<span class="k">start_session</span>     a child: Claude, Codex, shell
-<span class="k">send_to_session</span>   <span class="s">its own children only</span>
-<span class="k">wait_for_session</span>  until a child is done</div>
-            <p class="small muted" style="margin-top: 14px">No tool presses keys in someone else's session: an agent
-              never approves on another's behalf. « Connect other tools » gives the same server to any MCP client
-              outside the app, read and start only.</p>
+            <p class="muted">Every Claude Code or Codex session is offered Agent Manager's own MCP server, nothing to
+              install. A lead agent looks at any session and starts helpers of its own: they show up in your list,
+              « ↳ Lead », in real terminals you can take over at any time.</p>
+            <div class="term typer" role="img" aria-label="An example: a lead agent lists the sessions, starts a helper, waits for it, and reads its screen.">
+              <div class="typer-lines" aria-hidden="true"></div>
+            </div>
+            <p class="small muted" style="margin-top: 14px">No tool presses keys in someone else's session: an agent writes
+              only to its own children and never approves on another's behalf. <b>◐ › Connect other tools</b> plugs the
+              same server into any MCP client outside the app: list, read and start, never type nor approve.</p>
           </div>
-          <figure class="screen">
-            <img src="assets/showcase/agents.webp" width="1920" height="1200" loading="lazy" alt="A lead Claude Code session and two helper sessions it started through the MCP server, shown in a grid, each marked « ↳ Lead » in the list.">
+          <div>
+            <table class="mcp-table">
+              <thead><tr><th>Tool</th><th>Does</th><th>On</th></tr></thead>
+              <tbody>
+                <tr><td><code>list_sessions</code></td><td>every session and its state</td><td>any</td></tr>
+                <tr><td><code>session_status</code></td><td>working, waits, asks, done</td><td>any</td></tr>
+                <tr><td><code>read_screen</code></td><td>what a terminal shows now</td><td>any</td></tr>
+                <tr><td><code>start_session</code></td><td>a child: Claude Code, Codex, a shell</td><td>new</td></tr>
+                <tr><td><code>send_to_session</code></td><td>write to a session</td><td class="own">its children</td></tr>
+                <tr><td><code>wait_for_session</code></td><td>until a child is done or waits</td><td class="own">its children</td></tr>
+              </tbody>
+            </table>
+            <figure class="screen" style="margin-top: 22px">
+              <img src="assets/showcase/agents.webp" width="1920" height="1200" loading="lazy" alt="A lead Claude Code session and two helper sessions it started through the MCP server, shown in a grid, each marked « ↳ Lead » in the list.">
+            </figure>
+          </div>
+        </div>
+
+        <div id="orchestrator" class="orch reveal">
+          <div class="orch-head">
+            <p class="overline">Built on it · Orchestrator <span class="beta">beta</span></p>
+            <h3>One agent plans, you decide</h3>
+            <p class="muted">A Claude Code session with an orchestrator's instructions and a few more tools
+              (<code>list_repos</code>, <code>ask_owner</code>, <code>finish_session</code>), for all your connected
+              repositories. It reads your Second Brain, proposes a plan and waits for your OK, starts each task in its own
+              worktree with the tool and model your rules choose, and hands you every result to review. It never pushes
+              nor merges: you do.</p>
+          </div>
+          <div class="orch-steps">
+            <figure class="shot pos-right"><span class="crop"><img src="assets/showcase/orchestrator-panel.webp" width="1920" height="1200" loading="lazy" alt="The orchestrator's floating window: connected to the Second Brain, its question to the owner with the plan, its live terminal, and its sessions."></span><figcaption class="shot-caption"><b>1 · It asks.</b> The plan, as a question to you.</figcaption></figure>
+            <figure class="shot pos-right"><span class="crop"><img src="assets/showcase/orchestrator-plan.webp" width="1920" height="1200" loading="lazy" alt="The orchestrator's plan tab: each task with its tool, its model and its session's state."></span><figcaption class="shot-caption"><b>2 · It delegates.</b> Each task, its tool, its model, live.</figcaption></figure>
+            <figure class="shot pos-mid"><span class="crop"><img src="assets/showcase/routing-rules.webp" width="1920" height="1200" loading="lazy" alt="Routing rules: which tool and model for which kind of task, edited in a small table."></span><figcaption class="shot-caption"><b>3 · Your rules.</b> Which tool and model for which task.</figcaption></figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 07 REPOS -->
+    <section id="git" class="section feat-sec">
+      <div class="container">
+        <div class="feat flip reveal">
+          <div class="feat-text">
+            <p class="feat-num">07 · Repositories and keys</p>
+            <h2>Git that sets up its own keys</h2>
+            <p class="muted">Connect a repository on GitHub or Azure DevOps: Agent Manager makes an SSH key for it, checks
+              it, and gives it to that repository's sessions only. No <code>~/.ssh</code> to edit, no key shared between
+              projects.</p>
+            <ul class="checks">
+              <li><b>One line per repository</b>, drawn: the host, the key's state and how fresh its check is, what the key opens, the branch, a dot per session.</li>
+              <li><b>Its branches as a metro map</b>: the base line, each branch with its commits, its worktree and the agents working there.</li>
+              <li><b>Passed through <code>GIT_SSH_COMMAND</code></b>, with its own known_hosts: nothing written to your SSH config.</li>
+            </ul>
+          </div>
+          <figure class="screen loupe-fig" data-c="0.30 0.76 3">
+            <img src="assets/showcase/film-repos-metro.webp" width="1920" height="1080" loading="lazy" alt="The Repos page: GitHub and Azure DevOps repositories one per line with their key's state; acme-store unfolded with its public deploy key and the metro map of its branches: main, am/gift-cards with five commits and am/tax-rules, each with its worktree and session.">
+            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/film-repos-metro.webp)"></span>
+            <figcaption class="loupe-cap">The branches of acme-store, each in its worktree</figcaption>
           </figure>
         </div>
       </div>
     </section>
 
-    <!-- ORCHESTRATOR -->
-    <section id="orchestrator" class="section">
+    <!-- 08 MACHINE -->
+    <section id="machine" class="section section-alt feat-sec">
       <div class="container">
-        <div class="feature flip reveal">
-          <div>
-            <p class="overline">Orchestrator · beta</p>
-            <h2>One agent plans, you decide</h2>
-            <p class="muted">One orchestrator for all your connected repositories, in a floating window (◆ Orchestrator,
-              or Ctrl+O). It reads your Second Brain, proposes a plan and waits for your OK, then starts each task in
-              its own worktree and hands you every result to review.</p>
-            <ul class="muted">
-              <li><b>Its plan, live</b>: each task with its tool, its model, why, and its session's state.</li>
-              <li><b>Routing rules you edit</b>: which tool and model for which kind of task.</li>
-              <li><b>A daily token budget</b>, read from the agents' own logs.</li>
-              <li><b>Guard rails</b>: by default it and its sessions are refused git push, merge and rebase; at most 4
-                sessions at once, 2 levels deep; <i>Stop all</i> ends them, nothing is deleted.</li>
+        <div class="feat reveal">
+          <div class="feat-text">
+            <p class="feat-num">08 · Your machine</p>
+            <h2>See what your agents weigh</h2>
+            <p class="muted">The ground button's page reads this computer and WSL: memory, processors, the true room on
+              the disk, and the memory each session holds, from the last hour to the last seven days. Hover a bar, and
+              it tells you who weighs what.</p>
+            <ul class="checks">
+              <li><b>A button that lives</b>: ● all is well, ! something deserves a look, ✗ something is missing; then the memory in use.</li>
+              <li><b>The setup check</b> reads Windows, WSL, the distribution, then the programs and the engine, and gives the command to run yourself.</li>
+              <li><b>Restart WSL…</b> from the same page when it gets heavy.</li>
             </ul>
           </div>
-          <figure class="screen">
-            <img src="assets/showcase/orchestrator-panel.webp" width="1920" height="1200" loading="lazy" alt="The orchestrator's floating window: connected to the Second Brain, its question to the owner with the plan, its live terminal, and its sessions.">
+          <figure class="screen loupe-fig" data-c="0.815 0.475 3">
+            <img src="assets/showcase/film-wsl.webp" width="1920" height="1080" loading="lazy" alt="The WSL page: setup check all green, tiles for memory in use, sessions running, processors and disk, then memory in use by session over the last hour as stacked bars, the pointer on one hour with a tooltip listing each session's memory.">
+            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/film-wsl.webp)"></span>
+            <figcaption class="loupe-cap">Each session's memory, under the pointer</figcaption>
           </figure>
         </div>
       </div>
     </section>
 
-    <!-- PERMISSIONS -->
-    <section id="permissions" class="section section-alt">
+    <!-- 09 CLOUD -->
+    <section id="cloud" class="section feat-sec">
       <div class="container">
-        <div class="feature reveal">
-          <div>
-            <p class="overline">Permissions</p>
-            <h2>You decide what each agent may do</h2>
-            <p class="muted">A level, a file access and git rights for each session, with a default level and file
-              access per group. Agent Manager fills Claude Code's and Codex's own settings; it adds no permission
-              system of its own.</p>
-            <ul class="muted">
-              <li><b>Five levels</b>: Ask before acting, Auto edits, Auto, No permission, or Per my config, where your
-                own Claude Code or Codex settings decide.</li>
-              <li><b>File access</b>: Open, Contained (its folder only) or Read only, plus the extra folders you list.</li>
-              <li><b>Git rights</b> (Claude Code): <i>Enable git push</i>, <i>Enable git merge and rebase</i>, session by session.</li>
-              <li><b>Changed on an open agent</b>: it starts again on its own conversation, at once or at the end of its turn.</li>
-              <li><b>One view</b>: ◐ › Agent permissions… shows every agent, with Edit… for each.</li>
+        <div class="section-head reveal">
+          <p class="feat-num">09 · Cloud sandboxes</p>
+          <h2>A throw-away machine, a price before, a tunnel after</h2>
+          <p>Give a risky task its own Fly.io machine, with your own Fly token. Pick a size and see Fly.io's published
+            price before you deploy; then watch its health and bring its ports home through one SSH connection.</p>
+        </div>
+
+        <div class="tunnel reveal" aria-label="How a sandbox reaches this computer: an SSH tunnel carries a port to your localhost, a SOCKS proxy into the sandbox, and, only if you allow it, one port of this computer back to the sandbox.">
+          <div class="tn-node tn-here"><b>This computer</b><span>localhost:18502</span><span>SOCKS :1080</span><span>port 18600</span></div>
+          <svg class="tn-wires" viewBox="0 0 600 180" preserveAspectRatio="none" aria-hidden="true">
+            <path id="tw1" d="M0,40 C200,40 400,40 600,40"/><path id="tw2" d="M0,90 C200,90 400,90 600,90"/><path id="tw3" d="M600,140 C400,140 200,140 0,140"/>
+            <circle r="4" class="d1"><animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#tw1"/></animateMotion></circle>
+            <circle r="4" class="d1"><animateMotion dur="2.4s" begin="1.2s" repeatCount="indefinite"><mpath href="#tw1"/></animateMotion></circle>
+            <circle r="4" class="d2"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#tw2"/></animateMotion></circle>
+            <circle r="4" class="d2"><animateMotion dur="3s" begin="1.5s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#tw2"/></animateMotion></circle>
+            <circle r="4" class="d3"><animateMotion dur="3.6s" repeatCount="indefinite"><mpath href="#tw3"/></animateMotion></circle>
+          </svg>
+          <div class="tn-labels" aria-hidden="true"><span>Bring it to my localhost</span><span>SOCKS proxy into the sandbox</span><span>The way back, only if you allow it</span></div>
+          <div class="tn-node tn-cloud"><b>☁ Cloud sandbox</b><span>streamlit :18501</span><span>everything inside</span><span>its own :18601</span></div>
+          <p class="tn-ssh">one SSH connection · host key checked · nothing made public</p>
+        </div>
+
+        <div class="duo reveal">
+          <figure class="shot loupe-fig" data-c="0.34 0.37 2.6">
+            <img src="assets/showcase/film-sandbox-size.webp" width="1920" height="1080" loading="lazy" alt="The Sandboxes page: tiles for running, paused, destroyed and kept, and at Fly.io now; six size cards with Fly.io's published monthly and hourly prices, one chosen and the estimate updated; the inventory with each sandbox's life over thirty days; this month's costs as a chart with a budget.">
+            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/film-sandbox-size.webp)"></span>
+            <figcaption class="shot-caption"><b>Before.</b> A size, its price, the estimate; costs measured, a budget that only pauses.</figcaption>
+          </figure>
+          <figure class="shot loupe-fig" data-c="0.75 0.73 2.2">
+            <img src="assets/showcase/film-tunnel-wire.webp" width="1920" height="1080" loading="lazy" alt="A running sandbox: health charts for processors, memory, network and load, then « Tunnel and ports »: a wire for each port brought to this computer, with dots running each way for what is sent and received, a SOCKS proxy, and a rule that lets the sandbox reach one port of this computer.">
+            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/film-tunnel-wire.webp)"></span>
+            <figcaption class="shot-caption"><b>After.</b> Its health live, and a wire per port with what runs each way.</figcaption>
+          </figure>
+        </div>
+        <p class="small muted center reveal">Filmed with stand-ins for Fly.io and SSH: nothing was deployed, nothing was billed. The prices are Fly.io's published ones, as the app shows them.</p>
+      </div>
+    </section>
+
+    <!-- 10 VOICE -->
+    <section id="voice" class="section section-alt feat-sec">
+      <div class="container">
+        <div class="feat flip reveal">
+          <div class="feat-text">
+            <p class="feat-num">10 · Voice and mobile</p>
+            <h2>Talk to your agents, follow them anywhere</h2>
+            <p class="muted">Hold <kbd>F8</kbd> and speak: your words appear in a see-through box, phrase by phrase, and
+              stay there when you release the key. Read, correct, add; <kbd>Enter</kbd> sends all of it, and nothing before.</p>
+            <div class="mini-cards">
+              <article class="card"><h3><span class="icon">F8</span>Dictation</h3><p>Into a box you send with Enter. With your OpenAI key, about $0.003 a minute, shown.</p></article>
+              <article class="card"><h3><span class="icon">F9</span>Commands</h3><p>« approve Flaky tests », « who is waiting? », « grid view ». Plain rules, no model.</p></article>
+              <article class="card"><h3><span class="icon">📱</span>Remote Control</h3><p>On by default for Claude Code: follow and answer a session from claude.ai/code or the Claude app.</p></article>
+            </div>
+          </div>
+          <div class="stack">
+            <figure class="screen"><img src="assets/showcase/voice.webp" width="1920" height="1200" loading="lazy" alt="Dictation: a see-through box at the bottom of a Claude Code session, listening, with a first phrase already written in it and « Enter sends it all » below."></figure>
+            <figure class="screen stack-2"><img src="assets/showcase/voice-confirm.webp" width="1920" height="1200" loading="lazy" alt="A voice command « approve Flaky tests » asks for a visible confirmation before it approves."></figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11 SAFETY -->
+    <section id="safety" class="section feat-sec">
+      <div class="container">
+        <div class="feat reveal">
+          <div class="feat-text">
+            <p class="feat-num">11 · Keys, secrets, safety</p>
+            <h2>A secret goes where you send it, and nowhere else</h2>
+            <p class="muted"><b>Keys › Secrets</b> keeps your projects' keys under a name, encrypted for your Windows user
+              and never shown again. Each one goes only to the sessions you give it to, in its program's environment when
+              it starts: not in a file, not to the others.</p>
+            <ul class="checks">
+              <li>A card per secret: who holds it, and fourteen bars for how often it was handed over.</li>
+              <li>With dotenvx: keep <code>DOTENV_PRIVATE_KEY</code> here, give it to the session, <code>dotenvx run --</code> works as it is.</li>
+              <li>Said plainly: an agent can read a secret it is given. The vault keeps a key from being everywhere; it is not a wall between agents.</li>
             </ul>
-            <p class="small muted" style="margin-top: 14px">At every level, agents' file tools are refused
-              <code>~/.ssh</code>, <code>.env</code> files and your keys. These rules are a guard rail on the agent's
-              own tools, not a wall: a script it writes and runs is not stopped by them.</p>
+          </div>
+          <figure class="screen loupe-fig" data-c="0.74 0.45 2.2">
+            <img src="assets/showcase/keys-secrets.webp" width="1920" height="1200" loading="lazy" alt="Keys › Secrets: tiles for secrets kept, sessions holding one, given in the last 24 hours and given to no session; a card per secret (DOTENV_PRIVATE_KEY, ELEVENLABS_API_KEY, GITHUB_TOKEN, STRIPE_TEST_KEY) with its note, a chip per session that holds it, fourteen bars of handovers, and Give, Take back, Replace and Delete. Demonstration secrets with made-up values.">
+            <span class="loupe-detail" aria-hidden="true" style="background-image:url(assets/showcase/keys-secrets.webp)"></span>
+            <figcaption class="loupe-cap">Who holds each secret (demonstration values)</figcaption>
+          </figure>
+        </div>
+
+        <div id="permissions" class="feat flip reveal" style="margin-top: clamp(48px, 7vw, 84px)">
+          <div class="feat-text">
+            <h3>You decide what each agent may do</h3>
+            <p class="muted">A level, a file access and git rights for each session, with defaults per group. Agent
+              Manager fills Claude Code's and Codex's own settings; it adds no permission system of its own.</p>
+            <ul class="checks">
+              <li><b>Five levels</b>, from <i>Ask before acting</i> to <i>No permission</i>, or <i>Per my config</i>.</li>
+              <li><b>Changed on an open agent</b>, on its own conversation.</li>
+              <li>At every level, agents' file tools are refused <code>~/.ssh</code>, <code>.env</code> files and your keys: a guard rail on the agent's own tools, not a wall.</li>
+            </ul>
           </div>
           <figure class="screen">
             <img src="assets/showcase/permissions-overview.webp" width="1920" height="1200" loading="lazy" alt="The Agent permissions view: seven agents in one table, each with its level, file access, git push and merge rights and an Edit… button; below, each group's default level and file access.">
           </figure>
         </div>
+
+        <div class="cards reveal" style="margin-top: clamp(40px, 6vw, 64px)">
+          <article class="card"><h3><span class="icon">⌂</span>Local engine</h3><p>On 127.0.0.1 only, behind a token. Nothing leaves your computer unless you ask.</p></article>
+          <article class="card"><h3><span class="icon">⚿</span>API keys, encrypted</h3><p>OpenAI, Fly.io, Anthropic: DPAPI on Windows, never shown again, never logged.</p></article>
+          <article class="card"><h3><span class="icon">✻</span>Your logins stay yours</h3><p>Agent CLIs run as you installed them. Agent Manager never reads, copies or relays a subscription token.</p></article>
+          <article class="card"><h3><span class="icon">Σ</span>Usage</h3><p>Tokens per session, per day and per tool, read from the agents' own logs. No invented dollar amounts.</p></article>
+        </div>
       </div>
     </section>
 
-    <!-- GIT & SSH -->
-    <section id="git" class="section">
+    <!-- THE LAB -->
+    <section id="lab" class="section lab-band">
       <div class="container">
-        <div class="section-head reveal">
-          <p class="overline">Git manager · SSH, handled</p>
-          <h2>Git that sets up its own keys</h2>
-          <p>Connect a repository, on GitHub or Azure DevOps, and Agent Manager makes an SSH key for it, checks it,
-            and gives it to the sessions on that repository. No <code>~/.ssh</code> to edit, no key shared between
-            projects.</p>
-        </div>
-
-        <div class="feature reveal">
+        <div class="lab-grid reveal">
           <div>
-            <span class="tag">Connected repositories</span>
-            <h3>One repository, one key</h3>
-            <ul>
-              <li><b>Add the SSH address</b>: a key is made for it, its public half shown with where to paste it. On
-                GitHub, a deploy key for that repository only; on Azure DevOps, a key on your profile, and the line
-                says it opens your whole account.</li>
-              <li><b>One line each, drawn</b>: a chip for the host, the key's state and how fresh its check is, the
-                folder's branch and what waits in it, a dot per session. What needs a hand comes first.</li>
-              <li><b>Passed through <code>GIT_SSH_COMMAND</code></b> to that repository's sessions only (its own
-                known_hosts, <code>IdentitiesOnly</code>). Nothing written to <code>~/.ssh</code> or to the repository's config.</li>
-              <li><b>Its branches as a metro map</b>: the base line, each branch with its commits, its worktree
-                and the sessions working there.</li>
-              <li><b>Your own clone</b>: « I already have it », or « clone it » where you choose. Rotate or disconnect any time.</li>
-            </ul>
+            <p class="overline">It's a lab</p>
+            <h2>Yours. On your computer. Moving fast.</h2>
+            <p class="muted">Agent Manager GD is built in loops, by the coding agents it now runs, with its owner testing
+              every round. Alpha, open, honest about what works and what does not yet. Run it on your own machine; don't
+              put it on the internet unless you know what you are doing (TCP/IP, TLS, authentication, infrastructure).
+              <a href="https://github.com/sonixz/agent-manager-gd/blob/main/AI-NOTICE.md" rel="noopener">The AI notice →</a></p>
           </div>
-          <figure class="screen">
-            <img src="assets/showcase/repos.webp" width="1920" height="1200" loading="lazy" alt="The Repos tab: four tiles (keys that work, need a hand, sessions running, hosts), then five repositories, one per line, on GitHub and Azure DevOps, each with a host chip, the state of its key, what the key opens, the folder's branch, a dot per session and the sessions started over fourteen days. Two lines are unfolded: an Azure DevOps repository that waits for its key, with its public key and where to add it, and a GitHub repository with the map of its branches drawn like a metro's: main at the top, two branches leaving it, each with its commits, its folder and its session.">
-          </figure>
-        </div>
-
-        <div class="feature flip reveal">
-          <div>
-            <span class="tag">Review</span>
-            <h3>Review what the agent did, line by line</h3>
-            <p>The session's changes file by file, coloured, with line numbers: uncommitted, since the session
-              started, or its branch against the target. Click a line to comment it; <b>Send review</b> hands the
-              agent one numbered request.</p>
-            <ul>
-              <li><b>A branch per session</b>: <code>am/&lt;name&gt;</code> in its own worktree, so agents never step on each other.</li>
-              <li><b>Finish its git branch…</b>: what is ahead, merge it (a conflicting merge is undone), remove the worktree.</li>
-            </ul>
-          </div>
-          <figure class="screen">
-            <img src="assets/showcase/review.webp" width="1920" height="1200" loading="lazy" alt="The Review view: the gift card change, file by file, with two comments on lines of code waiting to be sent to the agent.">
-          </figure>
-        </div>
-      </div>
-    </section>
-
-    <!-- VOICE -->
-    <section id="voice" class="section section-alt">
-      <div class="container">
-        <div class="feature reveal">
-          <div>
-            <p class="overline">Native voice</p>
-            <h2>Talk to your agents</h2>
-            <p class="muted">Hold <kbd>F8</kbd> and speak: your words appear in a small see-through box, phrase by
-              phrase, and stay there when you release the key. Read them, correct them, add more; <kbd>Enter</kbd>
-              sends all of it to the agent, and nothing before. Hold <kbd>F9</kbd> to run the control room by voice,
-              in English or French.</p>
-            <div class="cards" style="grid-template-columns: 1fr 1fr; margin: 18px 0">
-              <article class="card"><h3><span class="icon">F8</span>Dictation</h3><p>Into a box you send with Enter, saved on your computer so nothing you said is lost. About $0.003 a minute with your OpenAI key, shown.</p></article>
-              <article class="card"><h3><span class="icon">F9</span>Commands</h3><p>« approve Flaky tests », « who is waiting? », « grid view », « wrap up Docs ». Plain rules, no model.</p></article>
-            </div>
-            <p class="small muted">Approving, refusing and wrapping up always ask for a visible confirmation.
-              A soft sound tells you when an agent waits for you; <b>♪</b> mutes it.</p>
-          </div>
-          <figure class="screen">
-            <img src="assets/showcase/voice.webp" width="1920" height="1200" loading="lazy" alt="Dictation: a see-through box at the bottom of a Claude Code session, listening, with a first phrase already written in it and « Enter sends it all » below.">
-          </figure>
-        </div>
-      </div>
-    </section>
-
-    <!-- CLOUD -->
-    <section id="cloud" class="section">
-      <div class="container">
-        <div class="feature flip reveal">
-          <div>
-            <p class="overline">Cloud sandboxes</p>
-            <h2>A throw-away machine per agent</h2>
-            <p class="muted">Give a risky task its own Fly.io machine, ready in about 30 seconds, with your Fly token.
-              Its terminal opens like any session; the same SSH connection carries the tunnel to your Second Brain.</p>
-            <ul class="muted">
-              <li><b>The image, explained</b>: Ubuntu, tmux, git, SSH by keys only, Node, Python, Claude Code, Codex.</li>
-              <li><b>The cost before you deploy</b>, then measured from the machine's history, with a chart and a budget.</li>
-              <li><b>Caps that only pause</b>; nothing is ever destroyed except by you, after seeing what is not pushed.</li>
-            </ul>
-          </div>
-          <figure class="screen">
-            <img src="assets/showcase/sandboxes.webp" width="1920" height="1200" loading="lazy" alt="The Sandboxes tab: four tiles (running now, paused, destroyed and kept, at Fly.io now), the inventory with one line per sandbox and its life over thirty days as a bar, a destroyed one still listed with a cross where it ended; then the image and what it holds, deploy with an estimate first, and this month's costs.">
-          </figure>
-        </div>
-      </div>
-    </section>
-
-    <!-- MORE -->
-    <section class="section section-alt">
-      <div class="container">
-        <div class="section-head center reveal">
-          <p class="overline">And also</p>
-          <h2>The small things that make it home</h2>
-        </div>
-        <div class="cards reveal">
-          <article class="card"><h3><span class="icon">📱</span>Remote Control</h3><p>On by default for Claude Code: follow and drive a session from claude.ai/code or the Claude app, named « Group · Session ».</p></article>
-          <article class="card"><h3><span class="icon">▤</span>An impeccable terminal</h3><p>Accents, true colour, emoji, mouse, OSC 52 copy (sign-in links copy whole). A change that degrades it is a bug.</p></article>
-          <article class="card"><h3><span class="icon">Σ</span>Usage</h3><p>Tokens per session, per day and per tool, read from the agents' own logs on your computer.</p></article>
-          <article class="card"><h3><span class="icon">⌨</span>Your shortcuts</h3><p>Change any of them. With Shift they work everywhere, since a terminal keeps plain Ctrl keys for its programs.</p></article>
-          <article class="card"><h3><span class="icon">✓</span>Setup check</h3><p>What is found, what is missing, and the command to run yourself. Nothing downloaded behind your back.</p></article>
-          <article class="card"><h3><span class="icon">⚿</span>Your keys, encrypted</h3><p>OpenAI, Fly.io, Anthropic: encrypted for your Windows user (DPAPI), never shown again, never logged.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <!-- BUILT IN LOOPS -->
-    <section class="section" id="loops">
-      <div class="container">
-        <div class="section-head center reveal">
-          <p class="overline">Built in loops</p>
-          <h2>One loop, one thing that works</h2>
-          <p>Each loop ends with tests, real screenshots and a journal entry, then the next one starts. Agent Manager
-            was built this way by coding agents it now runs, with the owner testing every round.</p>
-        </div>
-        <ol class="timeline reveal">
-          <li><span class="when">Loop 2</span><b>Our own terminal</b><span>libghostty-vt in Godot, on Linux and native Windows: accents, true colour, mouse.</span></li>
-          <li><span class="when">Loop 3</span><b>Sessions that survive</b><span>A local engine and a private tmux server: close the app, the agents keep working.</span></li>
-          <li><span class="when">Loop 4</span><b>Live states</b><span>The tree, « They wait for you », Approve from the list, alerts.</span></li>
-          <li><span class="when">Loop 5</span><b>Resume, fork, worktree</b><span>A history that never forgets a conversation.</span></li>
-          <li class="brain"><span class="when">Loop 6</span><b>✦ The Brain in every session</b><span>A Second Brain key per session; agents pilot agents through MCP.</span></li>
-          <li class="brain"><span class="when">Loop 7</span><b>✦ Context that survives</b><span>Wrap up, summaries proposed to the Brain, Brief from the last one.</span></li>
-          <li><span class="when">Loops 8–9</span><b>Review and repositories</b><span>Diff review with line comments; deploy keys made for you.</span></li>
-          <li><span class="when">Loops 10–11</span><b>Keys and voice</b><span>Encrypted keys, F8 dictation, F9 commands.</span></li>
-          <li><span class="when">Loops 12–16</span><b>Cloud sandboxes</b><span>Fly.io machines per agent, tunnels, budgets that only pause.</span></li>
-          <li class="brain"><span class="when">Loop 16e</span><b>✦ Sessions that document themselves</b><span>The agent orients in the Brain, then proposes your words, decisions and its journal.</span></li>
-          <li><span class="when">Loops 17–18</span><b>This website</b><span>Every screenshot from the real app, on a fictional workspace, in one command.</span></li>
-          <li><span class="when">Loops 19–21</span><b>How-to and Docs</b><span>Twelve guides with a real screenshot per step, the Docs, one command that checks it all.</span></li>
-          <li class="brain"><span class="when">Loop 22</span><b>✦ The Brain, visible</b><span>A live badge, a ✦ light per session, a pulse when an agent uses the Brain.</span></li>
-          <li><span class="when">Loop 23</span><b>Approvals that unstick</b><span>Approve and Refuse answer at once; one notification per request.</span></li>
-          <li><span class="when">Loop 24</span><b>Permission levels</b><span>From Ask before acting to No permission; paths no agent may touch at any level.</span></li>
-          <li><span class="when">Loops 25–26</span><b>The orchestrator</b><span>One agent plans across your repositories, delegates in worktrees and hands you each result.</span></li>
-          <li><span class="when">Loops 27–31</span><b>What each agent may do</b><span>Level, file access and git rights per session, changed on an open agent; one view for all of them.</span></li>
-          <li><span class="when">Loop 32</span><b>One session per line</b><span>The list and « They wait for you » in lines: twenty sessions where eight tiles fitted.</span></li>
-          <li><span class="when">Loop 33</span><b>No more small delays</b><span>Measured, then fixed: opening a session again went from 80 ms to 8.</span></li>
-          <li><span class="when">Loop 34</span><b>The dictation box</b><span>What you say appears as you say it, stays in a box, and Enter sends all of it.</span></li>
-          <li><span class="when">Loop 35</span><b>What you do shows at once</b><span>Groups and sessions move on screen before the engine has answered; a dictation is written once more, in one piece.</span></li>
-          <li><span class="when">Loop 36</span><b>The setup check, from the ground up</b><span>First steps: it reads Windows, WSL and the Linux distribution before the programs and the engine, says why the engine does not answer, installs the missing programs on your click in a terminal you see, and has an engine room, a dashboard of the ground: memory in use by session over the last hour to the last seven days, what each session weighs, the true room on the disk. The top bar makes room for more: one View button for the ways to look at the sessions, and one button per manager.</span></li>
-          <li><span class="when">Loop 37</span><b>Repositories, a line each, and Azure DevOps</b><span>The Repos page shows one repository per line with its host, its key's state and age, what that key opens and the folder's branch; a line unfolds to the key and its actions. Azure DevOps repositories connect with the RSA key it asks for, and the line says that key opens the whole account. The list no longer waits on git.</span></li>
-          <li><span class="when">Loop 38</span><b>Sandboxes: the inventory, always</b><span>First steps: every sandbox made from here stays listed, the destroyed ones too, each with its life over thirty days as a bar, how long it ran and what it cost, beside what Fly.io holds now.</span></li>
-        </ol>
-      </div>
-    </section>
-
-    <!-- PRINCIPLES -->
-    <section class="section section-alt">
-      <div class="container">
-        <div class="section-head reveal">
-          <p class="overline">Principles</p>
-          <h2>Your tools, your login, your computer</h2>
-        </div>
-        <div class="principles reveal">
-          <article class="card"><h3>Local-first</h3><p>Nothing leaves your computer unless you ask. The engine listens on 127.0.0.1 with a token.</p></article>
-          <article class="card"><h3>Your own agents</h3><p>Claude Code and Codex run as you installed them, with your login and your config. Agent Manager never reads, copies or relays a subscription token.</p></article>
-          <article class="card"><h3>No admin, no surprises</h3><p>Installs for your user only. Third-party binaries only with your OK, pinned and checked against a published checksum.</p></article>
-          <article class="card"><h3>Open source</h3><p>MIT licence. Godot in front, Python's standard library behind, tmux underneath.</p></article>
-        </div>
-
-        <div class="section-head reveal" style="margin-top: clamp(56px, 8vw, 96px)">
-          <p class="overline">Architecture</p>
-          <h2>Godot in front, Python behind, tmux underneath</h2>
+          <ul class="principles-list">
+            <li><b>Local-first</b><span>Nothing leaves your computer unless you ask.</span></li>
+            <li><b>Your own agents</b><span>Claude Code and Codex as you installed them, with your login.</span></li>
+            <li><b>No admin, no surprises</b><span>Installs for your user; third-party binaries only with your OK, pinned and checked.</span></li>
+            <li><b>Open source</b><span>MIT. Godot in front, Python's standard library behind, tmux underneath.</span></li>
+          </ul>
         </div>
         <div class="arch reveal">
           <div class="box"><h3>Godot app</h3><p>The window, the native terminal (libghostty-vt), views, voice. Windows or Linux.</p></div>
@@ -512,26 +549,90 @@
       </div>
     </section>
 
-    <section class="section">
+    <!-- LOOPS: a rail with a dot per loop, filters, search, the latest cards; it scales to any number of loops -->
+    <section id="loops" class="section section-alt">
+      <div class="container">
+        <div class="section-head center reveal">
+          <p class="overline">Built in loops</p>
+          <h2>One loop, one thing that works</h2>
+          <p>Each loop ends with tests, real screenshots and a journal entry, then the next one starts. Pick a dot on the
+            line, a theme, or search.</p>
+        </div>
+        <div class="loops-ui reveal">
+          <div class="loop-rail" role="group" aria-label="Every loop, oldest to newest"></div>
+          <div class="loop-tools">
+            <div class="loop-phases" role="group" aria-label="Filter loops by theme">
+              <button type="button" data-phase="all" aria-pressed="true">All</button>
+              <button type="button" class="ph-core" data-phase="core" aria-pressed="false">Control room</button>
+              <button type="button" class="ph-brain" data-phase="brain" aria-pressed="false">Brain &amp; agents</button>
+              <button type="button" class="ph-git" data-phase="git" aria-pressed="false">Git</button>
+              <button type="button" class="ph-safety" data-phase="safety" aria-pressed="false">Safety</button>
+              <button type="button" class="ph-voice" data-phase="voice" aria-pressed="false">Voice</button>
+              <button type="button" class="ph-cloud" data-phase="cloud" aria-pressed="false">Cloud</button>
+              <button type="button" class="ph-site" data-phase="site" aria-pressed="false">Website</button>
+            </div>
+            <label class="loop-search"><span class="sr-only">Search the loops</span><input type="search" placeholder="Search the loops…" autocomplete="off"></label>
+          </div>
+          <div class="loop-list collapsed">
+            <article class="loop ph-site" data-phase="site" data-loop="Site"><p class="loop-tag">Website · Nov 2026</p><h3>A 30-second film, and this page</h3><p>The real app filmed on a private virtual display, cut and narrated; this home page rebuilt around it, one section per feature with new screenshots, and this line of loops that scales.</p></article>
+            <article class="loop ph-safety" data-phase="safety" data-loop="39"><p class="loop-tag">Loop 39 · Safety</p><h3>Secrets for your projects</h3><p>Keys › Secrets keeps your projects' keys under a name, encrypted, never shown again; each goes only to the sessions you give it to, in its environment when it starts. A card per secret with who holds it and fourteen bars of handovers. Works with dotenvx as it is.</p></article>
+            <article class="loop ph-cloud" data-phase="cloud" data-loop="38"><p class="loop-tag">Loop 38 · Cloud</p><h3>Sandboxes: the inventory, and the tunnel</h3><p>Every sandbox made here stays listed, destroyed ones too, with its life over thirty days and what it cost. On a running one, Tunnel and ports: bring a port to your localhost, a SOCKS proxy, a way back you allow, a wire per port with what runs each way.</p></article>
+            <article class="loop ph-git" data-phase="git" data-loop="37"><p class="loop-tag">Loop 37 · Git</p><h3>Repositories, a line each, and Azure DevOps</h3><p>One repository per line with its host, its key's state and age, what that key opens and the folder's branch; a line unfolds to the key and the metro map of its branches. Azure DevOps connects with the RSA key it asks for.</p></article>
+            <article class="loop ph-core" data-phase="core" data-loop="36"><p class="loop-tag">Loop 36 · Control room</p><h3>The setup check, from the ground up</h3><p>It reads Windows, WSL and the distribution before the programs and the engine, says why the engine does not answer, installs what is missing on your click in a terminal you see, and has an engine room: memory by session, from the last hour to seven days.</p></article>
+            <article class="loop ph-core" data-phase="core" data-loop="35"><p class="loop-tag">Loop 35 · Control room</p><h3>What you do shows at once</h3><p>Groups and sessions move on screen before the engine has answered; a dictation is written once more, in one piece.</p></article>
+            <article class="loop ph-voice" data-phase="voice" data-loop="34"><p class="loop-tag">Loop 34 · Voice</p><h3>The dictation box</h3><p>What you say appears as you say it, stays in a box, and Enter sends all of it.</p></article>
+            <article class="loop ph-core" data-phase="core" data-loop="33"><p class="loop-tag">Loop 33 · Control room</p><h3>No more small delays</h3><p>Measured, then fixed: opening a session again went from 80 ms to 8.</p></article>
+            <article class="loop ph-core" data-phase="core" data-loop="32"><p class="loop-tag">Loop 32 · Control room</p><h3>One session per line</h3><p>The list and « They wait for you » in lines: twenty sessions where eight tiles fitted.</p></article>
+            <article class="loop ph-safety" data-phase="safety" data-loop="27–31"><p class="loop-tag">Loops 27–31 · Safety</p><h3>What each agent may do</h3><p>Level, file access and git rights per session, changed on an open agent on its own conversation; one view for all of them.</p></article>
+            <article class="loop ph-brain" data-phase="brain" data-loop="25–26"><p class="loop-tag">Loops 25–26 · Brain &amp; agents</p><h3>The orchestrator</h3><p>One agent plans across your repositories, asks first, delegates in worktrees with the tool and model your rules choose, and hands you each result.</p></article>
+            <article class="loop ph-safety" data-phase="safety" data-loop="24"><p class="loop-tag">Loop 24 · Safety</p><h3>Permission levels</h3><p>From Ask before acting to No permission; paths no agent may touch at any level.</p></article>
+            <article class="loop ph-core" data-phase="core" data-loop="23"><p class="loop-tag">Loop 23 · Control room</p><h3>Approvals that unstick</h3><p>Approve and Refuse answer at once; one notification per request.</p></article>
+            <article class="loop ph-brain" data-phase="brain" data-loop="22"><p class="loop-tag">Loop 22 · Brain &amp; agents</p><h3>The Brain, visible</h3><p>A live badge, a ✦ light per session, a pulse when an agent uses the Brain.</p></article>
+            <article class="loop ph-site" data-phase="site" data-loop="19–21"><p class="loop-tag">Loops 19–21 · Website</p><h3>How-to and Docs</h3><p>Twelve guides with a real screenshot per step, the Docs, one command that checks it all.</p></article>
+            <article class="loop ph-site" data-phase="site" data-loop="17–18"><p class="loop-tag">Loops 17–18 · Website</p><h3>The website</h3><p>Every screenshot from the real app, on a fictional workspace, in one command.</p></article>
+            <article class="loop ph-brain" data-phase="brain" data-loop="16e"><p class="loop-tag">Loop 16e · Brain &amp; agents</p><h3>Sessions that document themselves</h3><p>The agent orients in the Brain, then proposes your words, decisions and its journal.</p></article>
+            <article class="loop ph-cloud" data-phase="cloud" data-loop="12–16"><p class="loop-tag">Loops 12–16 · Cloud</p><h3>Cloud sandboxes</h3><p>Fly.io machines per agent, tunnels, budgets that only pause; usage per session and day; the installer.</p></article>
+            <article class="loop ph-voice" data-phase="voice" data-loop="10–11"><p class="loop-tag">Loops 10–11 · Voice</p><h3>Keys and voice</h3><p>Encrypted keys, F8 dictation, F9 commands.</p></article>
+            <article class="loop ph-git" data-phase="git" data-loop="8–9"><p class="loop-tag">Loops 8–9 · Git</p><h3>Review and repositories</h3><p>Diff review with line comments; deploy keys made for you.</p></article>
+            <article class="loop ph-brain" data-phase="brain" data-loop="7"><p class="loop-tag">Loop 7 · Brain &amp; agents</p><h3>Context that survives</h3><p>Wrap up, summaries proposed to the Brain, Brief from the last one.</p></article>
+            <article class="loop ph-brain" data-phase="brain" data-loop="6"><p class="loop-tag">Loop 6 · Brain &amp; agents</p><h3>The Brain in every session</h3><p>A Second Brain key per session; agents pilot agents through MCP.</p></article>
+            <article class="loop ph-core" data-phase="core" data-loop="5"><p class="loop-tag">Loop 5 · Control room</p><h3>Resume, fork, worktree</h3><p>A history that never forgets a conversation.</p></article>
+            <article class="loop ph-core" data-phase="core" data-loop="4"><p class="loop-tag">Loop 4 · Control room</p><h3>Live states</h3><p>The tree, « They wait for you », Approve from the list, alerts.</p></article>
+            <article class="loop ph-core" data-phase="core" data-loop="3"><p class="loop-tag">Loop 3 · Control room</p><h3>Sessions that survive</h3><p>A local engine and a private tmux server: close the app, the agents keep working.</p></article>
+            <article class="loop ph-core" data-phase="core" data-loop="2"><p class="loop-tag">Loop 2 · Control room</p><h3>Our own terminal</h3><p>libghostty-vt in Godot, on Linux and native Windows: accents, true colour, mouse.</p></article>
+          </div>
+          <div class="loop-more-row">
+            <button type="button" class="btn loop-toggle" aria-expanded="false">Show all loops</button>
+            <a class="btn btn-ghost" href="https://github.com/sonixz/agent-manager-gd/blob/main/CHANGELOG.md" rel="noopener">The changelog →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section final-cta">
       <div class="container narrow center reveal">
+        <p class="tagline-lab small-lab"><span>Your agent lab.</span></p>
         <h2>Ready when you are</h2>
-        <p class="muted">Windows (with WSL) or Linux. Unzip, run the installer for your user, and the Setup check
-          tells you what is missing.</p>
+        <p class="muted">Windows (with WSL) or Linux. Unzip, run the installer for your user, and the Setup check tells
+          you what is missing.</p>
         <div class="hero-actions" style="justify-content: center">
           <a class="btn btn-primary" href="docs.html#install">Install it</a>
           <a class="btn" href="howto.html#first-minutes">Your first five minutes</a>
+          <a class="btn" href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a>
         </div>
+        <p class="license-line">Open Source · MIT Licensed</p>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
     <div class="container">
-      <span>Agent Manager GD · MIT licence</span>
+      <span>Agent Manager GD · your agent lab · MIT licence</span>
       <span><a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
     </div>
   </footer>
-  <script src="js/main.js?v=2026-11-09d"></script>
-  <script src="js/live.js?v=2026-11-09d"></script>
+  <script src="js/main.js?v=2026-11-13a"></script>
+  <script src="js/live.js?v=2026-11-13a"></script>
+  <script src="js/home.js?v=2026-11-13a"></script>
 </body>
 </html>

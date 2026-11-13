@@ -44,3 +44,11 @@ marks the film steps leave (`mark <name> <frame> [x y w h]`), so they follow the
 | `scripts/logo_png.gd` | `public/assets/logo.svg` as a PNG for the closing card |
 | `assets/audio/` | the exact takes used, and the music prompt |
 | `captures/`, `work/`, `output/` | made by the scripts, not in git |
+
+## Stills on the website
+
+Four screenshots of the home page are single frames of these films (1920x1080, WebP quality 80), taken from
+`captures/<step>/frameNNNNNNNN.png` near the step's marks: `film-wsl` 460 → `public/assets/showcase/film-wsl.webp`,
+`film-repos` 520 → `film-repos-metro.webp`, `film-sandbox` 380 → `film-sandbox-size.webp`, `film-tunnel` 1030 →
+`film-tunnel-wire.webp`. `tools/site.sh` does not remake them; after
+a new film, take them again with ffmpeg (`-i frame.png -c:v libwebp -quality 80 out.webp`).
