@@ -5,6 +5,13 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Website: the showcase video
+- The home page opens with a 30-second video of the real app, narrated in English: the control room with six agents,
+  the WSL page and each session's memory, repositories and their branches, choosing a cloud sandbox with its price,
+  and a running sandbox's tunnel bringing a port to your localhost. « Built for AI Builders. » and the MIT licence
+  sit with it. Filmed on a private virtual display with the demonstration workspace; Fly.io and the sandboxes are
+  stand-ins there, nothing was deployed. How it is made and remade: `video-production/README.md`.
+
 ### Sandboxes: the inventory, always · Loop 38 (first steps)
 - **Bring it to my localhost** no longer takes a port a Windows program already holds (the engine runs in WSL and
   could not see it: the browser landed on the Windows program). It reads Windows' listeners, read only, and takes
