@@ -3387,6 +3387,7 @@ var sbx_image_open := false # what the image holds is shown
 var sbx_open := {}          # a sandbox -> its line is unfolded
 var sbx_last := {}          # what the engine said last: a click that only changes what is shown draws from it
 var sbx_loading := false
+var sbx_reloads := 0        # how many times the page asked the engine (the measuring step reads it)
 var sbx_again := false
 var sbx_tunnels := {}     # a sandbox -> its connection as the engine last told it (state, ports, what listens, how it is doing)
 var sbx_tunnel_boxes := {} # a sandbox -> the box of its « Tunnel and ports » on the page
@@ -3405,6 +3406,7 @@ func _load_sandboxes() -> void:
 		sbx_again = true
 		return
 	sbx_loading = true
+	sbx_reloads += 1
 	var r := await engine.call_api("GET", "/sandboxes", null, true, 60.0)
 	sbx_loading = false
 	if not r.has("error"):
@@ -3517,10 +3519,6 @@ func _render_sandboxes(r: Dictionary) -> void:
 	for row in lines:
 		right.add_child(_sbx_line(row, live.get(str(row["id"]), {}), r, now))
 	_sbx_orphans(r)
-	# keep the view current while it is shown
-	get_tree().create_timer(30.0).timeout.connect(func() -> void:
-		if view == "sandboxes" and is_instance_valid(sbx_box):
-			_load_sandboxes())
 
 
 ## A running sandbox's « Tunnel and ports »: its lasting connection, how it is doing, the wires of what is brought to
@@ -3777,7 +3775,12 @@ func _sbx_line(row: Dictionary, sb: Dictionary, r: Dictionary, now: float) -> Co
 
 func _sbx_second() -> void:
 	sbx_seconds += 1
-	if view == "sandboxes" and sbx_seconds % 3 == 0:  # what passes and what listens, asked again while one looks
+	# the page is asked again every thirty seconds while it is shown, by this one clock. Before, every drawing of the
+	# page started a timer of its own that asked again, so each click added a loop: eight clicks, ten reloads in
+	# thirty seconds (measured), each one rebuilding the page.
+	if view == "sandboxes" and sbx_seconds % 30 == 0 and is_instance_valid(sbx_box):
+		_load_sandboxes()
+	if view == "sandboxes" and sbx_seconds % 3 == 0:  # what passes and what listens, asked again while one looks (the engine answers from what it last read)
 		for sbid in sbx_tunnel_boxes.keys():
 			if is_instance_valid(sbx_tunnel_boxes[sbid]) and str(sbx_tunnels.get(sbid, {}).get("state", "closed")) in ["open", "lost"]:
 				_sbx_tunnel_ask(sbid)

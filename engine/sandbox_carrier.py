@@ -425,7 +425,9 @@ class Carrier:
             r["open"] = r["port"] in link["ports"]
         # a port of this computer that the sandbox reaches listens there too: it is not one of the sandbox's own
         mine = {row.get("there") for row in link["ports"].values() if row["kind"] == "out"}
-        return [r for r in rows if r["port"] not in mine]
+        rows = [r for r in rows if r["port"] not in mine]
+        link["listening_last"] = rows
+        return rows
 
     HEALTH_KEEP = 180   # readings kept per sandbox: fifteen minutes at one every five seconds
 
@@ -459,7 +461,18 @@ class Carrier:
             hist.append({"at": steady, "t": time.time(), "cpu": h["cpu"], "mem": h["memory_used"], "rx": h["rx_rate"], "tx": h["tx_rate"], "load": h["load"]})
             del hist[:-self.HEALTH_KEEP]
         h["history"] = [{k: v for k, v in x.items() if k != "at"} for x in hist]
+        link["health_last"] = h
         return h
+
+    def last_read(self, sbid: str) -> tuple[dict, list]:
+        """How the sandbox was doing and what listened there, as the watch last read them (every five seconds):
+        what the page asks every few seconds is answered from here, without going to the sandbox each time."""
+        with self.lock:
+            link = self.links.get(sbid)
+        if not link:
+            return {}, []
+        listening = [dict(r, open=r["port"] in link["ports"]) for r in link.get("listening_last", [])]
+        return link.get("health_last", {}), listening
 
     def describe(self, sbid: str) -> dict:
         with self.lock:
@@ -495,6 +508,7 @@ class Carrier:
         for sbid in due_health:
             try:
                 self.health(sbid)
+                self.listening(sbid)
             except (ValueError, OSError):
                 pass
         with self.lock:

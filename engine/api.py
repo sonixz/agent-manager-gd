@@ -155,9 +155,14 @@ def make_handler(sessions: Sessions, token: str):
                     sbid = parts[1]
                     if parts[2:] == ["tunnel"] and method == "GET":
                         link = carrier.describe(sbid)
-                        if link["state"] == "open":   # what listens there and how it is doing, read through the connection
-                            link["listening"] = carrier.listening(sbid)
-                            link["health"] = carrier.health(sbid, sessions.sandboxes.get(sbid).get("workdir") or "/work")
+                        if link["state"] == "open":
+                            # what listens there and how it is doing, as last read (every five seconds); read now only
+                            # the first time. Before, each look went to the sandbox twice over SSH.
+                            health, listening = carrier.last_read(sbid)
+                            if not health:
+                                listening = carrier.listening(sbid)
+                                health = carrier.health(sbid, sessions.sandboxes.get(sbid).get("workdir") or "/work")
+                            link["listening"], link["health"] = listening, health
                         return self._reply(200, link)
                     if parts[2:] == ["tunnel", "connect"] and method == "POST":
                         return self._reply(200, carrier.connect(sbid))

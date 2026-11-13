@@ -142,6 +142,24 @@ func _run() -> void:
 	await wait(1.0)
 	var made := await _workspace()
 	match OS.get_environment("SHOW_STEP"):
+		"frames":  # frame times on the focus view, the same on any version (to compare versions)
+			main.select(made["Checkout flow"])
+			await wait(3.0)
+			for label in ["focus", "focus again"]:
+				var times := []
+				var before := Time.get_ticks_usec()
+				var until := Time.get_ticks_msec() + 8000
+				while Time.get_ticks_msec() < until:
+					await process_frame
+					var now_us := Time.get_ticks_usec()
+					times.append((now_us - before) / 1000.0)
+					before = now_us
+				times.sort()
+				var avg := 0.0
+				for t in times:
+					avg += t
+				avg /= maxf(times.size(), 1)
+				report.append("frames: %s: %d frames, average %.1f ms, 95 %% under %.1f ms, longest %.1f ms" % [label, times.size(), avg, times[int(times.size() * 0.95)], times[-1]])
 		"measure":
 			main.select(made["Checkout flow"])
 			await wait(3.0)
@@ -1296,6 +1314,55 @@ for i in range(600):
 			await process_frame
 			var unfolded: bool = main.sbx_box.find_child("Sandbox_a1c4e9f2", true, false).find_children("*", "Button", true, false).any(func(b: Node) -> bool: return (b as Button).text == "▾")
 			report.append("latency: a sandbox's line unfolded in %d ms (unfolded: %s)" % [Time.get_ticks_msec() - t1, unfolded])
+		"smooth":  # is the app still fluid: frame times on each page, what a few clicks leave behind (nodes, reload loops), with a running sandbox connected and a dashboard in it
+			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "shell", "cwd": "~", "group": "Orbit API", "brain": false})
+			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), OS.get_environment("AGMGD_HOME"), str(pa["id"]), str(pb["id"])], [])
+			var hl := FileAccess.open(OS.get_environment("STANDIN_HEALTH"), FileAccess.WRITE)
+			hl.store_string("MemTotal: 1009636 kB\nMemAvailable: 604580 kB\n---\n0.42 0.31 0.12 1/97 2231\n---\n5123.40 9001.11\n---\nF\n/dev/vdb 8350298112 2147483648 5771362304 28% /\n---\ncpu  1000 0 500 8500 0 0 0 0 0 0\n---\n  eth0: 1000 1 0 0 0 0 0 0 500 1 0 0 0 0 0 0\n---\n    412 streamlit 38.5 182340\n---\n2\n")
+			hl.close()
+			var ss := FileAccess.open(OS.get_environment("STANDIN_SS"), FileAccess.WRITE)
+			ss.store_string("LISTEN 0 5 127.0.0.1:8000 0.0.0.0:* users:((\"python3\",pid=500,fd=3))\n")
+			ss.close()
+			await main.refresh()
+			var frames := func(label: String, secs: float) -> void:
+				var times := []
+				var before := Time.get_ticks_usec()
+				var until := Time.get_ticks_msec() + int(secs * 1000)
+				while Time.get_ticks_msec() < until:
+					await process_frame
+					var now_us := Time.get_ticks_usec()
+					times.append((now_us - before) / 1000.0)
+					before = now_us
+				times.sort()
+				var avg := 0.0
+				for t in times:
+					avg += t
+				avg /= maxf(times.size(), 1)
+				report.append("smooth: %s: %d frames, average %.1f ms, 95 %% under %.1f ms, longest %.1f ms | nodes %d, orphans %d" % [label, times.size(), avg,
+					times[int(times.size() * 0.95)], times[-1], int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))])
+			main.select(made["Checkout flow"])
+			await wait(2.0)
+			await frames.call("focus, before anything", 6.0)
+			main.set_view("sandboxes")
+			await wait(3.0)
+			await frames.call("sandboxes, nothing open", 6.0)
+			main.sbx_open["a1c4e9f2"] = true
+			main._render_sandboxes(main.sbx_last)
+			await main._sbx_tunnel_do("a1c4e9f2", "tunnel/connect")
+			await wait(2.0)
+			await frames.call("sandboxes, a sandbox unfolded and connected", 8.0)
+			var reloads0: int = main.sbx_reloads
+			for i in 8:
+				main.sbx_open["b07d3e55"] = i % 2 == 0
+				main._render_sandboxes(main.sbx_last)
+				await wait(0.3)
+			await wait(31.0)
+			report.append("smooth: after eight clicks and 31 s, the page asked the engine %d times (one is expected)" % (main.sbx_reloads - reloads0))
+			await frames.call("sandboxes, after the clicks", 6.0)
+			main.set_view("focus")
+			await wait(2.0)
+			await frames.call("focus, after the sandboxes", 6.0)
 		"palette":
 			main.select(made["Sparks"])
 			await wait(2.0)
