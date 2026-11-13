@@ -11,6 +11,8 @@ const RepoView := preload("res://scripts/repo_view.gd")
 const RepoWidgets := preload("res://scripts/repo_widgets.gd")
 const SandboxView := preload("res://scripts/sandbox_view.gd")
 const SandboxWidgets := preload("res://scripts/sandbox_widgets.gd")
+const SecretView := preload("res://scripts/secret_view.gd")
+const SecretWidgets := preload("res://scripts/secret_widgets.gd")
 const ACT_KEYS := ["working", "approval", "waiting", "done", "idle", "exited", "missing"]
 
 var engine: EngineClient
@@ -155,6 +157,8 @@ const DRAFT_FILE := "user://dictation-draft.txt"
 const EARLIER_FILE := "user://dictation-earlier.json"
 const VOICE_MAX_SECONDS := 300  # a key release that got lost (the window lost the focus) must not record for ever
 var keys_list: VBoxContainer
+var f_secrets: HFlowContainer   # New session: a box per secret of the vault (Loop 39)
+var f_secrets_words: Label
 var usage_box: VBoxContainer
 var perms_box: VBoxContainer   # Loop 31: the Agent Permissions view
 var access_menu: PopupMenu     # a group's default file access
@@ -808,6 +812,19 @@ func _build_new_dialog() -> void:
 	f_remote.button_pressed = true
 	f_remote.tooltip_text = "The session appears in claude.ai/code under « Group · Name »; Claude Code only"
 	g.add_child(f_remote)
+	var sec_label := Label.new()
+	sec_label.text = "Secrets"
+	g.add_child(sec_label)
+	var sec_box := VBoxContainer.new()
+	f_secrets = HFlowContainer.new()
+	f_secrets.add_theme_constant_override("h_separation", 10)
+	sec_box.add_child(f_secrets)
+	f_secrets_words = _muted("")
+	f_secrets_words.add_theme_font_size_override("font_size", 11)
+	f_secrets_words.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	f_secrets_words.custom_minimum_size = Vector2(420, 0)
+	sec_box.add_child(f_secrets_words)
+	g.add_child(sec_box)
 	f_cwd.text_changed.connect(func(_t: String) -> void: _check_brief())
 	f_tool.item_selected.connect(func(_i: int) -> void: _check_brief())
 	f_where.item_selected.connect(func(_i: int) -> void: _check_remote())
@@ -933,6 +950,7 @@ func _open_new(where := "", tool := "") -> void:
 			f_tool.select(i)
 	f_remote.button_pressed = true
 	_check_remote()
+	await _fill_secret_boxes()
 	new_dialog.popup_centered()
 	f_name.grab_focus()
 
@@ -4350,6 +4368,163 @@ func _load_usage() -> void:
 
 
 # ------------------------------------------------------------------ keys (Loop 10)
+## New session: one box per secret of the vault, none ticked; the words under them say who gets what.
+func _fill_secret_boxes() -> void:
+	for c in f_secrets.get_children():
+		c.queue_free()
+	var r := await engine.call_api("GET", "/secrets")
+	var names: Array = (r.get("secrets", []) as Array).map(func(x: Dictionary) -> String: return str(x["name"]))
+	if names.is_empty():
+		f_secrets_words.text = "The vault is empty: add secrets under Keys › Secrets, then tick the ones a session needs."
+		return
+	for n in names:
+		var cb := CheckBox.new()
+		cb.text = n
+		cb.toggled.connect(func(_on: bool) -> void: f_secrets_words.text = SecretView.session_words(_ticked_secrets()))
+		f_secrets.add_child(cb)
+	f_secrets_words.text = SecretView.session_words([])
+
+
+func _ticked_secrets() -> Array:
+	if f_secrets == null or str(f_where.get_selected_metadata()) == "sandbox":
+		return []
+	var out := []
+	for c in f_secrets.get_children():
+		if c is CheckBox and (c as CheckBox).button_pressed and not c.is_queued_for_deletion():
+			out.append((c as CheckBox).text)
+	return out
+
+
+## Keys › Secrets (Loop 39): the tiles, a drawn card per secret with what can be done with it, and the form to add one.
+func _load_secrets() -> void:
+	var r := await engine.call_api("GET", "/secrets")
+	if keys_list == null or not is_instance_valid(keys_list):
+		return
+	var t := Label.new()
+	t.text = "Secrets"
+	t.add_theme_font_size_override("font_size", 15)
+	t.add_theme_font_override("font", AmTheme.ui_font(650))
+	keys_list.add_child(t)
+	var intro := _muted("Keys for your projects (an ElevenLabs key, a GitHub token, a dotenvx private key). Each goes only to the sessions you give it to, in its program's environment when it starts: not in a file, not to the other sessions. An agent can read what it is given.")
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	keys_list.add_child(intro)
+	if r.has("error"):
+		keys_list.add_child(_muted(str(r["error"])))
+		return
+	var now := Time.get_unix_time_from_system()
+	keys_list.add_child(RepoWidgets.Tiles.new(SecretView.tiles(r, sessions, now)))
+	var encrypted := str(r.get("protection", "")).begins_with("Windows")
+	for x in r.get("secrets", []):
+		var name := str(x["name"])
+		var held := SecretView.holders(name, sessions)
+		var card := PanelContainer.new()
+		card.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, AmTheme.col("BORDER"), 1, 8))
+		var v := VBoxContainer.new()
+		card.add_child(v)
+		var drawn = SecretWidgets.Card.new(x, held, SecretView.days(r.get("journal", []), name, now), encrypted)
+		drawn.name = "Secret_" + name
+		v.add_child(drawn)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		v.add_child(row)
+		var w := _muted(SecretView.words(x, held, now))
+		w.add_theme_font_size_override("font_size", 11)
+		w.size_flags_horizontal = SIZE_EXPAND_FILL
+		w.clip_text = true
+		row.add_child(w)
+		var give := OptionButton.new()   # give it to a session that does not have it, from that session's next start
+		give.add_item("Give to a session…")
+		for s in sessions:
+			if str(s.get("cwd", "")) != "/work" and not (name in (s.get("secrets", []) as Array)):
+				give.add_item(str(s["name"]))
+				give.set_item_metadata(give.item_count - 1, str(s["id"]))
+		give.disabled = give.item_count < 2
+		give.item_selected.connect(func(i: int) -> void:
+			if i == 0:
+				return
+			var sid := str(give.get_item_metadata(i))
+			var have: Array = (_session(sid).get("secrets", []) as Array).duplicate()
+			have.append(name)
+			var res := await engine.call_api("POST", "/sessions/%s/secrets" % sid, {"names": have})
+			_toast(str(res["error"]) if res.has("error") else "%s goes to « %s » from its next start (Restart it to give it now)" % [name, _session(sid).get("name", "")])
+			await refresh()
+			await _load_keys())
+		row.add_child(give)
+		if not held.is_empty():
+			var back := OptionButton.new()
+			back.add_item("Take back from…")
+			for h in held:
+				back.add_item(str(h["name"]))
+				back.set_item_metadata(back.item_count - 1, str(h["id"]))
+			back.item_selected.connect(func(i: int) -> void:
+				if i == 0:
+					return
+				var sid := str(back.get_item_metadata(i))
+				var have: Array = (_session(sid).get("secrets", []) as Array).filter(func(n) -> bool: return str(n) != name)
+				var res := await engine.call_api("POST", "/sessions/%s/secrets" % sid, {"names": have})
+				_toast(str(res["error"]) if res.has("error") else "« %s » no longer gets %s from its next start: a program already running keeps what it had" % [_session(sid).get("name", ""), name])
+				await refresh()
+				await _load_keys())
+			row.add_child(back)
+		var edit := LineEdit.new()
+		edit.secret = true
+		edit.placeholder_text = "a new value"
+		edit.custom_minimum_size = Vector2(150, 0)
+		row.add_child(edit)
+		row.add_child(_small("Replace", func() -> void:
+			var value := edit.text
+			edit.text = ""
+			var res := await engine.call_api("POST", "/secrets", {"name": name, "value": value}, true, 60.0)
+			_toast(str(res.get("error", "Replaced: %s (encrypted). Sessions get it at their next start." % name)))
+			await _load_keys(), "Replace its value; the sessions given it get the new one when they start again"))
+		row.add_child(_small("Delete…", func() -> void:
+			_confirm("Delete the secret %s from this computer?
+The sessions given it no longer get it from their next start; a program already running keeps what it had." % name, func() -> void:
+				await engine.call_api("DELETE", "/secrets/" + name)
+				await _load_keys())))
+		keys_list.add_child(card)
+	# the form: a name, the value (hidden as it is typed), a note
+	var form := HBoxContainer.new()
+	form.add_theme_constant_override("separation", 8)
+	var fname := LineEdit.new()
+	fname.placeholder_text = "NAME (like ELEVENLABS_API_KEY)"
+	fname.custom_minimum_size = Vector2(260, 0)
+	form.add_child(fname)
+	var fvalue := LineEdit.new()
+	fvalue.secret = true
+	fvalue.placeholder_text = "the value: hidden, never shown again"
+	fvalue.size_flags_horizontal = SIZE_EXPAND_FILL
+	form.add_child(fvalue)
+	var fnote := LineEdit.new()
+	fnote.placeholder_text = "a note (what it is for)"
+	fnote.custom_minimum_size = Vector2(220, 0)
+	form.add_child(fnote)
+	var hint := _muted("")
+	hint.add_theme_font_size_override("font_size", 11)
+	fname.text_changed.connect(func(text: String) -> void:
+		var tidy := SecretView.tidy_name(text)
+		if tidy != text:
+			var at := fname.caret_column
+			fname.text = tidy
+			fname.caret_column = mini(at, tidy.length())
+		hint.text = SecretView.name_problem(tidy) if tidy != "" else "")
+	form.add_child(_small("+ Add the secret", func() -> void:
+		var problem := SecretView.name_problem(fname.text)
+		if problem != "":
+			hint.text = problem
+			return
+		var value := fvalue.text
+		fvalue.text = ""
+		var res := await engine.call_api("POST", "/secrets", {"name": fname.text, "value": value, "note": fnote.text}, true, 60.0)
+		if res.has("error"):
+			hint.text = str(res["error"])
+			return
+		_toast("Kept: %s (encrypted). Give it to a session, or tick it in New session." % fname.text)
+		await _load_keys()))
+	keys_list.add_child(form)
+	keys_list.add_child(hint)
+
+
 func _keys_view() -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
@@ -4376,6 +4551,12 @@ func _load_keys() -> void:
 	var prot := _muted("Protection: " + str(r.get("protection", "")))
 	prot.add_theme_font_size_override("font_size", 12)
 	keys_list.add_child(prot)
+	await _load_secrets()
+	var api_t := Label.new()
+	api_t.text = "Agent Manager's own API keys"
+	api_t.add_theme_font_size_override("font_size", 15)
+	api_t.add_theme_font_override("font", AmTheme.ui_font(650))
+	keys_list.add_child(api_t)
 	for k in r["keys"]:
 		keys_list.add_child(_key_card(k))
 	await _load_brain_keys()
@@ -5219,7 +5400,7 @@ func _create_now() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled, "level": str(f_level.get_selected_metadata()), "access": str(f_access.get_selected_metadata())}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled, "level": str(f_level.get_selected_metadata()), "access": str(f_access.get_selected_metadata()), "secrets": _ticked_secrets()}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return

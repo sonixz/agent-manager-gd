@@ -13,6 +13,10 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
 - **The local engine** listens on 127.0.0.1 only and answers only with its token (a file readable by your user only).
 - **Your keys** (OpenAI, Fly.io, Anthropic) are encrypted with Windows DPAPI for your user on Windows; on Linux they are
   files readable by your user only (0600). They are never shown again and never written to a log.
+- **Your project secrets** (Keys › Secrets: an ElevenLabs key, a GitHub token, a dotenvx private key) are kept the
+  same way and go only to the sessions you give them to: at its start, a session's program trades a single-use ticket
+  (90 seconds, 127.0.0.1) with the engine for them. No file, nothing in tmux's environment, no value on a command line;
+  the API never returns a value; a journal records which session received which secret and when, never the value.
 - **Repository keys**: each connected repository gets its own key; your personal SSH key is never used or read.
   On GitHub it is a deploy key, which opens that repository only. Azure DevOps has no key per repository: the key
   goes on your profile and opens everything your account reaches there, and the repository's line says so; to keep
@@ -57,6 +61,11 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   Linux. **Restart WSL…** runs WSL's own `wsl --shutdown` after you typed « restart ».
 
 ## What it does not protect
+
+- **A secret given to a session.** Its program, and what it starts, can read and print it; the sessions run as the
+  same Linux user, so a determined program could read another session's memory too. The vault keeps a key from lying
+  everywhere in WSL; it is not a wall between agents. Give each secret to the sessions that need it, with the
+  smallest rights it can have (a fine-grained GitHub token for one repository, for example).
 
 - **Scripts an agent writes and runs.** Deny rules cover Claude Code's file tools and the file commands it recognises
   in a shell, not a program that opens files itself. Only an operating-system sandbox stops that (Claude Code's
