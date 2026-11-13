@@ -168,6 +168,7 @@ var repos_form_open := false
 var repos_open := {}           # a repository -> its line is unfolded (asked for; the ones that need a hand unfold by themselves)
 var repos_ticks := 0
 var repos_unfolding := ""      # the line a click just unfolded: its details fade in
+var repos_sig := ""            # what the lines were built from
 var repos_branches := {}       # a repository -> its branches as the engine last read them (the map of an unfolded line)
 var repos_branches_at := {}    # a repository -> when that was asked
 var f_repo: OptionButton
@@ -2322,6 +2323,8 @@ func _layout_view() -> void:
 			content.add_child(_page(_connect_rows()))
 		"sandboxes":
 			content.add_child(_sandboxes_view())
+			if not sbx_last.is_empty():
+				_render_sandboxes.call_deferred(sbx_last)  # what was known shows at once; the engine's answer follows
 			_load_sandboxes()
 		"board":
 			var scroll := ScrollContainer.new()
@@ -3382,17 +3385,55 @@ func _sandboxes_view() -> Control:
 var sbx_live: Array = []  # [Label, running_since] pairs ticking every second
 var sbx_image_open := false # what the image holds is shown
 var sbx_open := {}          # a sandbox -> its line is unfolded
+var sbx_last := {}          # what the engine said last: a click that only changes what is shown draws from it
+var sbx_loading := false
+var sbx_again := false
 var sbx_tunnels := {}     # a sandbox -> its connection as the engine last told it (state, ports, what listens, how it is doing)
 var sbx_tunnel_boxes := {} # a sandbox -> the box of its « Tunnel and ports » on the page
 var sbx_tunnel_names := {}
+var sbx_tunnel_sigs := {}  # a sandbox -> what its block was built from (see _sbx_tunnel_sig)
+var sbx_page_sig := ""     # what the page was built from: a reload that brings nothing new does not build it again
 var sbx_seconds := 0
 var sbx_tick: Timer
 
 
+## The page asks the engine (which asks Fly.io: up to a few seconds), then draws what it got. A click that only
+## changes what is shown (unfold a line, the image's contents) draws again from what was last got, at once: before,
+## it waited for the engine and the page answered seconds after the click (owner, 2026-11-12).
 func _load_sandboxes() -> void:
+	if sbx_loading:
+		sbx_again = true
+		return
+	sbx_loading = true
 	var r := await engine.call_api("GET", "/sandboxes", null, true, 60.0)
+	sbx_loading = false
+	if not r.has("error"):
+		sbx_last = r
+	var sig := _sbx_page_sig(r)
+	if sig != sbx_page_sig or not is_instance_valid(sbx_box) or sbx_box.get_child_count() == 0:
+		_render_sandboxes(r)   # built again only when something it shows changed: a click is not swallowed by a rebuild
+	if sbx_again:
+		sbx_again = false
+		_load_sandboxes()
+
+
+## The page's content without what moves every second (running times, costs to the cent are rounded): what must
+## be the same for the page to stay as it is.
+func _sbx_page_sig(r: Dictionary) -> String:
+	var rows: Array = (r.get("inventory", {}).get("sandboxes", []) as Array).map(func(x: Dictionary) -> Array:
+		return [x.get("id"), x.get("state"), x.get("destroyed"), x.get("finished"), x.get("runs", []).size(), snappedf(float(x.get("cost_usd", 0)), 0.01)])
+	return JSON.stringify([rows, r.get("sizes", {}).get("chosen", ""), r.get("job", {}), r.get("image_info", {}).get("ready", false),
+		r.get("orphans", []).size(), r.get("token", false), snappedf(float(r.get("month_spend_usd", 0)), 0.01), sbx_open, sbx_image_open])
+
+
+func _render_sandboxes(r: Dictionary) -> void:
 	if sbx_box == null or not is_instance_valid(sbx_box):
 		return
+	sbx_page_sig = _sbx_page_sig(r)
+	var scroller := sbx_box.get_parent() as ScrollContainer
+	var kept := scroller.scroll_vertical if scroller else 0   # drawn again where one was, not back at the top
+	if scroller:
+		scroller.set_deferred("scroll_vertical", kept)
 	for c in sbx_box.get_children():
 		sbx_box.remove_child(c)  # out of the page now: what is made in the same breath keeps its own name
 		c.queue_free()
@@ -3499,12 +3540,40 @@ func _sbx_tunnel(sbid: String, name: String) -> Control:
 func _sbx_tunnel_ask(sbid: String) -> void:
 	var t := await engine.call_api("GET", "/sandboxes/%s/tunnel" % sbid, null, true, 30.0)
 	if not t.has("error"):
+		if (sbx_tunnels.get(sbid, {}) as Dictionary).has("pending"):
+			t["pending"] = sbx_tunnels[sbid]["pending"]   # an action is under way: it keeps saying so
 		sbx_tunnels[sbid] = t
+		# Nothing but figures changed: the charts and the wires are given the new figures and drawn again where they
+		# are. The buttons stay: rebuilding the block every three seconds swallowed a click that came meanwhile.
+		var box: Control = sbx_tunnel_boxes.get(sbid)
+		if is_instance_valid(box) and sbx_tunnel_sigs.get(sbid, "") == _sbx_tunnel_sig(t):
+			var health: Node = box.find_child("Health_" + sbid, false, false)
+			if health != null:
+				health.h = t.get("health", {})
+				health._fit()
+				health.queue_redraw()
+			var wire: Node = box.find_child("Wire_" + sbid, false, false)
+			if wire != null:
+				wire.rows = SandboxView.wire_rows(t)
+			return
 		_sbx_tunnel_fill(sbid)
 
 
+## What decides whether the block must be built again: its state, its ports and their states, what listens, who
+## carries the way back, an action under way. Figures (rates, memory, programs) are not in it.
+func _sbx_tunnel_sig(t: Dictionary) -> String:
+	return JSON.stringify([t.get("state"), t.get("pending", ""), t.get("brain_way", ""), t.get("why", ""), int(t.get("tries", 0)),
+		(t.get("ports", []) as Array).map(func(p: Dictionary) -> Array: return [p.get("kind"), p.get("remote_port"), p.get("port"), p.get("state")]),
+		(t.get("listening", []) as Array).map(func(l: Dictionary) -> Array: return [l.get("port"), l.get("program"), l.get("open")])])
+
+
 func _sbx_tunnel_do(sbid: String, path: String, body := {}, said := "") -> void:
+	var t: Dictionary = sbx_tunnels.get(sbid, {})
+	t["pending"] = {"tunnel/connect": "connecting…", "tunnel/disconnect": "disconnecting…"}.get(path, "working…")
+	sbx_tunnels[sbid] = t
+	_sbx_tunnel_fill(sbid)   # the click shows at once; the engine answers after
 	var res := await engine.call_api("POST", "/sandboxes/%s/%s" % [sbid, path], body, true, 120.0)
+	(sbx_tunnels.get(sbid, {}) as Dictionary).erase("pending")
 	if res.has("error"):
 		_toast(str(res["error"]))
 	elif said != "":
@@ -3520,7 +3589,10 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 		box.remove_child(c)
 		c.queue_free()
 	var t: Dictionary = sbx_tunnels.get(sbid, {})
+	sbx_tunnel_sigs[sbid] = _sbx_tunnel_sig(t)
 	var link: Dictionary = SandboxView.link_of(t)
+	if t.has("pending"):
+		link = {"text": "⏳ " + str(t["pending"]), "level": "warn"}
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 10)
 	box.add_child(head)
@@ -3657,7 +3729,7 @@ func _sbx_line(row: Dictionary, sb: Dictionary, r: Dictionary, now: float) -> Co
 	line.add_child(mark)
 	var toggle := func() -> void:
 		sbx_open[sbid] = not open
-		_load_sandboxes()
+		_render_sandboxes(sbx_last)
 	var name := Button.new()
 	name.text = SandboxView.name_of(row)
 	name.flat = true
@@ -3771,7 +3843,7 @@ func _sbx_image_step(r: Dictionary) -> Control:
 	if ready:  # once it is ready, the image is one line: what it holds is one click away
 		h.add_child(_small("Contents ▾" if sbx_image_open else "Contents ▸", func() -> void:
 			sbx_image_open = not sbx_image_open
-			_load_sandboxes()))
+			_render_sandboxes(sbx_last)))
 	var grid := GridContainer.new()
 	grid.visible = sbx_image_open or not ready
 	grid.columns = 2
@@ -3827,9 +3899,13 @@ func _sbx_deploy_step(r: Dictionary) -> Control:
 		var pick = SandboxWidgets.Sizes.new(sizes)
 		pick.name = "SandboxSizes"
 		pick.picked.connect(func(id: String) -> void:
+			pick.chosen = id   # at once on the card; the engine is told aside
+			pick.queue_redraw()
 			var res := await engine.call_api("POST", "/sandboxes/size", {"size": id})
 			_toast(str(res["error"]) if res.has("error") else "The next sandboxes get %s" % id)
-			await _load_sandboxes())
+			if not res.has("error") and sbx_last.has("sizes"):
+				sbx_last["sizes"] = res
+			_load_sandboxes())
 		v.add_child(pick)
 		var note := _muted("Prices: %s, while the machine runs, billed by the second; paused, only its disk (≈ %s a month). Region %s.%s A sandbox that runs keeps its size." % [
 			str(sizes.get("source", "")), CostChart.money(float(sizes.get("paused_per_month", 0))), str(sizes.get("region", "")),
@@ -4508,8 +4584,8 @@ func _repos_tick() -> void:
 	elif repos_ticks % 30 == 0:
 		await engine.call_api("POST", "/repos/refresh", {"keys": false})  # the folders, every half minute while one looks
 		await _load_repos()
-	elif repos_ticks % 10 == 0:
-		_render_repos()  # the ages move on
+	elif repos_ticks % 10 == 0 and not (is_instance_valid(repos_list) and repos_list.get_global_rect().has_point(repos_list.get_global_mouse_position())):
+		_render_repos()  # the ages move on, but not under the pointer: a click there is not swallowed
 
 
 func _load_repos() -> void:
@@ -4518,7 +4594,13 @@ func _load_repos() -> void:
 		return
 	repos_cache = r["repos"]
 	_render_repos_button()
-	_render_repos()
+	# built again only when something it shows changed (a check's answer, a folder read): the second-by-second
+	# asking while a key is checked no longer rebuilds the lines under the pointer and swallows a click
+	var sig := JSON.stringify(repos_cache.map(func(x: Dictionary) -> Array:
+		return [x.get("id"), x.get("status"), x.get("message"), x.get("busy"), x.get("folder"), x.get("sessions", []).size(), x.get("key_made")]))
+	if sig != repos_sig or repos_list == null or not is_instance_valid(repos_list) or repos_list.get_child_count() == 0:
+		repos_sig = sig
+		_render_repos()
 
 
 func _render_repos() -> void:

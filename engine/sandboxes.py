@@ -281,7 +281,7 @@ class Sandboxes:
             raise ValueError("the sandbox did not start: " + out[-300:])
         machine = ""
         for _ in range(1 if isinstance(self.fly, DemoFly) else 10):  # a new machine can take a few seconds to show in Fly's list
-            machine = next((m["id"] for m in self.machines() if m.get("name") == "sandbox-" + sbid), "")
+            machine = next((m["id"] for m in self.machines(fresh=True) if m.get("name") == "sandbox-" + sbid), "")
             if machine:  # without its id the sandbox could never be reached (the terminal looks it up again, by name)
                 break
             time.sleep(1)
@@ -289,17 +289,48 @@ class Sandboxes:
             db.execute("INSERT INTO sandboxes (id, session_id, app, machine, region, size, secret, repo_id, created) "
                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (sbid, session_id, st["app"], machine, st["region"], size,
                                                                secrets.token_urlsafe(24), repo_id, time.time()))
+        self.forget_machines()
         return self.get(sbid)
 
-    def machines(self) -> list[dict]:
+    MACHINES_FRESH = 10.0   # seconds a list of machines from Fly.io is used as it is
+
+    def machines(self, fresh: bool = False) -> list[dict]:
+        """The app's machines at Fly.io. Asking Fly.io takes one to a few seconds: the list is kept ten seconds, and
+        when it is older the last one is given at once while a new one is asked aside (the page no longer waits on
+        Fly.io at every click). The first time, and when `fresh` is asked, it waits for Fly.io."""
         app = self.config("app")
-        return list(self.fly.json("machine", "list", "--app", app)) if app else []
+        if not app:
+            return []
+        import threading
+        cache = getattr(self, "_machines", None)
+        now = time.monotonic()
+        if fresh or cache is None or cache[0] != app:
+            got = list(self.fly.json("machine", "list", "--app", app))
+            self._machines = (app, now, got)
+            return got
+        if now - cache[1] > self.MACHINES_FRESH and not getattr(self, "_machines_asking", False):
+            self._machines_asking = True
+
+            def ask() -> None:
+                try:
+                    self._machines = (app, time.monotonic(), list(self.fly.json("machine", "list", "--app", app)))
+                except (RuntimeError, ValueError, OSError):
+                    pass
+                finally:
+                    self._machines_asking = False
+            threading.Thread(target=ask, daemon=True).start()
+        return cache[2]
+
+    def forget_machines(self) -> None:
+        """Something changed at Fly.io from here (a machine made, started, stopped, destroyed): ask again next time."""
+        self._machines = None
 
     def start(self, sbid: str) -> dict:
         sb = self.get(sbid)
         rc, out = self.fly.run("machine", "start", sb["machine"], "--app", sb["app"], timeout=300)
         if rc != 0:
             raise ValueError(out[-200:])
+        self.forget_machines()
         return self.get(sbid)
 
     def stop(self, sbid: str) -> dict:
@@ -307,6 +338,7 @@ class Sandboxes:
         rc, out = self.fly.run("machine", "stop", sb["machine"], "--app", sb["app"], timeout=300)
         if rc != 0:
             raise ValueError(out[-200:])
+        self.forget_machines()
         return self.get(sbid)
 
     def mark_finished(self, sbid: str, finished: bool = True) -> None:
@@ -338,6 +370,7 @@ class Sandboxes:
         except OSError:
             pass
         self._set(sbid, destroyed=1)
+        self.forget_machines()
         return self.get(sbid)
 
     # ---------------------------------------------------------------- Loop 16: image, estimates, measured costs

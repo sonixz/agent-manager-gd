@@ -1207,6 +1207,12 @@ for i in range(600):
 			await wait(0.4)
 			report.append("ports: « %s » | %s | from inside the sandbox, this computer's program answers: « %s »" % [SandboxView.link_of(main.sbx_tunnels[sbid])["text"],
 				" ; ".join(SandboxView.extra_rows(main.sbx_tunnels[sbid]).map(func(e: Dictionary) -> String: return str(e["words"]).left(70))), "".join(from_inside).strip_edges()])
+			# the buttons stay the same while figures move: a click is never swallowed by a rebuild
+			var a_button: Button = _find_button(main.sbx_tunnel_boxes[sbid], "Disconnect")
+			var page_first: Node = main.sbx_box.get_child(0)
+			await wait(8.0)
+			report.append("ports: after eight seconds of new figures, the same buttons: %s, the same page: %s | the charts kept moving: %d readings" % [is_instance_valid(a_button) and a_button.is_inside_tree(),
+				is_instance_valid(page_first) and page_first.is_inside_tree(), main.sbx_tunnels[sbid].get("health", {}).get("history", []).size()])
 			var left_w: float = (main.sbx_box.find_child("SandboxLeft", true, false) as Control).size.x
 			var right_w: float = (main.sbx_box.find_child("SandboxRight", true, false) as Control).size.x
 			report.append("ports: the page in two columns: left %d px, right %d px, of %d | the page is no wider than its window: %s" % [int(left_w), int(right_w), int(main.sbx_box.size.x), main.sbx_box.get_combined_minimum_size().x <= main.sbx_box.size.x + 1.0])
@@ -1240,6 +1246,56 @@ for i in range(600):
 			OS.kill(fetch)
 			OS.kill(web)
 			OS.kill(mover)
+		"latency":  # how long a click waits before the page answers: first frame drawn, and until its content is in. The stand-in Fly.io answers after 1.5 s, as a real one may
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), OS.get_environment("AGMGD_HOME"), str(made["Checkout flow"]), str(made["Sparks"])], [])
+			for p in ["acme-store", "orbit-api"]:
+				await main.engine.call_api("POST", "/repos", {"url": "git@github.com:acme/%s.git" % p, "local_path": code.path_join(p)})
+			await main.refresh()
+			for pass_n in 2:
+				for v in ["sandboxes", "repos", "setup", "usage", "keys", "permissions", "history", "board", "grid", "focus"]:
+					var clicked := Time.get_ticks_msec()
+					main.set_view(v)
+					await process_frame
+					var first := Time.get_ticks_msec() - clicked
+					var filled := -1
+					for i in 400:
+						if main.content.get_child_count() > 0 and main.content.find_children("*", "Label", true, false).size() > 3:
+							filled = Time.get_ticks_msec() - clicked
+							break
+						await process_frame
+					report.append("latency: round %d · %s: first frame %d ms, content in %d ms" % [pass_n + 1, v, first, filled])
+					await wait(2.5)
+			for route in ["/sessions", "/permissions", "/repos", "/sandboxes", "/host", "/usage", "/history", "/keys"]:
+				var a2 := Time.get_ticks_msec()
+				await main.engine.call_api("GET", route, null, true, 60.0)
+				report.append("latency: the engine answers %s in %d ms" % [route, Time.get_ticks_msec() - a2])
+			# where the time goes: the drawing of each page alone, and the longest frame in the three seconds after
+			for v in ["permissions", "board", "sandboxes", "board", "permissions"]:
+				main.view = v
+				var a := Time.get_ticks_usec()
+				main._layout_view()
+				var drawn_us := Time.get_ticks_usec() - a
+				var worst := 0
+				var before := Time.get_ticks_msec()
+				var until := before + 3000
+				while Time.get_ticks_msec() < until:
+					await process_frame
+					var now_ms := Time.get_ticks_msec()
+					worst = maxi(worst, now_ms - before)
+					before = now_ms
+				report.append("latency: %s drawn in %d ms; longest frame after it: %d ms" % [v, drawn_us / 1000, worst])
+			main.set_view("sandboxes")
+			await wait(4.0)
+			var line: Node = main.sbx_box.find_child("Sandbox_a1c4e9f2", true, false)
+			var arrow: Button = null
+			for b in line.find_children("*", "Button", true, false):
+				if (b as Button).text == "▸":
+					arrow = b
+			var t1 := Time.get_ticks_msec()
+			arrow.pressed.emit()
+			await process_frame
+			var unfolded: bool = main.sbx_box.find_child("Sandbox_a1c4e9f2", true, false).find_children("*", "Button", true, false).any(func(b: Node) -> bool: return (b as Button).text == "▾")
+			report.append("latency: a sandbox's line unfolded in %d ms (unfolded: %s)" % [Time.get_ticks_msec() - t1, unfolded])
 		"palette":
 			main.select(made["Sparks"])
 			await wait(2.0)

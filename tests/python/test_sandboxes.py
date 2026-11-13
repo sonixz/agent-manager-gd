@@ -316,6 +316,7 @@ class SandboxesTest(unittest.TestCase):
         def no_network(*args):
             raise RuntimeError("no network")
         self.fly.json = no_network
+        self.s.sandboxes.forget_machines()                               # nothing kept from before: Fly.io must be asked
         offline = self.s.sandboxes.overview()["inventory"]               # Fly.io not reached: the inventory is still there
         self.assertEqual((offline["at_fly"]["reachable"], len(offline["sandboxes"])), (False, 2))
         self.assertEqual({r["id"]: r["state"] for r in offline["sandboxes"]}[sb["id"]], "destroyed")
@@ -336,6 +337,26 @@ class SandboxesTest(unittest.TestCase):
         self.assertEqual(self.s.sandboxes.by_session(d["id"])["size"], "performance-cpu-2x-4096")
         self.s.sandboxes.set_config("region", "iad")
         self.assertEqual(self.s.sandboxes.sizes()["region_note"], "")
+
+    def test_fly_is_not_asked_at_every_look(self):
+        self.s.sandboxes.prepare()
+        asked = lambda: len([c for c in self.fly.calls if c[:2] == ("machine", "list")])   # noqa: E731
+        self.s.sandboxes.overview()
+        first = asked()
+        self.s.sandboxes.overview()
+        self.s.sandboxes.overview()
+        self.assertEqual(asked(), first)                                  # kept: the page did not wait on Fly.io again
+        self.s.create("Work", "shell", "", host="sandbox")                # a change made from here: asked again
+        self.assertGreater(asked(), first)
+        self.s.sandboxes.overview()
+        self.s.sandboxes._machines = (self.s.sandboxes.config("app"), 0.0, self.s.sandboxes._machines[2])   # older than ten seconds
+        n = asked()
+        self.s.sandboxes.overview()                                       # given at once, asked aside
+        import time
+        end = time.monotonic() + 5
+        while time.monotonic() < end and asked() == n:
+            time.sleep(0.02)
+        self.assertEqual(asked(), n + 1)
 
     def test_the_owner_routes_answer_over_http(self):
         """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
