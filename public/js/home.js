@@ -1,5 +1,5 @@
 // The home page: the film in the hero, the feature bar, hotspots, the views and themes viewer, the loupes, the MCP
-// typer, the tunnel's wires and the loops. No dependency, no network call. With reduced motion nothing moves by itself.
+// map and the loops. No dependency, no network call. With reduced motion nothing moves by itself.
 (() => {
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const saveData = !!(navigator.connection && navigator.connection.saveData);
@@ -159,47 +159,140 @@
     fig.addEventListener("pointerleave", () => lens.classList.remove("on"));
   });
 
-  // ---------------------------------------------------------------- the MCP typer: an example of calls, typed
-  const typer = document.querySelector(".typer-lines");
-  if (typer) {
-    const script = [
-      ["c", "# a lead agent, through agent-manager's MCP server"],
-      ["k", "list_sessions()"],
-      ["o", "  Checkout flow · working   Flaky tests · waits for your OK   Rate limiter · working"],
-      ["k", "start_session(name=\"Helper · tests\", tool=\"shell\", cwd=\"~/code/orbit-api\")"],
-      ["o", "  ↳ started, under « Release lead »"],
-      ["k", "send_to_session(\"Helper · tests\", \"python3 -m unittest -v\")"],
-      ["k", "wait_for_session(\"Helper · tests\")"],
-      ["o", "  done"],
-      ["k", "read_screen(\"Helper · tests\")"],
-      ["g", "  Ran 3 tests in 0.000s · OK"],
-    ];
-    const render = (n, partial) => {
-      typer.innerHTML = "";
-      script.slice(0, n).forEach(([c, t], i) => {
-        const d = document.createElement("div");
-        d.className = "tl " + c;
-        d.textContent = (i === n - 1 && partial != null) ? t.slice(0, partial) : t;
-        typer.appendChild(d);
-      });
+  // ---------------------------------------------------------------- the built-in MCP: a map of who calls what, played step by step
+  const stage = document.querySelector("[data-mcp]");
+  if (stage) {
+    const map = stage.querySelector(".mcp-map"), svg = map.querySelector(".mm-lines"), log = stage.querySelector(".mcp-lines");
+    const hubCall = map.querySelector(".mm-call"), pauseB = stage.querySelector(".mcp-pause");
+    const tools = [...document.querySelectorAll(".mcp-tool")];
+    const N = {};
+    map.querySelectorAll("[data-n]").forEach((el) => { N[el.dataset.n] = el; });
+    const NS = "http://www.w3.org/2000/svg";
+    const EDGES = [["lead", "hub"], ["hub", "s1"], ["hub", "s2"], ["hub", "s3"], ["hub", "k1"]];
+    const paths = {};
+    // a line from one box to the next, wherever the layout put them (side by side, or one under the other)
+    const edge = (a, b) => {
+      const m = map.getBoundingClientRect(), A = N[a].getBoundingClientRect(), B = N[b].getBoundingClientRect();
+      if (B.left >= A.right - 4) {
+        const x1 = A.right - m.left, y1 = A.top + A.height / 2 - m.top, x2 = B.left - m.left, y2 = B.top + B.height / 2 - m.top, dx = (x2 - x1) / 2;
+        return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+      }
+      const x2 = B.left + B.width / 2 - m.left, y2 = B.top - m.top, y1 = A.bottom - m.top;
+      const x1 = Math.max(A.left - m.left + 14, Math.min(A.right - m.left - 14, x2)), dy = (y2 - y1) / 2;
+      return `M${x1},${y1} C${x1},${y1 + dy} ${x2},${y2 - dy} ${x2},${y2}`;
     };
-    if (reduce) render(script.length);
-    else seen(typer, () => {
-      let line = 0, ch = 0;
-      const tick = () => {
-        if (line >= script.length) { setTimeout(() => { line = 0; ch = 0; tick(); }, 5200); return; }
-        const [c, t] = script[line];
-        if (c === "k" && ch < t.length) { ch += 2; render(line + 1, ch); setTimeout(tick, 28); return; }
-        render(line + 1); line++; ch = 0;
-        setTimeout(tick, c === "k" ? 420 : 650);
+    const draw = () => {
+      svg.setAttribute("viewBox", `0 0 ${map.clientWidth} ${map.clientHeight}`);
+      for (const [a, b] of EDGES) {
+        const key = a + "-" + b;
+        if (!paths[key]) { paths[key] = document.createElementNS(NS, "path"); svg.appendChild(paths[key]); }
+        paths[key].setAttribute("d", edge(a, b));
+      }
+    };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let run = 0, paused = false, onScreen = false;
+    const alive = (id) => id === run;
+    const pulse = (key, id, back = false, dur = 520) => new Promise((res) => {
+      const p = paths[key];
+      if (!p || reduce || !alive(id)) { res(); return; }
+      p.classList.add("hot");
+      const len = p.getTotalLength(), dot = document.createElementNS(NS, "circle"), t0 = performance.now();
+      dot.setAttribute("r", "5"); dot.setAttribute("class", "mm-dot"); svg.appendChild(dot);
+      const step = (now) => {
+        const k = Math.min(1, (now - t0) / dur), pt = p.getPointAtLength(len * (back ? 1 - k : k));
+        dot.setAttribute("cx", pt.x); dot.setAttribute("cy", pt.y);
+        if (k < 1 && alive(id)) requestAnimationFrame(step);
+        else { dot.remove(); setTimeout(() => p.classList.remove("hot"), 350); res(); }
       };
-      tick();
+      requestAnimationFrame(step);
+    });
+    const flash = (n, cls = "flash", ms = 900) => { N[n].classList.add(cls); setTimeout(() => N[n].classList.remove(cls), ms); };
+    const kid = (state, words) => {   // "off" | "idle" | "working" | "done"
+      const k = N.k1;
+      k.classList.toggle("off", state === "off");
+      paths["hub-k1"] && paths["hub-k1"].classList.toggle("off", state === "off");
+      k.querySelector(".light").className = "light" + (state === "working" ? " working" : state === "done" ? " done" : "");
+      k.querySelector("small").textContent = words;
+    };
+    const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const line = (cls, text) => {
+      const d = document.createElement("div");
+      d.className = "ml " + cls; d.textContent = text; log.appendChild(d);
+      while (log.children.length > 1 && log.scrollHeight > log.clientHeight + 1) log.firstChild.remove();   // the oldest lines leave, as in a terminal
+      return d;
+    };
+    const pretty = (d, text) => { const i = text.indexOf("("); d.innerHTML = `<span class="fn">${esc(text.slice(0, i))}</span>${esc(text.slice(i))}`; };
+    const type = async (text, id) => {
+      const d = line("call typing", "");
+      if (!reduce) for (let i = 0; i <= text.length; i += 3) { if (!alive(id)) return; d.textContent = text.slice(0, i); await sleep(20); }
+      d.classList.remove("typing"); pretty(d, text);
+      while (log.children.length > 1 && log.scrollHeight > log.clientHeight + 1) log.firstChild.remove();
+    };
+    // the example: every tool once, and the one refusal that matters. Each step: the call, what moves, what comes back.
+    const STEPS = [
+      { tool: "list_sessions", call: "list_sessions()", out: [["res", "Checkout flow · working"], ["res", "Flaky tests · waits for your OK"], ["res", "Rate limiter · working"]],
+        fx: async (id) => { await pulse("lead-hub", id); await Promise.all(["s1", "s2", "s3"].map((n) => pulse("hub-" + n, id))); ["s1", "s2", "s3"].forEach((n) => flash(n)); await pulse("lead-hub", id, true); } },
+      { tool: "session_status", call: "session_status(\"Flaky tests\")", out: [["res", "waits for your OK · « Claude needs your permission »"]],
+        fx: async (id) => { await pulse("lead-hub", id); await pulse("hub-s2", id); flash("s2"); await pulse("hub-s2", id, true); await pulse("lead-hub", id, true); } },
+      { tool: "send_to_session", call: "send_to_session(\"Flaky tests\", \"1\")", out: [["no", "refused · you may only write to sessions you started"]],
+        fx: async (id) => { await pulse("lead-hub", id); if (!alive(id)) return; paths["hub-s2"].classList.add("no"); flash("hub", "blocked", 600); await sleep(900); paths["hub-s2"].classList.remove("no"); } },
+      { tool: "start_session", call: "start_session(name=\"Helper · tests\", tool=\"shell\")", out: [["ok", "started · ↳ Release lead"]],
+        fx: async (id) => { await pulse("lead-hub", id); if (!alive(id)) return; kid("idle", "ready · ↳ Release lead"); await pulse("hub-k1", id); flash("k1"); } },
+      { tool: "send_to_session", call: "send_to_session(\"Helper · tests\", \"python3 -m unittest -v\")", out: [["ok", "sent"]],
+        fx: async (id) => { await pulse("lead-hub", id); await pulse("hub-k1", id); if (alive(id)) kid("working", "working · ↳ Release lead"); } },
+      { tool: "wait_for_session", call: "wait_for_session(\"Helper · tests\")", out: [["ok", "done"]],
+        fx: async (id) => { await sleep(reduce ? 0 : 1100); if (!alive(id)) return; kid("done", "done · ↳ Release lead"); await pulse("hub-k1", id, true); await pulse("lead-hub", id, true); } },
+      { tool: "read_screen", call: "read_screen(\"Helper · tests\")", out: [["res", "Ran 3 tests in 0.000s"], ["ok", "OK"]],
+        fx: async (id) => { await pulse("lead-hub", id); await pulse("hub-k1", id); flash("k1"); await pulse("hub-k1", id, true); await pulse("lead-hub", id, true); } },
+    ];
+    const kidAt = (i) => (i <= 3 ? ["off", "not started yet"] : i === 4 ? ["idle", "ready · ↳ Release lead"] : i === 5 ? ["working", "working · ↳ Release lead"] : ["done", "done · ↳ Release lead"]);
+    const mark = (tool) => { tools.forEach((b) => b.classList.toggle("on", b.dataset.tool === tool)); hubCall.textContent = tool || "6 tools"; };
+    const play = async (from, once = false) => {
+      const id = ++run;
+      draw();
+      for (let i = from; alive(id); i++) {
+        if (i >= STEPS.length) {
+          if (once || reduce) { mark(""); return; }
+          await sleep(4200);
+          if (!alive(id)) return;
+          i = 0; log.innerHTML = "";
+        }
+        while ((paused || !onScreen) && alive(id)) await sleep(250);
+        if (!alive(id)) return;
+        const s = STEPS[i];
+        kid(...kidAt(i)); mark(s.tool);
+        await type(s.call, id);
+        if (!alive(id)) return;
+        await s.fx(id);
+        if (!alive(id)) return;
+        s.out.forEach(([c, x]) => line(c, x));
+        await sleep(reduce ? 0 : 1300);
+      }
+    };
+    draw();
+    window.addEventListener("resize", draw);
+    window.addEventListener("load", draw);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+    kid("off", "not started yet");
+    if (reduce) {   // no motion: the whole example, written out, and the map at its end
+      onScreen = true;
+      play(0, true);
+    } else if ("IntersectionObserver" in window) {
+      let started = false;
+      new IntersectionObserver((es) => { onScreen = es.some((e) => e.isIntersecting); if (onScreen && !started) { started = true; play(0); } }, { threshold: 0.2 }).observe(stage);
+    } else { onScreen = true; play(0); }
+    tools.forEach((b) => b.addEventListener("click", () => {
+      const i = STEPS.findIndex((s) => s.tool === b.dataset.tool);
+      log.innerHTML = ""; paused = false; onScreen = true;
+      pauseB.textContent = "❚❚"; pauseB.setAttribute("aria-pressed", "false");
+      play(i);
+    }));
+    pauseB.addEventListener("click", () => {
+      paused = !paused;
+      pauseB.textContent = paused ? "▶" : "❚❚"; pauseB.setAttribute("aria-pressed", String(paused));
+      pauseB.setAttribute("aria-label", paused ? "Play the example" : "Pause the example");
     });
   }
-
-  // ---------------------------------------------------------------- the tunnel's wires: still with reduced motion
-  const wires = document.querySelector(".tn-wires");
-  if (wires && reduce && wires.pauseAnimations) wires.pauseAnimations();
 
   // ---------------------------------------------------------------- loops: a dot per loop, themes, search, the latest first
   const ui = document.querySelector(".loops-ui");

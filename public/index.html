@@ -10,7 +10,7 @@
   <meta property="og:description" content="Claude Code, Codex and your shells, side by side: isolated, observed, in your control. Open source, local-first.">
   <meta property="og:image" content="assets/video/showcase-poster.webp">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=2026-11-13a">
+  <link rel="stylesheet" href="css/style.css?v=2026-11-13d">
 </head>
 <body class="home">
   <a class="skip" href="#main">Skip to content</a>
@@ -152,7 +152,7 @@
     <!-- 02 INTERFACE -->
     <section id="interface" class="section section-alt feat-sec">
       <div class="container">
-        <div class="section-head reveal">
+        <div class="section-head center reveal">
           <p class="feat-num">02 · Interface, views, themes</p>
           <h2>Drawn, alive, and yours</h2>
           <p>Not columns of text: pages drawn like instruments, a terminal of our own (Ghostty's core, drawn by Godot), five
@@ -196,10 +196,10 @@
             <p class="muted">Claude Code and Codex report what they do through their own hooks; Agent Manager turns it into
               lights you read from across the room. The ones that need you come first.</p>
             <ul class="legend">
-              <li><span class="light working"></span><b>working</b> the agent is on a turn</li>
-              <li><span class="light ok"></span><b>waits for your OK</b> a command, a file</li>
-              <li><span class="light asks"></span><b>asks you something</b> a question for you</li>
-              <li><span class="light done"></span><b>done</b> the turn is over</li>
+              <li><span class="light working"></span><b>working</b><span>the agent is on a turn</span></li>
+              <li><span class="light ok"></span><b>waits for your OK</b><span>a command, a file</span></li>
+              <li><span class="light asks"></span><b>asks you something</b><span>a question for you</span></li>
+              <li><span class="light done"></span><b>done</b><span>the turn is over</span></li>
             </ul>
             <ul class="checks">
               <li><b>Approve</b>, <b>Refuse</b> or <b>Reply…</b> from the list, without opening the session; <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> approves the first one.</li>
@@ -306,41 +306,69 @@
     <!-- 06 BUILT-IN MCP + ORCHESTRATOR -->
     <section id="mcp" class="section section-alt feat-sec">
       <div class="container">
-        <div class="feat reveal">
-          <div class="feat-text">
-            <p class="feat-num">06 · Built-in MCP</p>
-            <h2>Agents pilot agents</h2>
-            <p class="muted">Every Claude Code or Codex session is offered Agent Manager's own MCP server, nothing to
-              install. A lead agent looks at any session and starts helpers of its own: they show up in your list,
-              « ↳ Lead », in real terminals you can take over at any time.</p>
-            <div class="term typer" role="img" aria-label="An example: a lead agent lists the sessions, starts a helper, waits for it, and reads its screen.">
-              <div class="typer-lines" aria-hidden="true"></div>
+        <div class="section-head center reveal">
+          <p class="feat-num">06 · Built-in MCP</p>
+          <h2>Agents pilot agents</h2>
+          <p>Every Claude Code or Codex session is offered Agent Manager's own MCP server, nothing to install. A lead
+            agent looks at any session and starts helpers of its own: they show up in your list, « ↳ Lead », in real
+            terminals you can take over at any time.</p>
+        </div>
+
+        <div class="mcp-stage reveal" data-mcp>
+          <div class="mcp-map" role="img" aria-label="An example, drawn: a lead agent, « Release lead », calls Agent Manager's MCP server. It lists your three sessions, reads the state of one that waits for your OK, is refused when it tries to write to it, then starts a helper of its own, writes to it, waits for it and reads its screen.">
+            <svg class="mm-lines" aria-hidden="true"></svg>
+            <div class="mm-node mm-lead" data-n="lead"><b><span class="mm-ic">✻</span> Release lead</b><small>Claude Code · the lead</small></div>
+            <div class="mm-node mm-hub" data-n="hub"><b>agent-manager</b><small>MCP server · built in</small><span class="mm-call" aria-hidden="true">6 tools</span></div>
+            <div class="mm-right">
+              <p class="mm-cap">Reads · your sessions</p>
+              <div class="mm-node mm-s" data-n="s1"><i class="light working"></i><b>Checkout flow</b><small>working</small></div>
+              <div class="mm-node mm-s" data-n="s2"><i class="light ok"></i><b>Flaky tests</b><small>waits for your OK</small></div>
+              <div class="mm-node mm-s" data-n="s3"><i class="light working"></i><b>Rate limiter</b><small>working</small></div>
+              <p class="mm-cap mm-cap-kid">Writes · its own children</p>
+              <div class="mm-node mm-s mm-kid off" data-n="k1"><i class="light"></i><b>Helper · tests</b><small>not started yet</small></div>
             </div>
-            <p class="small muted" style="margin-top: 14px">No tool presses keys in someone else's session: an agent writes
-              only to its own children and never approves on another's behalf. <b>◐ › Connect other tools</b> plugs the
-              same server into any MCP client outside the app: list, read and start, never type nor approve.</p>
           </div>
-          <div>
-            <table class="mcp-table">
-              <thead><tr><th>Tool</th><th>Does</th><th>On</th></tr></thead>
-              <tbody>
-                <tr><td><code>list_sessions</code></td><td>every session and its state</td><td>any</td></tr>
-                <tr><td><code>session_status</code></td><td>working, waits, asks, done</td><td>any</td></tr>
-                <tr><td><code>read_screen</code></td><td>what a terminal shows now</td><td>any</td></tr>
-                <tr><td><code>start_session</code></td><td>a child: Claude Code, Codex, a shell</td><td>new</td></tr>
-                <tr><td><code>send_to_session</code></td><td>write to a session</td><td class="own">its children</td></tr>
-                <tr><td><code>wait_for_session</code></td><td>until a child is done or waits</td><td class="own">its children</td></tr>
-              </tbody>
-            </table>
-            <figure class="screen" style="margin-top: 22px">
-              <img src="assets/showcase/agents.webp" width="1920" height="1200" loading="lazy" alt="A lead Claude Code session and two helper sessions it started through the MCP server, shown in a grid, each marked « ↳ Lead » in the list.">
-            </figure>
+          <figure class="screen mcp-log">
+            <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Release lead · its calls, an example<span class="bar-right"><button class="mcp-pause" type="button" aria-pressed="false" aria-label="Pause the example">❚❚</button></span></div>
+            <div class="mcp-lines" aria-hidden="true"></div>
+          </figure>
+        </div>
+
+        <div class="mcp-tools reveal" role="group" aria-label="The six tools of Agent Manager's MCP server; choose one to see it in the example">
+          <button type="button" class="mcp-tool" data-tool="list_sessions"><code>list_sessions</code><span>Every session and its state</span><em class="any">any session</em></button>
+          <button type="button" class="mcp-tool" data-tool="session_status"><code>session_status</code><span>Working, waits, asks, done</span><em class="any">any session</em></button>
+          <button type="button" class="mcp-tool" data-tool="read_screen"><code>read_screen</code><span>What a terminal shows now</span><em class="any">any session</em></button>
+          <button type="button" class="mcp-tool" data-tool="start_session"><code>start_session</code><span>A child: Claude Code, Codex or a shell</span><em class="new">a new child</em></button>
+          <button type="button" class="mcp-tool" data-tool="send_to_session"><code>send_to_session</code><span>Types a message and presses Enter</span><em class="own">its own children</em></button>
+          <button type="button" class="mcp-tool" data-tool="wait_for_session"><code>wait_for_session</code><span>Until a child is done or waits</span><em class="own">its own children</em></button>
+        </div>
+
+        <ul class="mcp-rules reveal">
+          <li><span class="r-ic">◉</span><b>Looks at any session</b><span>The list, a state, a screen: read only.</span></li>
+          <li><span class="r-ic">✎</span><b>Writes to its children only</b><span>Anything else is refused: « you may only write to sessions you started ».</span></li>
+          <li><span class="r-ic">✋</span><b>Never approves for another</b><span>No tool presses keys in someone else's session. Your OK stays yours.</span></li>
+          <li><span class="r-ic">▣</span><b>Bounded</b><span>At most 4 running under one session, 2 levels deep, and a child never gets more permissions than its parent.</span></li>
+        </ul>
+
+        <div class="feat flip reveal" style="margin-top: clamp(40px, 6vw, 72px)">
+          <div class="feat-text">
+            <h3>In your list, in real terminals</h3>
+            <p class="muted">The helpers a lead starts appear under it, « ↳ Lead », each in its own terminal: watch them
+              work, take one over, or stop it. Nothing happens off screen.</p>
+            <div class="connect-card">
+              <p class="connect-title"><span>◐</span> Connect other tools</p>
+              <p>The same server for any MCP client outside the app, with the command to paste: Claude Code, Codex or
+                another tool can <b>list</b>, <b>read</b> and <b>start</b> sessions. It can never type into one, nor approve.</p>
+            </div>
           </div>
+          <figure class="screen">
+            <img src="assets/showcase/agents.webp" width="1920" height="1200" loading="lazy" alt="A lead Claude Code session and two helper sessions it started through the MCP server, shown in a grid, each marked « ↳ Lead » in the list.">
+          </figure>
         </div>
 
         <div id="orchestrator" class="orch reveal">
           <div class="orch-head">
-            <p class="overline">Built on it · Orchestrator <span class="beta">beta</span></p>
+            <p class="feat-num">Built on it · Orchestrator <span class="beta">beta</span></p>
             <h3>One agent plans, you decide</h3>
             <p class="muted">A Claude Code session with an orchestrator's instructions and a few more tools
               (<code>list_repos</code>, <code>ask_owner</code>, <code>finish_session</code>), for all your connected
@@ -410,26 +438,29 @@
     <!-- 09 CLOUD -->
     <section id="cloud" class="section feat-sec">
       <div class="container">
-        <div class="section-head reveal">
+        <div class="section-head center reveal">
           <p class="feat-num">09 · Cloud sandboxes</p>
           <h2>A throw-away machine, a price before, a tunnel after</h2>
           <p>Give a risky task its own Fly.io machine, with your own Fly token. Pick a size and see Fly.io's published
             price before you deploy; then watch its health and bring its ports home through one SSH connection.</p>
         </div>
 
-        <div class="tunnel reveal" aria-label="How a sandbox reaches this computer: an SSH tunnel carries a port to your localhost, a SOCKS proxy into the sandbox, and, only if you allow it, one port of this computer back to the sandbox.">
-          <div class="tn-node tn-here"><b>This computer</b><span>localhost:18502</span><span>SOCKS :1080</span><span>port 18600</span></div>
-          <svg class="tn-wires" viewBox="0 0 600 180" preserveAspectRatio="none" aria-hidden="true">
-            <path id="tw1" d="M0,40 C200,40 400,40 600,40"/><path id="tw2" d="M0,90 C200,90 400,90 600,90"/><path id="tw3" d="M600,140 C400,140 200,140 0,140"/>
-            <circle r="4" class="d1"><animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#tw1"/></animateMotion></circle>
-            <circle r="4" class="d1"><animateMotion dur="2.4s" begin="1.2s" repeatCount="indefinite"><mpath href="#tw1"/></animateMotion></circle>
-            <circle r="4" class="d2"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#tw2"/></animateMotion></circle>
-            <circle r="4" class="d2"><animateMotion dur="3s" begin="1.5s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#tw2"/></animateMotion></circle>
-            <circle r="4" class="d3"><animateMotion dur="3.6s" repeatCount="indefinite"><mpath href="#tw3"/></animateMotion></circle>
-          </svg>
-          <div class="tn-labels" aria-hidden="true"><span>Bring it to my localhost</span><span>SOCKS proxy into the sandbox</span><span>The way back, only if you allow it</span></div>
-          <div class="tn-node tn-cloud"><b>☁ Cloud sandbox</b><span>streamlit :18501</span><span>everything inside</span><span>its own :18601</span></div>
-          <p class="tn-ssh">one SSH connection · host key checked · nothing made public</p>
+        <div class="tunnel reveal" role="img" aria-label="How a sandbox reaches this computer, through one SSH connection: a port of the sandbox brought to your localhost, a SOCKS proxy into the sandbox, and, only if you allow it, one port of this computer the sandbox may reach.">
+          <span class="tn-box tn-box-here" aria-hidden="true"></span>
+          <span class="tn-box tn-box-cloud" aria-hidden="true"></span>
+          <b class="tn-head tn-h1">This computer</b>
+          <span class="tn-head tn-mid">one SSH connection</span>
+          <b class="tn-head tn-h3">☁ Cloud sandbox</b>
+          <span class="tn-port tn-l r2">localhost:18502</span>
+          <span class="tn-wire tn-w r2"><em>Bring it to my localhost</em><i></i><i class="back"></i></span>
+          <span class="tn-port tn-r r2">streamlit :18501</span>
+          <span class="tn-port tn-l r3">localhost:1080 · SOCKS</span>
+          <span class="tn-wire tn-w r3 w2"><em>A SOCKS proxy into the sandbox</em><i></i><i class="back"></i></span>
+          <span class="tn-port tn-r r3">everything inside</span>
+          <span class="tn-port tn-l r4">this computer's :18600</span>
+          <span class="tn-wire tn-w r4 w3"><em>The way back, only if you allow it</em><i class="back"></i><i class="back late"></i></span>
+          <span class="tn-port tn-r r4">its own :18601</span>
+          <p class="tn-ssh">the sandbox's host key is checked · nothing is made public · a paused sandbox is never started</p>
         </div>
 
         <div class="duo reveal">
@@ -630,7 +661,7 @@
       <span><a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
     </div>
   </footer>
-  <script src="js/main.js?v=2026-11-13a"></script>
-  <script src="js/home.js?v=2026-11-13a"></script>
+  <script src="js/main.js?v=2026-11-13d"></script>
+  <script src="js/home.js?v=2026-11-13d"></script>
 </body>
 </html>
