@@ -5,6 +5,8 @@ extends Node
 
 signal ready_changed(ok: bool)
 
+const ApiJob := preload("res://scripts/api_job.gd")
+
 var port := 8790
 var token := ""
 var connected := false
@@ -88,27 +90,18 @@ func call_api(method: String, path: String, body: Variant = null, auth := true, 
 		# on a slow disk, a restart, a transcription) takes what it takes: 60 s, more where the caller says so. With
 		# 10 s for everything, the app gave up on work the engine then finished alone (a long dictation, Loop 33).
 		timeout = 10.0 if method == "GET" else 60.0
-	var http := HTTPRequest.new()
-	http.timeout = timeout  # a cloud sandbox takes ~20 s to start: its creation passes a longer timeout
-	# In its own thread: without it the request moves one step per drawn frame (connect, send, read…), which made
-	# every call to the engine last five frames or more, whatever the engine's own speed (measured in Loop 33).
-	http.use_threads = true
-	add_child(http)
-	var headers := PackedStringArray(["Content-Type: application/json"])
+	var headers := PackedStringArray(["Content-Type: application/json", "Connection: close"])
 	if auth:
 		headers.append("Authorization: Bearer " + token)
 	var m: int = {"GET": HTTPClient.METHOD_GET, "POST": HTTPClient.METHOD_POST, "DELETE": HTTPClient.METHOD_DELETE}[method]
-	var err := http.request("http://127.0.0.1:%d%s" % [port, path], headers, m, JSON.stringify(body) if body != null else "")
-	if err != OK:
-		http.queue_free()
-		return {"error": "request failed"}
-	var res: Array = await http.request_completed
-	http.queue_free()
-	if res[0] != HTTPRequest.RESULT_SUCCESS:
-		return {"error": "engine unreachable"}
-	var data: Variant = JSON.parse_string((res[3] as PackedByteArray).get_string_from_utf8())
+	# in a thread of its own that sleeps while it waits (scripts/api_job.gd): Godot's HTTPRequest kept a core busy per call
+	var job := ApiJob.new()  # held here while the answer comes
+	var res: Dictionary = await job.run(port, m, path, headers, JSON.stringify(body) if body != null else "", timeout)
+	if res.has("error"):
+		return res
+	var data: Variant = JSON.parse_string((res["body"] as PackedByteArray).get_string_from_utf8())
 	if data is Dictionary:
-		if int(res[1]) >= 400 and not data.has("error"):
-			data["error"] = "HTTP %d" % res[1]
+		if int(res["code"]) >= 400 and not data.has("error"):
+			data["error"] = "HTTP %d" % res["code"]
 		return data
 	return {"error": "bad reply"}

@@ -6,13 +6,14 @@ Newest first.
 ## Unreleased: alpha
 
 ### Lighter on the processor
-- Fix: the app drew its whole window 60 to 144 times a second even when nothing moved, which kept about two cores
-  busy on Windows. It now draws only what changes (Godot's low-processor mode, the one its own editor uses), and the
-  small animations of Repos and Sandboxes draw 30 times a second, only while they are seen. Measured on the private
-  virtual display, idle: from 40-80 images a second to under one. Terminals still draw as soon as text arrives.
-
-### Install
-- Docs › Install, the README and `docs/INSTALL.md`: the Windows archive's name links to the Releases page.
+- Fix: the app kept about two cores busy on Windows. The main cause: each call to the engine went through Godot's
+  HTTPRequest in thread mode, whose thread loops with a one-microsecond pause while it waits for the answer, so every
+  call in flight held a whole core, and the app asks the engine several things every 2 seconds. Each call now runs in
+  a thread that sleeps while it waits: about ten times less processor per call, and three times faster (7 ms instead
+  of 24 for a call on this computer, measured).
+- The app also draws only what changes (Godot's low-processor mode, the one its own editor uses), and the small
+  animations of Repos and Sandboxes draw 30 times a second, only while they are seen. Terminals still draw as soon as
+  text arrives.
 
 ### Keys, step by step
 - New: a **⚷ Keys** button in the top bar, between WSL and Sandboxes.
