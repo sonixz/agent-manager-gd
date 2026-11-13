@@ -909,6 +909,16 @@ func _run() -> void:
 				x.pressed.emit()
 			await wait(0.6)
 			await shot("queue-dismissed")
+		"approvals-site":  # the website: the agent that waits, its question in its terminal, then Approve from the list
+			main.set_view("focus")
+			main.select(made["Flaky tests"])
+			await wait(3.0)
+			await shot("approvals-wait")
+			var ap := _find_button(main.queue_box, "Approve")
+			if ap:
+				ap.pressed.emit()
+			await wait(0.35)
+			await shot("approvals-done")
 		"brain-visible":  # the Brain made visible: the badge, the ✦ lights, the header pill and the panel
 			main.set_view("focus")
 			main.select(made["Checkout flow"])

@@ -654,3 +654,7 @@ p { margin: 0 0 1em; }
   .stack { padding-bottom: 0; } .stack .screen:first-child { width: 100%; } .stack .stack-2 { position: static; width: 100%; margin-top: 12px; }
   .featnav { top: 57px; }
 }
+.hot.left em { left: auto; right: 18px; transform: translateX(6px); }
+.hot.left.lit em, [data-hot].all .hot.left em, .hot.left:hover em { transform: none; }
+.viewer.alt .hot { display: none; }
+#control-room .viewer-bar { margin-bottom: 12px; }

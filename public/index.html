@@ -205,28 +205,23 @@
               <li>One session per line: twenty fit where eight tiles did.</li>
             </ul>
           </div>
-          <figure class="screen live-wrap">
-            <div class="bar"><span class="dots"><i></i><i></i><i></i></span>Agent Manager GD<span class="bar-right"><button class="live-pause" type="button" aria-pressed="false">❚❚ Pause</button></span></div>
-            <div class="live" role="img" aria-label="Agent Manager at work: Claude Code sessions in groups change state live; one waits for your OK and is approved from the list, another asks a question and gets an answer, a lead agent starts two helpers, and a finished session proposes its journal to the Second Brain.">
-              <div class="lv-app" aria-hidden="true">
-                <aside class="lv-side">
-                  <div class="lv-brand"><b>◆ AGENT MANAGER</b><span>GD</span></div>
-                  <div class="lv-queue"></div>
-                  <div class="lv-tree"></div>
-                  <div class="lv-brain"><i>✦</i><span><b>Second Brain <em>● connected</em></b><small><span class="lv-linked">5 of 5</span> agents linked · <span class="lv-today">2</span> proposals today</small></span></div>
-                </aside>
-                <section class="lv-main">
-                  <div class="lv-top"><div class="lv-head"></div><div class="lv-views"><span class="on" data-v="focus">Focus</span><span data-v="grid">Grid</span><span data-v="board">Board</span><span data-v="review">Review</span></div></div>
-                  <div class="lv-term"></div>
-                  <div class="lv-grid"></div>
-                  <div class="lv-voice"><span class="mic">🎙</span><span class="lv-meter"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="lv-vt">Listening to you for « Checkout flow »… <small>release F8 to write it</small></span><b class="said"></b></div>
-                </section>
-                <div class="lv-toasts"></div>
-                <svg class="lv-cursor" viewBox="0 0 16 22" width="16" height="22"><path d="M1 1l0 17 4.5-4 3 7 3-1.4-3-6.8 6-.3z" fill="#fff" stroke="#0d1d26" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          <div class="viewer" data-viewer>
+            <div class="viewer-bar">
+              <div class="seg" role="tablist" aria-label="Before and after Approve">
+                <button type="button" role="tab" aria-selected="true" data-src="assets/showcase/approvals-wait.webp" data-alt="Flaky tests waits for your OK: its question in its terminal (« Do you want to proceed? 1. Yes 2. Yes, and switch to auto mode 3. No »), « waits for your OK · Claude needs your permission to use Bash » in the header, Approve and Refuse in « They wait for you », and a toast at the bottom right.">Waits for your OK</button>
+                <button type="button" role="tab" aria-selected="false" data-src="assets/showcase/approvals-done.webp" data-alt="Just after Approve from the list: « ✓ Approved · Flaky tests carries on » where the request was.">Approved</button>
               </div>
             </div>
-            <figcaption class="live-cap">A live reconstruction with the agents' real screens. <a href="assets/showcase/hero-grid.webp" class="live-real">The real app, full size →</a></figcaption>
-          </figure>
+            <figure class="screen shot-hot viewer-screen" data-hot>
+              <div class="hot-wrap">
+                <img class="viewer-img" src="assets/showcase/approvals-wait.webp" width="1920" height="1200" loading="lazy" alt="Flaky tests waits for your OK: its question in its terminal (« Do you want to proceed? 1. Yes 2. Yes, and switch to auto mode 3. No »), « waits for your OK · Claude needs your permission to use Bash » in the header, Approve and Refuse in « They wait for you », and a toast at the bottom right.">
+                <span class="hot" style="--x:8.9%;--y:10.2%"><i></i><em>Approve or Refuse, from the list</em></span>
+                <span class="hot" style="--x:41.5%;--y:2.5%"><i></i><em>What it waits for, in its own words</em></span>
+                <span class="hot" style="--x:20%;--y:46%"><i></i><em>Approve sends Enter: the agent's « Yes »</em></span>
+                <span class="hot left" style="--x:88%;--y:96.2%"><i></i><em>A toast, and a soft sound</em></span>
+              </div>
+            </figure>
+          </div>
         </div>
       </div>
     </section>
@@ -632,7 +627,6 @@
     </div>
   </footer>
   <script src="js/main.js?v=2026-11-13a"></script>
-  <script src="js/live.js?v=2026-11-13a"></script>
   <script src="js/home.js?v=2026-11-13a"></script>
 </body>
 </html>

@@ -113,6 +113,7 @@
     tabs.forEach((t) => t.addEventListener("click", () => {
       tabs.forEach((x) => x.setAttribute("aria-selected", String(x === t)));
       sws.forEach((s) => s.classList.toggle("on", false));
+      v.classList.toggle("alt", t !== tabs[0]);   // the points belong to the first picture
       show(t);
     }));
     sws.forEach((s) => s.addEventListener("click", () => {
