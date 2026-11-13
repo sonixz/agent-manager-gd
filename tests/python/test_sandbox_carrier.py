@@ -91,6 +91,19 @@ class ParsingTest(unittest.TestCase):
                          [(53, "", True), (8000, "python3", True), (8501, "streamlit", False)])   # our own two ports are left out
         self.assertEqual(parse_listening("nothing of the kind\n"), [])
 
+    def test_what_listens_when_the_sandbox_has_no_ss(self):
+        from engine.sandbox_carrier import parse_proc_net
+        text = """  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 0100007F:1F40 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 81234 1 0000000000000000 100 0 0 10 0
+   1: 00000000:08AE 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 1111 1 0000000000000000 100 0 0 10 0
+   2: 0100007F:223D 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 2222 1 0000000000000000 100 0 0 10 0
+   3: 0100007F:1F40 0100007F:9C40 01 00000000:00000000 00:00000000 00000000     0        0 3333 1 0000000000000000 100 0 0 10 0
+  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 00000000000000000000000000000000:2135 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 4444 1
+"""
+        rows = parse_proc_net(text)
+        self.assertEqual([(r["port"], r["inside"]) for r in rows], [(8000, True), (8501, False)])   # 2222, 8765 ours; a connection is not a listener
+
     def test_how_a_sandbox_is_doing(self):
         h = parse_health(HEALTH)
         self.assertEqual((h["memory_total"], h["memory_used"]), (1009636 * 1024, (1009636 - 604580) * 1024))
@@ -165,6 +178,22 @@ class CarrierTest(unittest.TestCase):
         self.assertEqual(self.carrier.describe("sb1")["ports"], [])
         with self.assertRaises(ValueError):
             self.carrier.open_port("sb1", 2222)                                    # our own ports are not ones to open
+
+    def test_without_ss_in_the_sandbox_the_kernel_list_is_read(self):
+        proc = os.path.join(self.tmp, "proc_net.txt")
+        with open(proc, "w") as f:
+            f.write("  sl  local_address rem_address   st\n   0: 0100007F:%04X 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 1 1\n" % self.inside)
+        os.environ.update(STANDIN_NO_SS="1", STANDIN_PROC_NET=proc)
+        try:
+            self.carrier.connect("sb1")
+            rows = self.carrier.listening("sb1")
+            self.assertEqual([(r["port"], r["program"], r["inside"]) for r in rows], [(self.inside, "", True)])
+            opened = self.carrier.open_port("sb1", self.inside)
+            with urllib.request.urlopen(opened["address"] + "/", timeout=10) as r:
+                self.assertIn(b"Sales", r.read())
+        finally:
+            os.environ.pop("STANDIN_NO_SS", None)
+            os.environ.pop("STANDIN_PROC_NET", None)
 
     def test_how_the_sandbox_is_doing_is_read_through_the_connection(self):
         self.carrier.connect("sb1")

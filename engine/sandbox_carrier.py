@@ -61,6 +61,28 @@ def parse_listening(text: str) -> list[dict]:
     return [found[k] for k in sorted(found)]
 
 
+def parse_proc_net(text: str) -> list[dict]:
+    """What listens, read from /proc/net/tcp and /proc/net/tcp6, which every Linux has: the sandbox's image has no
+    `ss` (its Ubuntu base leaves it out; seen on the owner's first real sandbox, 2026-11-12). No program names there."""
+    found: dict[int, dict] = {}
+    for line in text.splitlines():
+        f = line.split()
+        if len(f) < 4 or f[3] != "0A" or ":" not in f[1]:   # 0A: LISTEN
+            continue
+        addr, _, port_hex = f[1].rpartition(":")
+        try:
+            n = int(port_hex, 16)
+        except ValueError:
+            continue
+        if n in OURS:
+            continue
+        inside = addr in ("0100007F", "00000000000000000000000001000000") or (len(addr) == 8 and addr.endswith("7F"))
+        row = found.setdefault(n, {"port": n, "program": "", "inside": True})
+        if not inside:
+            row["inside"] = False
+    return [found[k] for k in sorted(found)]
+
+
 def parse_health(text: str) -> dict:
     """What `cat /proc/meminfo; echo ---; cat /proc/loadavg; echo ---; cat /proc/uptime; echo ---; df -B1 -P <dir>`
     printed in the sandbox: memory, load, how long it has been up, the room on its disk."""
@@ -419,8 +441,11 @@ class Carrier:
     def listening(self, sbid: str) -> list[dict]:
         """What listens in the sandbox now, with for each port whether it is brought here."""
         link = self._link(sbid)
-        rc, out, _ = self._run(link, "root@127.0.0.1", "ss -Hltnp 2>/dev/null")
-        rows = parse_listening(out) if rc == 0 else []
+        rc, out, _ = self._run(link, "root@127.0.0.1", "ss -Hltnp 2>/dev/null; echo ---PROC---; cat /proc/net/tcp /proc/net/tcp6 2>/dev/null")
+        ss_part, _, proc_part = out.partition("---PROC---")
+        rows = parse_listening(ss_part) if rc == 0 else []
+        if rc == 0 and not rows:   # no `ss` there: the kernel's own list (without program names)
+            rows = parse_proc_net(proc_part)
         for r in rows:
             r["open"] = r["port"] in link["ports"]
         # a port of this computer that the sandbox reaches listens there too: it is not one of the sandbox's own

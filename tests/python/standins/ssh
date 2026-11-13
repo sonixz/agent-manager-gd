@@ -151,7 +151,11 @@ else:   # a command in the sandbox
         sys.exit(255)
     command = " ".join(rest[1:])
     if command.startswith("ss "):
-        sys.stdout.write(open(os.environ["STANDIN_SS"]).read())
+        if not os.environ.get("STANDIN_NO_SS"):
+            sys.stdout.write(open(os.environ["STANDIN_SS"]).read())
+        sys.stdout.write("---PROC---\n")
+        if os.environ.get("STANDIN_PROC_NET"):
+            sys.stdout.write(open(os.environ["STANDIN_PROC_NET"]).read())
     elif command.startswith("cat /proc/meminfo"):
         sys.stdout.write(open(os.environ["STANDIN_HEALTH"]).read())
     sys.exit(0)
