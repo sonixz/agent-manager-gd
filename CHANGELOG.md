@@ -5,6 +5,12 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Lighter on the processor
+- Fix: the app drew its whole window 60 to 144 times a second even when nothing moved, which kept about two cores
+  busy on Windows. It now draws only what changes (Godot's low-processor mode, the one its own editor uses), and the
+  small animations of Repos and Sandboxes draw 30 times a second, only while they are seen. Measured on the private
+  virtual display, idle: from 40-80 images a second to under one. Terminals still draw as soon as text arrives.
+
 ### Install
 - Docs › Install, the README and `docs/INSTALL.md`: the Windows archive's name links to the Releases page.
 

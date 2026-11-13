@@ -39,8 +39,13 @@ class Life extends Control:
 			queue_redraw())
 		set_process(rows.any(func(r: Dictionary) -> bool: return bool(r.get("running_now", false))))
 
-	func _process(_delta: float) -> void:
-		queue_redraw()
+	var _since := 0.0
+
+	func _process(delta: float) -> void:  # an animation: 30 images a second, and only while it is seen
+		_since += delta
+		if _since >= 1.0 / 30.0 and is_visible_in_tree():
+			_since = 0.0
+			queue_redraw()
 
 	func row_at(y: float) -> int:
 		var i := int(floor((y - HEAD) / ROW)) if y >= HEAD else -1
@@ -174,8 +179,13 @@ class Wire extends Control:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		set_process(true)   # the dots run
 
-	func _process(_delta: float) -> void:
-		queue_redraw()
+	var _since := 0.0
+
+	func _process(delta: float) -> void:  # an animation: 30 images a second, and only while it is seen
+		_since += delta
+		if _since >= 1.0 / 30.0 and is_visible_in_tree():
+			_since = 0.0
+			queue_redraw()
 
 	## How fast the dots run for a rate: slowly for a few bytes, a little faster each time it is ten times more.
 	static func speed(per_second: float) -> float:
@@ -333,8 +343,13 @@ class LifeBar extends Control:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		set_process(bool(row.get("running_now", false)))
 
-	func _process(_delta: float) -> void:
-		queue_redraw()
+	var _since := 0.0
+
+	func _process(delta: float) -> void:  # an animation: 30 images a second, and only while it is seen
+		_since += delta
+		if _since >= 1.0 / 30.0 and is_visible_in_tree():
+			_since = 0.0
+			queue_redraw()
 
 	func _draw() -> void:
 		var gone := bool(row.get("destroyed", false))
@@ -489,8 +504,13 @@ class Loading extends Control:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		set_process(true)
 
-	func _process(_delta: float) -> void:
-		queue_redraw()
+	var _since := 0.0
+
+	func _process(delta: float) -> void:  # an animation: 30 images a second, and only while it is seen
+		_since += delta
+		if _since >= 1.0 / 30.0 and is_visible_in_tree():
+			_since = 0.0
+			queue_redraw()
 
 	func _draw() -> void:
 		var c := Vector2(size.x / 2.0, minf(size.y / 2.0, 80.0))

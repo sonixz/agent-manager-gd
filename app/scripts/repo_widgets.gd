@@ -74,8 +74,13 @@ class KeyPill extends Piece:
 		fresh = RepoView.freshness(r, now)
 		set_process(busy)
 
-	func _process(_delta: float) -> void:
-		queue_redraw()
+	var _since := 0.0
+
+	func _process(delta: float) -> void:  # an animation: 30 images a second, and only while it is seen
+		_since += delta
+		if _since >= 1.0 / 30.0 and is_visible_in_tree():
+			_since = 0.0
+			queue_redraw()
 
 	func _draw() -> void:
 		var col: Color = {"warn": AmTheme.col("WARN"), "bad": AmTheme.col("ERROR")}.get(level, AmTheme.col("MINT"))
@@ -191,8 +196,13 @@ class SessionDots extends Piece:
 		colours = the_colours
 		set_process(dots.any(func(d: Dictionary) -> bool: return d["running"] and str(d["activity"]) == "working"))
 
-	func _process(_delta: float) -> void:
-		queue_redraw()
+	var _since := 0.0
+
+	func _process(delta: float) -> void:  # an animation: 30 images a second, and only while it is seen
+		_since += delta
+		if _since >= 1.0 / 30.0 and is_visible_in_tree():
+			_since = 0.0
+			queue_redraw()
 
 	func _gui_input(e: InputEvent) -> void:
 		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
@@ -322,8 +332,13 @@ class Metro extends Control:
 				working = working or (d["running"] and str(d["activity"]) == "working")
 		set_process(working)
 
-	func _process(_delta: float) -> void:
-		queue_redraw()
+	var _since := 0.0
+
+	func _process(delta: float) -> void:  # an animation: 30 images a second, and only while it is seen
+		_since += delta
+		if _since >= 1.0 / 30.0 and is_visible_in_tree():
+			_since = 0.0
+			queue_redraw()
 
 	## The map starts at the left and takes the room it needs: a base line with few commits is not stretched across
 	## the page, one with many is packed so the names keep their room at the right.
