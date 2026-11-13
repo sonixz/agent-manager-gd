@@ -1,4 +1,4 @@
-// The home page: the film in the hero, the feature bar, hotspots, the views and themes viewer, the zooms, the MCP
+// The home page: the film in the hero, the feature bar, the pictures' numbered points, the views and themes viewer, the zooms, the MCP
 // map and the loops. No dependency, no network call. With reduced motion nothing moves by itself.
 (() => {
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -82,18 +82,61 @@
     onScroll();
   }
 
-  // ---------------------------------------------------------------- hotspots: one after the other, then all stay
-  document.querySelectorAll("[data-hot]").forEach((fig) => {
-    const hots = [...fig.querySelectorAll(".hot")];
-    seen(fig, () => {
-      hots.forEach((h, i) => setTimeout(() => h.classList.add("in"), reduce ? 0 : 500 + i * 650));
-      if (reduce) return;
-      // then each label in turn, as a guided tour, until the pointer comes
-      let k = 0, timer = 0;
-      const tour = () => { hots.forEach((h) => h.classList.remove("lit")); hots[k % hots.length].classList.add("lit"); k++; };
-      setTimeout(() => { tour(); timer = setInterval(tour, 2200); }, 500 + hots.length * 650);
-      fig.addEventListener("pointerenter", () => { clearInterval(timer); hots.forEach((h) => h.classList.remove("lit")); fig.classList.add("all"); });
+  // ---------------------------------------------------------------- a picture's numbered points and their cards
+  // Each card (data-for) belongs to a point on the picture (data-n). Beside the picture, a line joins them; under it,
+  // the number does. A tour lights one at a time while it is on screen; the pointer or the keyboard takes over.
+  document.querySelectorAll("[data-anno]").forEach((anno) => {
+    const svg = anno.querySelector(".anno-lines"), NS = "http://www.w3.org/2000/svg";
+    const cards = [...anno.querySelectorAll(".anno-card")], dots = [...anno.querySelectorAll(".hot")];
+    const dotOf = (n) => dots.find((d) => d.dataset.n === n);
+    const shown = (el) => el && el.offsetParent !== null;
+    const lines = {};
+    const draw = () => {
+      if (!svg) return;
+      const m = anno.getBoundingClientRect();
+      svg.setAttribute("viewBox", `0 0 ${m.width} ${m.height}`);
+      for (const c of cards) {
+        const n = c.dataset.for, d = dotOf(n);
+        if (!lines[n]) { lines[n] = document.createElementNS(NS, "path"); svg.appendChild(lines[n]); }
+        if (!shown(c) || !shown(d)) { lines[n].setAttribute("d", ""); continue; }
+        const C = c.getBoundingClientRect(), D = d.getBoundingClientRect();
+        const left = C.right <= D.left, right = C.left >= D.right;
+        if (!left && !right) { lines[n].setAttribute("d", ""); continue; }   // the card is under the picture: no line
+        const x1 = (left ? C.right : C.left) - m.left, y1 = C.top + Math.min(C.height / 2, 30) - m.top;
+        const x2 = (left ? D.left - 3 : D.right + 3) - m.left, y2 = D.top + D.height / 2 - m.top, dx = (x2 - x1) / 2;
+        lines[n].setAttribute("d", `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`);
+      }
+    };
+    const light = (n) => {
+      cards.forEach((c) => c.classList.toggle("on", c.dataset.for === n));
+      dots.forEach((d) => d.classList.toggle("on", d.dataset.n === n));
+      Object.keys(lines).forEach((k) => lines[k].classList.toggle("on", k === n));
+    };
+    let at = -1, held = false, onScreen = false;
+    const next = () => {
+      const live = cards.filter(shown);
+      if (!live.length) return;
+      at = (at + 1) % live.length;
+      light(live[at].dataset.for);
+    };
+    const take = (n) => { held = true; light(n); };
+    cards.forEach((c) => {
+      c.addEventListener("pointerenter", () => take(c.dataset.for));
+      c.addEventListener("focus", () => take(c.dataset.for));
     });
+    dots.forEach((d) => d.addEventListener("pointerenter", () => take(d.dataset.n)));
+    anno.addEventListener("pointerleave", () => { held = false; });
+    // the picture's other state (the viewer's tabs) has its own points and cards
+    const viewer = anno.closest("[data-viewer]");
+    if (viewer) viewer.addEventListener("click", (e) => { if (e.target.closest("[role=tab]")) setTimeout(() => { at = -1; light(""); draw(); if (!reduce) next(); }, 0); });
+    draw();
+    window.addEventListener("resize", draw);
+    window.addEventListener("load", draw);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+    if (reduce) return;   // nothing lights by itself
+    if ("IntersectionObserver" in window) new IntersectionObserver((es) => { onScreen = es.some((e) => e.isIntersecting); if (onScreen) draw(); }, { threshold: 0.3 }).observe(anno);
+    else onScreen = true;
+    setInterval(() => { if (onScreen && !held) next(); }, 2600);
   });
 
   // ---------------------------------------------------------------- views and themes
@@ -113,7 +156,7 @@
     tabs.forEach((t) => t.addEventListener("click", () => {
       tabs.forEach((x) => x.setAttribute("aria-selected", String(x === t)));
       sws.forEach((s) => s.classList.toggle("on", false));
-      v.classList.toggle("alt", t !== tabs[0]);   // the points belong to the first picture
+      v.classList.toggle("alt", t !== tabs[0]);   // each state of the picture has its own points and cards
       show(t);
     }));
     sws.forEach((s) => s.addEventListener("click", () => {

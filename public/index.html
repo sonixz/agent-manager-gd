@@ -10,7 +10,7 @@
   <meta property="og:description" content="Claude Code, Codex and your shells, side by side: isolated, observed, in your control. Open source, local-first.">
   <meta property="og:image" content="assets/video/showcase-poster.webp">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/style.css?v=2026-11-13f">
+  <link rel="stylesheet" href="css/style.css?v=2026-11-13g">
 </head>
 <body class="home">
   <a class="skip" href="#main">Skip to content</a>
@@ -113,34 +113,47 @@
     <!-- 01 LAUNCH -->
     <section id="launch" class="section feat-sec">
       <div class="container">
-        <div class="feat reveal">
-          <div class="feat-text">
-            <p class="feat-num">01 · Session manager</p>
-            <h2>Launch an agent that already knows its job</h2>
-            <p class="muted">Claude Code, Codex or a plain shell, in a real terminal that keeps running in tmux when you
-              close the window. What Agent Manager adds is everything set up <i>before</i> the first prompt.</p>
-            <ul class="checks">
-              <li><b>From a connected repository</b>: its folder and its own SSH key come with it. Git just works, your personal key never leaves <code>~/.ssh</code>.</li>
-              <li><b>A branch of its own</b>: a worktree <code>am/&lt;name&gt;</code>, so ten agents share a repository without stepping on each other.</li>
-              <li><b>Its rights</b>: a permission level, a file access, git push and merge or not.</li>
-              <li><b>Its MCP servers, plugged in</b>: Agent Manager's own and your Second Brain, with a key for this session.</li>
-              <li><b>Its secrets</b>: the GitHub token or API key it needs, in its environment only.</li>
-              <li><b>Remote Control</b>, a journal in the Brain, a brief from the last session in this folder.</li>
-            </ul>
-          </div>
-          <figure class="screen shot-hot" data-hot>
+        <div class="section-head center reveal">
+          <p class="feat-num">01 · Session manager</p>
+          <h2>Launch an agent that already knows its job</h2>
+          <p>Claude Code, Codex or a plain shell, in a real terminal that keeps running in tmux when you close the
+            window. What Agent Manager adds is everything set up <i>before</i> the first prompt.</p>
+        </div>
+      </div>
+      <div class="container wide">
+        <div class="anno reveal" data-anno>
+          <svg class="anno-lines" aria-hidden="true"></svg>
+          <ol class="anno-col" aria-label="What a new session is given, part one">
+            <li class="anno-card" data-for="1" tabindex="0"><span class="anno-n">1</span><b>A connected repository</b>
+              <span>Its folder and its own SSH key come with it. Git just works, and your personal key never leaves <code>~/.ssh</code>.</span><em>Repository</em></li>
+            <li class="anno-card" data-for="2" tabindex="0"><span class="anno-n">2</span><b>Its rights, before it starts</b>
+              <span>A permission level and a file access. Git push and merge are rights you give, session by session.</span><em>Permissions · File access</em></li>
+            <li class="anno-card" data-for="3" tabindex="0"><span class="anno-n">3</span><b>Its secrets</b>
+              <span>The token or API key it needs, in its environment only: « Only this session gets GITHUB_TOKEN ».</span><em>Secrets</em></li>
+          </ol>
+          <figure class="screen anno-fig">
             <div class="bar"><span class="dots"><i></i><i></i><i></i></span>New session</div>
             <div class="hot-wrap">
               <img src="assets/showcase/new-session-lab.webp" width="1920" height="1200" loading="lazy" alt="The New session dialog: name « Gift cards, second pass », Claude Code, group Acme Store, this computer, the connected repository acme-store with its folder, « In its own git branch » ticked, the permission level and file access, the Second Brain shared and documenting, Remote Control, and four secrets with GITHUB_TOKEN ticked: « Only this session gets GITHUB_TOKEN, in its program's environment ».">
-              <span class="hot" style="--x:62%;--y:39.3%"><i></i><em>A connected repository: its folder and its key</em></span>
-              <span class="hot" style="--x:62%;--y:46.8%"><i></i><em>A worktree and a branch of its own</em></span>
-              <span class="hot" style="--x:62%;--y:50.4%"><i></i><em>What it may do, before it starts</em></span>
-              <span class="hot" style="--x:62%;--y:57.7%"><i></i><em>The Second Brain, with its own key</em></span>
-              <span class="hot" style="--x:62%;--y:69%"><i></i><em>Follow it from your phone</em></span>
-              <span class="hot" style="--x:47%;--y:76%"><i></i><em>One secret, for this session only</em></span>
+              <span class="hot" data-n="1" style="--x:33.2%;--y:39.3%" aria-hidden="true">1</span>
+              <span class="hot" data-n="2" style="--x:33.2%;--y:52.2%" aria-hidden="true">2</span>
+              <span class="hot" data-n="3" style="--x:33.2%;--y:76%" aria-hidden="true">3</span>
+              <span class="hot" data-n="4" style="--x:66.9%;--y:46.8%" aria-hidden="true">4</span>
+              <span class="hot" data-n="5" style="--x:66.9%;--y:59.5%" aria-hidden="true">5</span>
+              <span class="hot" data-n="6" style="--x:66.9%;--y:69%" aria-hidden="true">6</span>
             </div>
           </figure>
+          <ol class="anno-col" start="4" aria-label="What a new session is given, part two">
+            <li class="anno-card" data-for="4" tabindex="0"><span class="anno-n">4</span><b>A branch of its own</b>
+              <span>A worktree <code>am/&lt;name&gt;</code>: ten agents share a repository without stepping on each other.</span><em>In its own git branch</em></li>
+            <li class="anno-card" data-for="5" tabindex="0"><span class="anno-n">5</span><b>Its MCP servers, plugged in</b>
+              <span>Your Second Brain with a key for this session, and Agent Manager's own server. It can document its work as it goes.</span><em>Share the Second Brain</em></li>
+            <li class="anno-card" data-for="6" tabindex="0"><span class="anno-n">6</span><b>Remote Control</b>
+              <span>Follow the session and answer it from claude.ai/code or the Claude app.</span><em>Remote Control</em></li>
+          </ol>
         </div>
+      </div>
+      <div class="container">
         <p class="planned reveal"><span class="badge-soon">Planned</span> Launch presets: keep a set of these choices under a
           name and start from it in one click. Today a group already carries its default permission level.</p>
       </div>
@@ -206,8 +219,7 @@
               <li><span class="light done"></span><b>done</b><span>the turn is over</span></li>
             </ul>
             <ul class="checks">
-              <li><b>Approve</b>, <b>Refuse</b> or <b>Reply…</b> from the list, without opening the session; <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> approves the first one.</li>
-              <li>A soft sound and a toast when someone starts waiting.</li>
+              <li><b>Reply…</b> to an agent's question from the list, too.</li>
               <li>One session per line: twenty fit where eight tiles did.</li>
             </ul>
           </div>
@@ -218,15 +230,30 @@
                 <button type="button" role="tab" aria-selected="false" data-src="assets/showcase/approvals-done.webp" data-alt="Just after Approve from the list: « ✓ Approved · Flaky tests carries on » where the request was.">Approved</button>
               </div>
             </div>
-            <figure class="screen shot-hot viewer-screen" data-hot>
-              <div class="hot-wrap">
-                <img class="viewer-img" src="assets/showcase/approvals-wait.webp" width="1920" height="1200" loading="lazy" alt="Flaky tests waits for your OK: its question in its terminal (« Do you want to proceed? 1. Yes 2. Yes, and switch to auto mode 3. No »), « waits for your OK · Claude needs your permission to use Bash » in the header, Approve and Refuse in « They wait for you », and a toast at the bottom right.">
-                <span class="hot" style="--x:8.9%;--y:10.2%"><i></i><em>Approve or Refuse, from the list</em></span>
-                <span class="hot" style="--x:41.5%;--y:2.5%"><i></i><em>What it waits for, in its own words</em></span>
-                <span class="hot" style="--x:20%;--y:46%"><i></i><em>Approve sends Enter: the agent's « Yes »</em></span>
-                <span class="hot left" style="--x:88%;--y:96.2%"><i></i><em>A toast, and a soft sound</em></span>
-              </div>
-            </figure>
+            <div class="anno below" data-anno>
+              <figure class="screen viewer-screen">
+                <div class="hot-wrap">
+                  <img class="viewer-img" src="assets/showcase/approvals-wait.webp" width="1920" height="1200" loading="lazy" alt="Flaky tests waits for your OK: its question in its terminal (« Do you want to proceed? 1. Yes 2. Yes, and switch to auto mode 3. No »), « waits for your OK · Claude needs your permission to use Bash » in the header, Approve and Refuse in « They wait for you », and a toast at the bottom right.">
+                  <span class="hot" data-n="1" data-tab="0" style="--x:16.2%;--y:10.2%" aria-hidden="true">1</span>
+                  <span class="hot" data-n="2" data-tab="0" style="--x:40.4%;--y:2.5%" aria-hidden="true">2</span>
+                  <span class="hot" data-n="3" data-tab="0" style="--x:22.8%;--y:45.9%" aria-hidden="true">3</span>
+                  <span class="hot" data-n="4" data-tab="0" style="--x:87.6%;--y:96.2%" aria-hidden="true">4</span>
+                  <span class="hot" data-n="5" data-tab="1" style="--x:16.2%;--y:10.2%" aria-hidden="true">1</span>
+                </div>
+              </figure>
+              <ol class="anno-row">
+                <li class="anno-card" data-for="1" data-tab="0" tabindex="0"><span class="anno-n">1</span><b>Approve or Refuse, from the list</b>
+                  <span>Without opening the session. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> approves the first one.</span></li>
+                <li class="anno-card" data-for="2" data-tab="0" tabindex="0"><span class="anno-n">2</span><b>What it waits for</b>
+                  <span>In the agent's own words: « Claude needs your permission to use Bash ».</span></li>
+                <li class="anno-card" data-for="3" data-tab="0" tabindex="0"><span class="anno-n">3</span><b>Its question, in its terminal</b>
+                  <span>Approve sends Enter: the choice the agent highlights, « Yes ».</span></li>
+                <li class="anno-card" data-for="4" data-tab="0" tabindex="0"><span class="anno-n">4</span><b>A toast, and a soft sound</b>
+                  <span>When someone starts waiting. <b>♪</b> mutes the sound.</span></li>
+                <li class="anno-card" data-for="5" data-tab="1" tabindex="0"><span class="anno-n">1</span><b>Answered at once</b>
+                  <span>« ✓ Approved · Flaky tests carries on » takes the request's place, then the card leaves the list.</span></li>
+              </ol>
+            </div>
           </div>
         </div>
       </div>
@@ -700,7 +727,7 @@
       <span><a href="howto.html">How-to</a> · <a href="docs.html">Docs</a> · <a href="https://github.com/sonixz/agent-manager-gd" rel="noopener">GitHub</a></span>
     </div>
   </footer>
-  <script src="js/main.js?v=2026-11-13f"></script>
-  <script src="js/home.js?v=2026-11-13f"></script>
+  <script src="js/main.js?v=2026-11-13g"></script>
+  <script src="js/home.js?v=2026-11-13g"></script>
 </body>
 </html>
