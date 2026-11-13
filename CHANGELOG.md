@@ -29,9 +29,13 @@ Newest first.
   key, its own branch, its rights, the Second Brain, a secret), the views and themes to try in place, the control
   room, continuity, the Second Brain, the built-in MCP server and the orchestrator built on it, repositories, the
   machine and WSL, cloud sandboxes and their tunnel, voice, and keys, secrets and safety (Keys › Secrets, Loop 39).
-  Points on a screenshot show what matters, a loupe enlarges a detail, a bar follows you down the page.
+- On the pictures: numbered points with a card per point beside the picture, joined by a line (launching a session,
+  approving from the list); five pictures zoom inside their frame towards a detail and come back, with a button to
+  switch by hand. The MCP server is drawn as a map played step by step beside its calls, with a card per tool.
+- One header on the home page, How-to and Docs. A bar follows you down the home page.
 - The loops: a dot per loop on a line, a filter by theme, a search, the latest six and « Show all »: it holds any
   number of loops.
+- README: the film's poster, linked to the website where it plays with sound.
 
 ### Sandboxes: the inventory, always · Loop 38 (first steps)
 - **Bring it to my localhost** no longer takes a port a Windows program already holds (the engine runs in WSL and

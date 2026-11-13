@@ -53,7 +53,8 @@ when it uses the Brain.
 before acting* to *No permission*, changed on an open agent without losing its conversation, and one view that shows
 what every agent may do. At every level, agents' file tools cannot touch `~/.ssh`, `.env` files or your keys. Each
 connected repository, on GitHub or Azure DevOps, gets its own SSH key, so git just works without ever exposing your
-personal SSH key.
+personal SSH key. Your projects' secrets (a token, an API key) stay in a vault, encrypted, and each goes only to the
+sessions you give it to.
 
 **And more.** Resume any conversation, fork it, give a session its own git branch. Review a diff and comment lines.
 Wrap a session up into a summary and brief the next one with it. Hold F8 to dictate into a box you send with Enter,
