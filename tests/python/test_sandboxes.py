@@ -320,6 +320,23 @@ class SandboxesTest(unittest.TestCase):
         self.assertEqual((offline["at_fly"]["reachable"], len(offline["sandboxes"])), (False, 2))
         self.assertEqual({r["id"]: r["state"] for r in offline["sandboxes"]}[sb["id"]], "destroyed")
 
+    def test_the_size_is_chosen_priced_and_given_to_fly(self):
+        sz = self.s.sandboxes.sizes()
+        self.assertEqual([x["id"] for x in sz["sizes"]][:3], ["shared-cpu-1x-256", "shared-cpu-1x-512", "shared-cpu-1x-1024"])
+        self.assertEqual((sz["chosen"], sz["source"]), ("shared-cpu-1x-1024", "docs.fly.io/about/pricing, read 2026-11-12"))
+        self.assertIn("floors", sz["region_note"])                       # yyz is not one of the regions the page prices
+        with self.assertRaises(ValueError):
+            self.s.sandboxes.choose_size("huge-cpu-64x")
+        self.assertEqual(self.s.sandboxes.choose_size("performance-cpu-2x-4096")["chosen"], "performance-cpu-2x-4096")
+        self.assertAlmostEqual(self.s.sandboxes.estimate()["per_month_on"], 66.00)
+        self.s.sandboxes.prepare()
+        d = self.s.create("Big work", "shell", "", host="sandbox")
+        run = next(c for c in self.fly.calls if c[:2] == ("machine", "run"))
+        self.assertEqual(run[run.index("--vm-cpu-kind") + 1:run.index("--vm-cpu-kind") + 6], ("performance", "--vm-cpus", "2", "--vm-memory", "4096"))
+        self.assertEqual(self.s.sandboxes.by_session(d["id"])["size"], "performance-cpu-2x-4096")
+        self.s.sandboxes.set_config("region", "iad")
+        self.assertEqual(self.s.sandboxes.sizes()["region_note"], "")
+
     def test_the_owner_routes_answer_over_http(self):
         """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
         tok = load_token(self.tmp)

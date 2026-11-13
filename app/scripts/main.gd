@@ -3709,6 +3709,22 @@ func _sbx_deploy_step(r: Dictionary) -> Control:
 	var est := _wrap("Estimated, before you deploy (%s, %s): ≈ %s an hour while it runs · ≈ %s a day if left on · ≈ %s a month paused (its disk only)." % [
 		str(e.get("size", "")), str(e.get("source", "")), CostChart.money(float(e.get("per_hour", 0))), CostChart.money(float(e.get("per_day_on", 0))), CostChart.money(float(e.get("paused_per_month", 0)))])
 	v.add_child(est)
+	# the size the next sandboxes get: one card per size, with its price (Fly.io's page, dated); a click chooses
+	var sizes: Dictionary = r.get("sizes", {})
+	if not (sizes.get("sizes", []) as Array).is_empty():
+		var pick = SandboxWidgets.Sizes.new(sizes)
+		pick.name = "SandboxSizes"
+		pick.picked.connect(func(id: String) -> void:
+			var res := await engine.call_api("POST", "/sandboxes/size", {"size": id})
+			_toast(str(res["error"]) if res.has("error") else "The next sandboxes get %s" % id)
+			await _load_sandboxes())
+		v.add_child(pick)
+		var note := _muted("Prices: %s, while the machine runs, billed by the second; paused, only its disk (≈ %s a month). Region %s.%s A sandbox that runs keeps its size." % [
+			str(sizes.get("source", "")), CostChart.money(float(sizes.get("paused_per_month", 0))), str(sizes.get("region", "")),
+			(" " + str(sizes.get("region_note", ""))) if str(sizes.get("region_note", "")) != "" else ""])
+		note.add_theme_font_size_override("font_size", 11)
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(note)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var a := _small("☁ Deploy + open a shell", func() -> void: _open_new("sandbox", "shell"))

@@ -24,6 +24,11 @@ Newest first.
   the Second Brain when its terminal is closed; the block says who carries it.
 - A sandbox's terminal now checks the sandbox's host key too, against the one remembered at the first connection.
   Before, it accepted any.
+- **The size of a sandbox is yours to choose**: one card per Fly.io size (shared 1 CPU from 256 MB to 1 GB, shared
+  2 CPU with 2 GB, performance 1 and 2 CPU), each with its price a month and an hour and a bar against the dearest.
+  The next sandboxes get the one chosen, and the estimate follows. Prices are Fly.io's published ones, read
+  2026-11-12, for its cheapest regions; elsewhere they are said to be floors. Before, every sandbox had 1 shared CPU
+  and 1 GB.
 - Two sandboxes that listen on the same port each get their own address on this computer: the first keeps the
   number, the second takes the next free one, and each keeps its own afterwards.
 - **Open a SOCKS proxy**: one address on this computer through which a program set on it reaches everything inside

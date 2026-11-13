@@ -183,6 +183,8 @@ def make_handler(sessions: Sessions, token: str):
                             return self._reply(200, carrier.close_port(sbid, port))
                         if act in ("pause", "resume"):
                             return self._reply(200, carrier.pause_port(sbid, port, act == "pause"))
+                if parts == ["sandboxes", "size"] and method == "POST":   # the size the next sandboxes get
+                    return self._reply(200, sessions.sandboxes.choose_size(str(self._body().get("size", ""))))
                 if parts == ["sandboxes", "budget"] and method == "POST":
                     b = self._body()
                     return self._reply(200, sessions.sandboxes.set_budget(float(b.get("monthly_usd", 0)), int(b.get("stop_idle_minutes", 0)),

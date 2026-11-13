@@ -207,3 +207,77 @@ class Wire extends Control:
 				("   ·   %d open now" % int(row["open_now"])) if int(row["open_now"]) > 0 else ""]
 			draw_string(font, Vector2(x0, y - 9.0), figures, HORIZONTAL_ALIGNMENT_CENTER, x1 - x0, 11, muted)
 
+
+## The sizes a sandbox can have, one card each: its kind, processors and memory, what it costs a month and an hour
+## while it runs, and a bar of that price against the dearest, so the gap shows at a glance. The chosen one is lit;
+## a click chooses another (for the next sandboxes: one that runs keeps its size).
+class Sizes extends Control:
+	signal picked(id: String)
+	const H := 96.0
+	const GAP := 8.0
+	var rows: Array
+	var chosen: String
+	var hover := -1
+	var font: Font
+	var bold: Font
+
+	func _init(sizes: Dictionary) -> void:
+		rows = sizes.get("sizes", [])
+		chosen = str(sizes.get("chosen", ""))
+		font = AmTheme.ui_font(400)
+		bold = AmTheme.ui_font(650)
+		custom_minimum_size.y = H
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		mouse_exited.connect(func() -> void:
+			hover = -1
+			queue_redraw())
+
+	func card_w() -> float:
+		return (size.x - GAP * maxf(rows.size() - 1, 0)) / maxf(rows.size(), 1)
+
+	func at(x: float) -> int:
+		var i := int(floor(x / (card_w() + GAP)))
+		return i if i >= 0 and i < rows.size() else -1
+
+	func _gui_input(e: InputEvent) -> void:
+		if e is InputEventMouseMotion:
+			var i := at(e.position.x)
+			if i != hover:
+				hover = i
+				mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if i >= 0 else Control.CURSOR_ARROW
+				queue_redraw()
+		elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			var i := at(e.position.x)
+			if i >= 0 and str(rows[i]["id"]) != chosen:
+				picked.emit(str(rows[i]["id"]))
+
+	func _get_tooltip(pos: Vector2) -> String:
+		var i := at(pos.x)
+		if i < 0:
+			return ""
+		var r: Dictionary = rows[i]
+		return "%s\n%s processor%s, %s of memory\n≈ %s a month, ≈ %s an hour, ≈ %s a day while it runs" % [str(r["id"]), str(r["cpus"]),
+			"" if int(r["cpus"]) == 1 else "s", HostView.mem(float(r["memory_mb"]) * 1048576.0), SandboxView.money(float(r["month"])),
+			SandboxView.money(float(r["per_hour"])), SandboxView.money(float(r["per_day_on"]))]
+
+	func _draw() -> void:
+		var top := 0.0
+		for r in rows:
+			top = maxf(top, float(r["month"]))
+		var w := card_w()
+		for i in rows.size():
+			var r: Dictionary = rows[i]
+			var x := i * (w + GAP)
+			var on := str(r["id"]) == chosen
+			var perf := str(r["kind"]) == "performance"
+			var edge := AmTheme.col("MINT") if on else (AmTheme.col("FOREST_LIGHT") if i == hover else AmTheme.col("BORDER"))
+			draw_style_box(AmTheme.box(AmTheme.col("PANEL_2") if on else AmTheme.col("PANEL"), 10, edge, 2 if on else 1, 0), Rect2(x, 0, w, H))
+			draw_string(font, Vector2(x + 12.0, 20.0), ("✓ " if on else "") + ("performance" if perf else "shared"), HORIZONTAL_ALIGNMENT_LEFT, w - 20.0, 11, AmTheme.col("WARM") if perf else AmTheme.col("MUTED"))
+			draw_string(bold, Vector2(x + 12.0, 42.0), "%d CPU · %s" % [int(r["cpus"]), HostView.mem(float(r["memory_mb"]) * 1048576.0)], HORIZONTAL_ALIGNMENT_LEFT, w - 20.0, 14, AmTheme.col("TEXT"))
+			draw_string(bold, Vector2(x + 12.0, 64.0), SandboxView.money(float(r["month"])) + " / month", HORIZONTAL_ALIGNMENT_LEFT, w - 20.0, 13, AmTheme.col("TEXT"))
+			draw_string(font, Vector2(x + 12.0, 80.0), "≈ %s an hour" % SandboxView.money(float(r["per_hour"])), HORIZONTAL_ALIGNMENT_LEFT, w - 20.0, 11, AmTheme.col("MUTED"))
+			var track := Rect2(x + 12.0, H - 9.0, w - 24.0, 3.0)
+			draw_rect(track, Color(AmTheme.col("BORDER"), 0.7))
+			draw_rect(Rect2(track.position, Vector2(track.size.x * float(r["month"]) / maxf(top, 0.01), 3.0)), AmTheme.col("WARM") if perf else AmTheme.col("MINT"))
+

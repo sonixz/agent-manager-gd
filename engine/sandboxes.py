@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -23,10 +24,29 @@ from contextlib import closing
 FLYCTL = os.environ.get("AGMGD_FLYCTL") or os.path.expanduser("~/.local/opt/flyctl/flyctl")
 HERE = os.path.dirname(os.path.abspath(__file__))
 IMAGE_DIR = os.path.join(os.path.dirname(HERE), "sandbox")
-# docs.fly.io/about/pricing, read 2026-11-08 (no date on the page): USD per month while started / per GB-month stopped
-PRICES = {"shared-cpu-1x-1024": 6.70}
+# The sizes a sandbox can have, with Fly.io's published price per month (30 days) while it runs, in its cheapest
+# regions (Ashburn iad, Secaucus ewr): docs.fly.io/about/pricing, read 2026-11-12 (the page has no date). Fly.io
+# says prices vary by region; its page does not list the others, so elsewhere the figure is a floor, and said so.
+# Billed by the second while running; a paused machine bills only its root disk (STOPPED_GB_MONTH).
+SIZES = [
+    {"id": "shared-cpu-1x-256", "kind": "shared", "cpus": 1, "memory_mb": 256, "month": 2.19},
+    {"id": "shared-cpu-1x-512", "kind": "shared", "cpus": 1, "memory_mb": 512, "month": 3.69},
+    {"id": "shared-cpu-1x-1024", "kind": "shared", "cpus": 1, "memory_mb": 1024, "month": 6.70},
+    {"id": "shared-cpu-2x-2048", "kind": "shared", "cpus": 2, "memory_mb": 2048, "month": 13.39},
+    {"id": "performance-cpu-1x-2048", "kind": "performance", "cpus": 1, "memory_mb": 2048, "month": 33.00},
+    {"id": "performance-cpu-2x-4096", "kind": "performance", "cpus": 2, "memory_mb": 4096, "month": 66.00},
+]
+PRICES = {s["id"]: s["month"] for s in SIZES}
+DEFAULT_SIZE = "shared-cpu-1x-1024"
+CHEAPEST_REGIONS = ("iad", "ewr")
 STOPPED_GB_MONTH = 0.15
-PRICE_SOURCE = "docs.fly.io/about/pricing, read 2026-11-08"
+PRICE_SOURCE = "docs.fly.io/about/pricing, read 2026-11-12"
+
+
+def size_parts(size: str) -> tuple[str, int, int]:
+    """(cpu kind, cpus, memory in MB) of a size's name; the default one's for a name that is not one."""
+    m = re.match(r"^(shared|performance)-cpu-(\d+)x-(\d+)$", size or "")
+    return (m.group(1), int(m.group(2)), int(m.group(3))) if m else ("shared", 1, 1024)
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sandboxes (
     id TEXT PRIMARY KEY,
@@ -238,7 +258,10 @@ class Sandboxes:
             db.execute(f"UPDATE sandboxes SET {sets} WHERE id = ?", (*f.values(), sbid))
 
     # ---------------------------------------------------------------- lifecycle
-    def create(self, session_id: str, size: str = "shared-cpu-1x-1024", repo_id: str = "") -> dict:
+    def create(self, session_id: str, size: str = "", repo_id: str = "") -> dict:
+        size = size or self.config("size", DEFAULT_SIZE)
+        if size not in PRICES:
+            raise ValueError(f"not a size Agent Manager knows: {size}")
         st = self.status()
         if not st["ready"]:
             raise ValueError("cloud sandboxes are not prepared yet (Sandboxes → Prepare)")
@@ -249,9 +272,9 @@ class Sandboxes:
                         "-f", self.key_path(sbid)], check=True, capture_output=True, timeout=30)
         with open(self.key_path(sbid) + ".pub", encoding="utf-8") as f:
             pub = f.read().strip()
-        cpus, mem = "1", size.rsplit("-", 1)[-1]
+        kind, cpus, mem = size_parts(size)
         rc, out = self.fly.run("machine", "run", st["image"], "--app", st["app"], "--region", st["region"],
-                               "--vm-cpus", cpus, "--vm-memory", mem, "--name", "sandbox-" + sbid,
+                               "--vm-cpu-kind", kind, "--vm-cpus", str(cpus), "--vm-memory", str(mem), "--name", "sandbox-" + sbid,
                                "--env", "AGMGD_AUTHORIZED_KEY=" + pub, "--metadata", "agmgd=" + sbid, timeout=900)
         if rc != 0:
             shutil.rmtree(os.path.dirname(self.key_path(sbid)), ignore_errors=True)
@@ -324,9 +347,29 @@ class Sandboxes:
                 "ready": bool(self.config("image")), "built": built, "image": self.config("image"),
                 "build_note": "Fly builds it in your organisation's private registry, about 2 minutes, once"}
 
-    def estimate(self, size: str = "shared-cpu-1x-1024") -> dict:
+    def sizes(self) -> dict:
+        """The sizes to choose from, each with what it costs, the one chosen, and the region with its price caveat."""
+        region = self.config("region", "yyz")
+        rows = []
+        for s in SIZES:
+            hour = s["month"] / HOURS_PER_MONTH
+            rows.append({**s, "per_hour": round(hour, 4), "per_day_on": round(hour * 24, 3)})
+        return {"sizes": rows, "chosen": self.config("size", DEFAULT_SIZE), "region": region,
+                "cheapest_region": region in CHEAPEST_REGIONS, "paused_per_month": round(STOPPED_GB_MONTH * IMAGE_GB, 2),
+                "source": PRICE_SOURCE,
+                "region_note": "" if region in CHEAPEST_REGIONS else
+                f"Fly.io's prices vary by region and its page gives only those of iad and ewr, its cheapest: in {region} these are floors."}
+
+    def choose_size(self, size: str) -> dict:
+        if size not in PRICES:
+            raise ValueError(f"not a size Agent Manager knows: {size}")
+        self.set_config("size", size)
+        return self.sizes()
+
+    def estimate(self, size: str = "") -> dict:
         """Before deploying: what a sandbox costs while it runs, and while it is paused (published prices)."""
-        month = PRICES.get(size, 6.70)
+        size = size or self.config("size", DEFAULT_SIZE)
+        month = PRICES.get(size, PRICES[DEFAULT_SIZE])
         hour = month / HOURS_PER_MONTH
         return {"size": size, "per_hour": round(hour, 4), "per_day_on": round(hour * 24, 3), "per_month_on": month,
                 "paused_per_month": round(STOPPED_GB_MONTH * IMAGE_GB, 2), "source": PRICE_SOURCE}
@@ -379,7 +422,7 @@ class Sandboxes:
         per = {}
         for r in self.runs():
             a, b = r["start"], r["stop"] or now
-            rate = PRICES.get(r["size"], 6.70) / (HOURS_PER_MONTH * 3600)
+            rate = PRICES.get(r["size"], PRICES[DEFAULT_SIZE]) / (HOURS_PER_MONTH * 3600)
             for i, d0 in enumerate(starts):
                 d1 = d0 + 86400
                 ov = min(b, d1) - max(a, d0)
@@ -524,7 +567,7 @@ class Sandboxes:
         return total
 
     def cost(self, size: str, seconds: float) -> float:
-        return round(PRICES.get(size, 6.70) / (30 * 24 * 3600) * seconds, 4)
+        return round(PRICES.get(size, PRICES[DEFAULT_SIZE]) / (30 * 24 * 3600) * seconds, 4)
 
     # ---------------------------------------------------------------- the inventory: nothing made here is forgotten
     def inventory(self, rows: list[dict], reachable: bool, orphans: list[dict], now: float | None = None) -> dict:
@@ -607,4 +650,4 @@ class Sandboxes:
                 "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 4), "budget": b, "month_spend_usd": spend,
                 "budget_percent": round(100 * spend / b["monthly_usd"], 1) if b["monthly_usd"] > 0 else None,
                 "storage_note": f"stopped machines: ${STOPPED_GB_MONTH}/GB/month of root disk",
-                "image_info": self.image_info(), "estimate": self.estimate(), "costs": series}
+                "image_info": self.image_info(), "estimate": self.estimate(), "sizes": self.sizes(), "costs": series}

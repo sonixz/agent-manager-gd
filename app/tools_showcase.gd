@@ -1117,8 +1117,20 @@ func _run() -> void:
 			report.append("sandboxes: the inventory is on the page: %s | %s | at Fly.io: %s" % [life != null,
 				" ; ".join(SandboxView.order(inv["sandboxes"]).map(func(x: Dictionary) -> String: return "%s: %s, %d runs, %s, %s" % [SandboxView.name_of(x), SandboxView.state_of(x)["text"], x["runs"].size(), HostView.span(float(x["run_seconds"])), SandboxView.money(float(x["cost_usd"]))])),
 				" | ".join(SandboxView.tiles(inv).map(func(t: Dictionary) -> String: return "%s %s" % [t["label"], t["value"]]))])
+			var cards: Node = main.sbx_box.find_child("SandboxSizes", true, false)
+			report.append("sandboxes: sizes on the page: %s | %s" % [cards != null, " ; ".join(over["sizes"]["sizes"].map(func(x: Dictionary) -> String: return "%s $%.2f" % [x["id"], x["month"]]))])
 			report.append("sandboxes: the pointer on the destroyed one says: « %s »" % str(life._get_tooltip(Vector2(300, life.HEAD + life.ROW * 2.5))).replace("\n", " / ").left(170))
 			await shot("sandboxes")
+			# a size chosen on its card: the next sandboxes get it, and the estimate follows
+			(main.sbx_box.find_child("SandboxSizes", true, false)).picked.emit("shared-cpu-2x-2048")
+			await wait(2.0)
+			var again: Dictionary = await main.engine.call_api("GET", "/sandboxes", null, true, 60.0)
+			report.append("sandboxes: a card clicked: chosen « %s », estimate $%.2f a month | the region's caveat: « %s »" % [again["sizes"]["chosen"], again["estimate"]["per_month_on"], str(again["sizes"]["region_note"]).left(60)])
+			var scroller: ScrollContainer = main.sbx_box.get_parent()
+			scroller.scroll_vertical = int(maxf(0.0, (main.sbx_box.find_child("SandboxSizes", true, false) as Control).global_position.y - main.sbx_box.global_position.y - 400.0))
+			await wait(0.5)
+			await shot("sandbox-sizes")
+			await main.engine.call_api("POST", "/sandboxes/size", {"size": "shared-cpu-1x-1024"})
 		"sandbox-ports":  # Loop 38: a sandbox's port on localhost. Fly.io, ssh and the sandbox are stand-ins (nothing leaves this computer); the relay, its counting and the page are the real ones. A small web server here stands for a dashboard in the sandbox.
 			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
 			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
