@@ -17,6 +17,9 @@ How to build, test and contribute: CONTRIBUTING.md. What the app protects: SECUR
 - main is pushed only through the push-main workflow (`.claude/skills/push-main/SKILL.md`, `tools/push_main.sh`):
   the website, its index with every loop, the Docs and the devlog follow the changes first, and each push needs the
   owner's OK (owner, 2026-11-11).
+- A release is made only through the release workflow (`.claude/skills/release/SKILL.md`, `tools/release.sh`): built
+  from the commit GitHub's main holds, the archive checked (nothing personal, no key), and each release needs the
+  owner's OK (owner, 2026-11-13).
 - Two things are called sandbox; never mix them up. « Sandboxes » are ours: Fly.io machines reached through an SSH
   tunnel. Claude Code's own sandbox (bubblewrap, socat) stays Claude Code's native feature: name it as such, never
   as ours, and never install its tools yourself (owner, 2026-11-11).

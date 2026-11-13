@@ -10,7 +10,7 @@ and the devlog follow what changed, where needed; then main is pushed. The same 
 pushes; the judgement in between (what must the public face say now?) is yours.
 
 Never here: a forced push, another branch, a tag, a GitHub Release, the repository's visibility. Those are the
-owner's.
+owner's. A release has its own workflow, after the push: `.claude/skills/release/SKILL.md`.
 
 ## 1. See where things stand
 

@@ -2,6 +2,7 @@
 # Release build (Loop 15): exports the app for Windows (and Linux when its export template is installed), ships the
 # engine next to the executable, adds the per-user installer, and zips it. Run tools/build_native.sh template_release first.
 #   tools/build_release.sh [version]
+# For a release that goes public, use tools/release.sh: it calls this, then checks the archive before anything is published.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VER="${1:-$(date +%Y.%m.%d)}"
