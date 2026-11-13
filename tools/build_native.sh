@@ -7,8 +7,25 @@ TARGET="${1:-template_debug}"
 SCONS="${SCONS:-$HOME/.local/opt/scons-venv/bin/scons}"
 OUT="$(pwd)/app/addons/vtterm/bin"
 mkdir -p "$OUT"
+MINGW="$HOME/.local/opt/zigmingw"
+# A release library is published, and godot-cpp's headers write the path of each source file into it: built as is, it
+# would say where the builder's home folder is. For template_release the same compilers are called through wrappers
+# that map that folder out (-ffile-prefix-map); tools/release.sh checks the archive holds no such path.
+if [[ "$TARGET" == template_release ]]; then
+  CLEAN="${XDG_CACHE_HOME:-$HOME/.cache}/agmgd-build/mingw"
+  mkdir -p "$CLEAN/bin"
+  for tool in "$MINGW"/bin/*; do
+    name="$(basename "$tool")"
+    case "$name" in
+      *gcc|*g++) printf '#!/usr/bin/env bash\nexec %q "$@" -ffile-prefix-map=%q=/src -ffile-prefix-map=%q=/build\n' "$tool" "$HOME/src" "$HOME" ;;
+      *)         printf '#!/usr/bin/env bash\nexec %q "$@"\n' "$tool" ;;
+    esac > "$CLEAN/bin/$name"
+    chmod +x "$CLEAN/bin/$name"
+  done
+  MINGW="$CLEAN"
+fi
 (cd native/vtterm && "$SCONS" -j"$(nproc)" target="$TARGET" OUT="$OUT" >/dev/null)
-(cd native/vtterm && "$SCONS" -j"$(nproc)" platform=windows use_mingw=yes mingw_prefix="$HOME/.local/opt/zigmingw" target="$TARGET" OUT="$OUT" >/dev/null)
+(cd native/vtterm && "$SCONS" -j"$(nproc)" platform=windows use_mingw=yes mingw_prefix="$MINGW" target="$TARGET" OUT="$OUT" >/dev/null)
 cp "$HOME/src/ghostty/zig-out/lib/libghostty-vt.so.1.1.0" "$OUT/libghostty-vt.so.1"
 cp "$HOME/src/ghostty/zig-out-win/bin/ghostty-vt.dll" "$OUT/"
 rm -f "$OUT"/*.lib
