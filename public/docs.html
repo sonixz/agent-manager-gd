@@ -592,6 +592,23 @@
           Linux the file is protected by its permissions (0600), and the screen says so. A key is never shown again,
           never written to a log, and read only when a feature needs it. Below them, the
           <a href="#brain">Second Brain keys</a> Agent Manager made.</p>
+        <p><b>Secrets</b>, at the top of the same page, hold the keys of your projects: an ElevenLabs key, a GitHub
+          token, a dotenvx private key. Each has a name in the form of an environment variable
+          (<code>ELEVENLABS_API_KEY</code>), a note, and the same encryption as the keys above. A secret goes only to the
+          sessions you give it to: tick it in <b>New session</b>, or use <b>Give to a session…</b> on its card (from that
+          session's next start: <b>Restart</b> it to give it now). When such a session starts, its program receives the
+          secret in its environment through a single-use ticket traded with the engine: the value is in no file, not in
+          tmux's environment, not on a command line, and the other sessions do not have it. <code>AGMGD_SECRETS</code>
+          lists the names a session received. Each card draws a padlock (closed when Windows encrypts it), a chip per
+          session that holds it and fourteen bars for how often it was handed over; the journal keeps who received what
+          and when, never a value. <b>Take back from…</b> stops giving it from that session's next start; a program
+          already running keeps what it had.</p>
+        <p>With dotenvx: keep the project's <code>.env</code> encrypted as dotenvx makes it, put its private key in the
+          vault as <code>DOTENV_PRIVATE_KEY</code> (or <code>DOTENV_PRIVATE_KEY_PRODUCTION</code>…), give it to the
+          session, and <code>dotenvx run -- python script.py</code> works as it is. Agent Manager does not install dotenvx.</p>
+        <p>What it does not do: a program given a secret can read it, and print it. The sessions run as the same Linux
+          user, so a determined program could also read another session's memory. The vault keeps a key from being
+          everywhere in WSL; it is not a wall between agents. A session in a cloud sandbox gets no secret from here.</p>
         <p>Agents' own logins (your Claude or ChatGPT subscription) stay with the agents: Agent Manager never reads,
           copies or relays them.</p>
 
@@ -599,7 +616,7 @@
         <p>The engine listens on <code>127.0.0.1:8790</code> only, and every call needs the bearer token in
           <code>runtime/api_token</code> (JSON in, JSON out; request logs never hold the token). The app is its main
           client; the MCP server and the hooks use it too. Resources: <code>/sessions</code>, <code>/groups</code>,
-          <code>/tree</code>, <code>/history</code>, <code>/summaries</code>, <code>/repos</code>, <code>/keys</code>,
+          <code>/tree</code>, <code>/history</code>, <code>/summaries</code>, <code>/repos</code>, <code>/keys</code>, <code>/secrets</code>,
           <code>/brain</code>, <code>/usage</code>, <code>/voice</code>, <code>/sandboxes</code>, <code>/health</code>.</p>
         <table>
           <tr><th>Environment</th><th>Effect</th></tr>

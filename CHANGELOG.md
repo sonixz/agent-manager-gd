@@ -5,6 +5,18 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Secrets for your projects, given session by session · Loop 39
+- New: **Keys › Secrets**. Keep the keys of your projects (an ElevenLabs key, a GitHub token, a dotenvx private key)
+  under a name like `ELEVENLABS_API_KEY`, encrypted for your Windows user, never shown again. Each goes only to the
+  sessions you give it to: tick it in **New session**, or **Give to a session…** on its card. The session's program
+  gets it in its environment when it starts; the other sessions do not, and it is written in no file.
+- Each secret is drawn as a card: a padlock (closed when Windows encrypts it), a chip per session that holds it, and
+  fourteen bars for how often it was handed over. **Take back from…**, **Replace**, **Delete…**.
+- With dotenvx: put the project's private key in the vault as `DOTENV_PRIVATE_KEY` and give it to the session;
+  `dotenvx run --` works as it is.
+- Said plainly: an agent can read a secret it is given. The vault keeps a key from being everywhere in WSL; it is not
+  a wall between agents.
+
 ### Sandboxes: the inventory, always · Loop 38 (first steps)
 - **Bring it to my localhost** no longer takes a port a Windows program already holds (the engine runs in WSL and
   could not see it: the browser landed on the Windows program). It reads Windows' listeners, read only, and takes
