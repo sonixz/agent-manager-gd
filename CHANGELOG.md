@@ -8,7 +8,7 @@ Newest first.
 ### Agents ask for cloud machines, you decide (Loop 46)
 - New on Agent Manager's MCP server: `list_machines`, `create_machine`, `machine_status`, `stop_machine`,
   `start_machine`, `destroy_machine`, `expose_machine`, `unexpose_machine`. An agent (loop0, for instance) can get a
-  private sandbox or an Online machine, start sessions there and drive them like any session.
+  private cloud sandbox (ours, on Fly.io) or an Online machine, start sessions there and drive them like any session.
 - Creating, destroying and exposing are **requests**: they show in **They wait for you** with **Approve…** and
   **Refuse**, saying exactly what and what it costs; nothing happens before you approve.
 - An agent acts only on its own machines, at most two per root session; its sessions in a machine never get more than
