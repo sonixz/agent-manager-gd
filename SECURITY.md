@@ -41,7 +41,9 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   destruction or its exposure: the request waits in « They wait for you » and the engine does it only on your
   approval. It acts at once only on its own machines (pause, start within the budget, close to the internet), at most
   two per root session; a session it starts in a machine never gets more than its own level, and only reads on an
-  exposed machine; it can pass only secrets its own session holds, by name. Like every agent tool, this is enforced by
+  exposed machine; it can pass only secrets its own session holds, by name. « Cloud machines without asking » (an
+  agent's Permissions, your choice, for when you drive it from afar) skips the approval for that agent and the
+  sessions under it, never the other limits. Like every agent tool, this is enforced by
   the engine behind the MCP server; a program that reads the engine's token on this computer is not stopped by it.
 - **Online machines (the only public door)**: a machine of ⬡ Online is made private, in its own Fly.io app. It gets a
   public address only when you click *Expose to the internet* and confirm; then `https://<its app>.fly.dev` reaches

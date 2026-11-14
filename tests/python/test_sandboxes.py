@@ -713,6 +713,30 @@ class SandboxesTest(unittest.TestCase):
         self.assertEqual(self._settle(de["id"])["status"], "done")
         self.assertTrue(self.s.sandboxes.get(sbid)["destroyed"])
 
+    def test_without_asking_when_the_owner_drives_it_from_afar_the_limits_stay(self):
+        """Loop 46 (owner: « j'aimerais avoir un mode sans confirmation. Des fois je pilote un agent à distance »)."""
+        self.s.sandboxes.prepare()
+        lead = self._lead()
+        self.assertFalse(self.s.get(lead)["machines_auto"])
+        self.s.set_machines_auto(lead, True)
+        self.assertTrue(self.s.get(lead)["machines_auto"])
+        req = self.s.machine_request(lead, "create", {"kind": "sandbox", "name": "Remote"})
+        self.assertIn(req["status"], ("running", "done"))                     # no waiting for the owner
+        self.assertIn("without asking", self.s.machine_requests.get(req["id"])["params"]["approved_by"])
+        done = self._settle(req["id"])
+        self.assertEqual(done["status"], "done", done["result"])
+        self.assertNotEqual(self.s.get(lead)["activity"], "waiting")          # nothing in « They wait for you »
+        child = done["result"]["session"]                                      # a session under it inherits it
+        self.assertEqual(self.s.machines_auto_for(child), lead)
+        self.s.machine_request(lead, "create", {"kind": "sandbox"})
+        with self.assertRaises(ValueError):                                    # the cap holds without asking too
+            self.s.machine_request(lead, "create", {"kind": "sandbox"})
+        self.s.vault.set("NOT_HELD", "v", "")
+        with self.assertRaises(ValueError):
+            self.s.machine_request(child, "create", {"kind": "sandbox", "secrets": ["NOT_HELD"]})
+        self.s.set_machines_auto(lead, False)
+        self.assertEqual(self.s.machines_auto_for(child), "")
+
     def test_a_childs_tool_in_the_machine_gets_its_level_and_only_reads_when_exposed(self):
         from engine.sandbox_attach import agent_command
         self.assertEqual(agent_command({"tool": "claude"}), "claude --mcp-config /root/.agmgd/mcp.json")       # the owner's: unchanged

@@ -13,6 +13,8 @@ Newest first.
   **Refuse**, saying exactly what and what it costs; nothing happens before you approve.
 - An agent acts only on its own machines, at most two per root session; its sessions in a machine never get more than
   its own level, and only read on an exposed machine; it passes only secrets it holds.
+- **Cloud machines without asking**, in an agent's Permissions: for when you drive it from afar. Its requests are done
+  at once (the limits stay), and kept with who allowed them.
 
 ### Experts remember, and work everywhere (Loop 45)
 - An expert's **memory** is in the Second Brain: launched with it, an expert reads what it learned on other projects

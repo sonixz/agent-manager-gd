@@ -435,7 +435,10 @@
           and the agent's tool waits for your answer. An agent acts only on its own machines (their first session descends
           from its root session), at most two per root session (requests waiting counted); a session it starts in a machine
           gets its level, never more than its own, and only reads on an exposed machine; it can give a machine only the
-          secrets its own session holds, by name. The pause after idle time still applies to sandboxes.</p>
+          secrets its own session holds, by name. The pause after idle time still applies to sandboxes. When you drive an
+          agent from afar, its <b>Permissions</b> have <b>Cloud machines without asking</b>: its requests (and those of the
+          sessions under it) are done at once, kept in the requests with who allowed them; the limits stay (its own
+          machines, two per root session, your monthly budget, the secrets it holds).</p>
         <p>No tool presses keys in someone else's session: an agent never approves on another's behalf.
           <b>◐ › Connect other tools</b> gives the command to plug the same server into Claude Code, Codex or any MCP
           client outside the app; such a tool can list, read and start sessions, never type into one or approve.</p>

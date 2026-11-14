@@ -423,6 +423,8 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(201, sessions.machine_request(parts[1], str(b.get("kind", "")), b.get("params") or {}))
                 if len(parts) == 5 and parts[0] == "sessions" and parts[2] == "machines" and method == "POST":
                     return self._reply(200, sessions.agent_machine_action(parts[1], parts[3], parts[4]))
+                if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "machines-auto" and method == "POST":   # the owner's
+                    return self._reply(200, sessions.set_machines_auto(parts[1], bool(self._body().get("on", False))))
                 if len(parts) == 2 and parts[0] == "machine-requests" and method == "GET":
                     return self._reply(200, sessions.machine_requests.get(parts[1]))
                 if len(parts) == 3 and parts[0] == "machine-requests" and parts[2] == "decide" and method == "POST":

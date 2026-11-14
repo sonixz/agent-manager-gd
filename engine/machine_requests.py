@@ -75,6 +75,11 @@ class Requests:
         with closing(self._db()) as db:
             return [self._row(r) for r in db.execute("SELECT * FROM machine_requests WHERE status = 'pending' ORDER BY created")]
 
+    def active(self) -> list[dict]:
+        """Waiting for the owner, or approved and being done: both count against the caps."""
+        with closing(self._db()) as db:
+            return [self._row(r) for r in db.execute("SELECT * FROM machine_requests WHERE status IN ('pending', 'running') ORDER BY created")]
+
     def recent(self, limit: int = 30) -> list[dict]:
         with closing(self._db()) as db:
             return [self._row(r) for r in db.execute("SELECT * FROM machine_requests ORDER BY created DESC LIMIT ?", (limit,))]

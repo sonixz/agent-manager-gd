@@ -948,6 +948,7 @@ class Sessions:
                 "sandbox": {k: sb_info[k] for k in ("id", "region", "finished", "destroyed", "machine", "first", "kind")} if sb_info else None,
                 "branch": self.branch(rec["cwd"]),
                 "machine_request": machine_request,
+                "machines_auto": bool(rec.get("machines_auto")),
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
 
@@ -1362,7 +1363,8 @@ class Sessions:
         if kind == "create":
             root = self.root_of(sid)
             mine = [m for m in self.agent_machines(sid) if m["yours"]]
-            waiting = [r for r in self.machine_requests.pending() if r["kind"] == "create" and self.root_of(r["sid"]) == root]
+            # waiting for the owner or being done (a request approved without asking is « running » for a minute)
+            waiting = [r for r in self.machine_requests.active() if r["kind"] == "create" and self.root_of(r["sid"]) == root]
             if len(mine) + len(waiting) >= MAX_PER_ROOT:
                 raise ValueError(f"at most {MAX_PER_ROOT} machines per root session (with the requests waiting)")
             mk = str(params.get("kind", "sandbox"))
@@ -1406,9 +1408,36 @@ class Sessions:
             p = {"sandbox": sb["id"], "label": first.get("name", sb["id"]), "app": sb["app"], "port": sb.get("port", 0)}
         req = self.machine_requests.add(sid, kind, p)
         self._mr_cache = (0.0, [])
+        by = self.machines_auto_for(sid)
+        if by:   # the owner said so for this agent: approved at once, kept in the requests with who allowed it
+            self.machine_requests.set(req["id"], params=json.dumps({**p, "approved_by": "without asking (Permissions of « %s »)"
+                                                                  % (self.store.get(by) or {}).get("name", by)}))
+            self.decide_machine_request(req["id"], True)
+            req = self.machine_requests.get(req["id"])
         from .machine_requests import describe
         self._log(sid, {"machine_request": [req["id"], kind]})
         return {**req, "what": describe(req)}
+
+    def machines_auto_for(self, sid: str) -> str:
+        """The session (itself or an ancestor) whose machine requests the owner lets through without asking, or ''."""
+        seen = set()
+        while sid and sid not in seen:
+            seen.add(sid)
+            rec = self.store.get(sid) or {}
+            if rec.get("machines_auto"):
+                return sid
+            sid = rec.get("parent", "")
+        return ""
+
+    def set_machines_auto(self, sid: str, on: bool) -> dict:
+        """The owner's choice (Permissions): this agent and the sessions under it ask for machines without waiting for
+        an answer, for when the owner drives it from afar. The limits stay: own machines, two per root session, the
+        monthly budget, secrets it holds."""
+        if not self.store.get(sid):
+            raise KeyError(sid)
+        self.store.update(sid, machines_auto=int(bool(on)))
+        self._log(sid, {"machines_auto": bool(on)})
+        return {"id": sid, "machines_auto": bool(on)}
 
     def decide_machine_request(self, rid: str, approve: bool) -> dict:
         """The owner's answer (from the app). Approved, it runs aside: a machine takes up to a minute."""

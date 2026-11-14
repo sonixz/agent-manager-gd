@@ -103,6 +103,7 @@ var perm_access: OptionButton
 var perm_rw: LineEdit      # extra folders, read and write (« ; » between)
 var perm_ro: LineEdit      # extra folders, read only
 var perm_was := {}
+var perm_machines: CheckBox   # Loop 46: its cloud-machine requests without asking
 var perm_os: CheckBox      # Loop 30: Claude Code's own sandbox for its shell commands (bubblewrap)         # access and folders when the dialog opened         # its git rights when the dialog opened (only a change is sent)
 const LEVELS := {  # Loop 24: [menu label, card badge, what it means]
 	"ask": ["Ask before acting", "asks first", "Asks before editing files or running commands"],
@@ -2773,6 +2774,9 @@ func _open_permissions(id: String) -> void:
 	perm_rw.text = "; ".join(rw)
 	perm_ro.text = "; ".join(ro)
 	perm_was = {"access": acc, "rw": perm_rw.text, "ro": perm_ro.text, "os": bool(s.get("os_sandbox", false))}
+	perm_machines.set_meta("loading", true)
+	perm_machines.button_pressed = bool(s.get("machines_auto", false))
+	perm_machines.remove_meta("loading")
 	perm_os.button_pressed = bool(s.get("os_sandbox", false))
 	perm_os.disabled = true
 	perm_os.tooltip_text = "Claude Code only."
@@ -6878,6 +6882,15 @@ func _build_menus() -> void:
 	perm_merge.text = "Enable git merge and rebase"
 	perm_merge.tooltip_text = "Lifts the deny rules on git merge and git rebase for this session."
 	pv.add_child(perm_merge)
+	perm_machines = CheckBox.new()   # Loop 46: for when the owner drives this agent from afar
+	perm_machines.text = "Cloud machines without asking (create, destroy, expose)"
+	perm_machines.tooltip_text = "Its requests for cloud machines (and those of the sessions under it) are done at once, not shown in « They wait for you ». The limits stay: its own machines, two per root session, your monthly budget, the secrets it holds."
+	perm_machines.toggled.connect(func(on: bool) -> void:
+		if perm_machines.has_meta("loading"):
+			return
+		var d := await engine.call_api("POST", "/sessions/%s/machines-auto" % menu_target, {"on": on})
+		_toast(str(d.get("error", ("Its cloud machines now go without asking" if on else "Its cloud machines wait for your answer again")))))
+	pv.add_child(perm_machines)
 	perm_info = Label.new()
 	perm_info.add_theme_color_override("font_color", AmTheme.col("MUTED"))
 	perm_info.add_theme_font_size_override("font_size", 12)
