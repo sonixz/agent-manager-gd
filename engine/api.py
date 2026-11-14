@@ -206,6 +206,12 @@ def make_handler(sessions: Sessions, token: str):
                             return self._reply(200, carrier.close_port(sbid, port))
                         if act in ("pause", "resume"):
                             return self._reply(200, carrier.pause_port(sbid, port, act == "pause"))
+                if parts == ["online"] and method == "POST":   # Loop 41: a machine for a service online, private until exposed
+                    b = self._body()
+                    return self._reply(201, sessions.create_online_session(str(b.get("name", "")), str(b.get("tool", "claude")),
+                                                                           str(b.get("group", "")), int(b.get("port", 8080)),
+                                                                           int(b.get("volume_gb", 1)), str(b.get("size", "")),
+                                                                           str(b.get("repo", "")), bool(b.get("brain", True))))
                 if parts == ["sandboxes", "size"] and method == "POST":   # the size the next sandboxes get
                     return self._reply(200, sessions.sandboxes.choose_size(str(self._body().get("size", ""))))
                 if parts == ["sandboxes", "budget"] and method == "POST":
@@ -228,6 +234,13 @@ def make_handler(sessions: Sessions, token: str):
                     sbx = sessions.sandboxes
                     if act == "start" and method == "POST":
                         return self._reply(200, sbx.start(sbid))
+                    # Loop 41: an Online machine's public door, only on the owner's confirmed request
+                    if act == "expose" and method == "POST":
+                        return self._reply(200, sbx.expose(sbid, bool(self._body().get("confirmed", False))))
+                    if act == "unexpose" and method == "POST":
+                        return self._reply(200, sbx.unexpose(sbid))
+                    if act == "ips" and method == "GET":
+                        return self._reply(200, {"ips": sbx.public_ips(sbid), **sbx.online_info(sbid)})
                     if act == "stop" and method == "POST":
                         return self._reply(200, sbx.stop(sbid))
                     if act == "finish" and method == "POST":

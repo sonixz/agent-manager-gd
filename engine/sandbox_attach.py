@@ -142,7 +142,7 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
     if seat["first"]:
         sid = ""
     fly = Fly(lambda: keys.get("fly"))
-    machines = sbs.machines()
+    machines = sbs.machines(app=sb["app"])   # an Online machine lives in its own app (Loop 41)
     if not sb["machine"]:  # the machine was not in Fly's list yet when the sandbox was made: find it by its name
         found = next((m["id"] for m in machines if m.get("name") == "sandbox-" + sbid), "")
         if not found:
@@ -240,7 +240,8 @@ def setup(sbs, sb, rec, keys, base, store) -> None:
     if sb["brain_client"]:
         mcp["mcpServers"]["second-brain"] = {"type": "http", "url": f"http://127.0.0.1:8765/sandbox-brain/{sb['secret']}/mcp"}
     subprocess.run(base + ["root@127.0.0.1", "umask 077 && cat > /root/.agmgd/mcp.json"], input=json.dumps(mcp), text=True, timeout=60)
-    workdir = "/work/project"
+    root = "/data/work" if sb.get("kind") == "online" else "/work"   # an Online machine keeps its work on its volume
+    workdir = f"{root}/project"
     if sb["repo_id"]:
         from engine.repos import Repos
         repos = Repos(store.path, sbs.home)
@@ -248,7 +249,7 @@ def setup(sbs, sb, rec, keys, base, store) -> None:
         with open(repos.key_path(sb["repo_id"]), encoding="utf-8") as f:
             subprocess.run(base + ["root@127.0.0.1", "umask 077 && cat > /root/.ssh/repo_key"], input=f.read(), text=True, timeout=60)
         name = r["name"]
-        workdir = f"/work/{name}"
+        workdir = f"{root}/{name}"
         clone = (f"export GIT_SSH_COMMAND='ssh -i /root/.ssh/repo_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new' && "
                  f"git clone {json.dumps(r['url'])} {workdir} && git -C {workdir} switch -c am/{sb['id']} && "
                  f"git -C {workdir} config core.sshCommand \"$GIT_SSH_COMMAND\"")

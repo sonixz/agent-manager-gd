@@ -87,7 +87,7 @@ def connection(sbx, sbid: str) -> dict:
     """Machine state, tunnel (the session's SSH with its reverse port), latency, the Brain reachable from inside."""
     sb = sbx.get(sbid)
     try:
-        m = next((x for x in sbx.machines() if x["id"] == sb["machine"]), {})
+        m = next((x for x in sbx.machines(app=sb["app"]) if x["id"] == sb["machine"]), {})
         machine = m.get("state", "gone")
     except Exception:
         machine = "unknown (Fly unreachable)"

@@ -896,7 +896,7 @@ class Sessions:
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",
-                "sandbox": {k: sb_info[k] for k in ("id", "region", "finished", "destroyed", "machine", "first")} if sb_info else None,
+                "sandbox": {k: sb_info[k] for k in ("id", "region", "finished", "destroyed", "machine", "first", "kind")} if sb_info else None,
                 "branch": self.branch(rec["cwd"]),
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
@@ -1218,6 +1218,27 @@ class Sessions:
             raise
         if brain and self.brain and tool in ("claude", "codex"):
             cid = self.brain.connect(rec["name"] + " ☁")
+            if cid:
+                self.store.update(rec["id"], brain_client=cid)
+                self.sandboxes._set(sb["id"], brain_client=cid)
+        self.tmux.new_session(self.tmux_name(rec["id"]), self.home, [sys.executable or "python3", SANDBOX_ATTACH, sb["id"]],
+                              env=self.session_env(rec["id"]))
+        return self.get(rec["id"])
+
+    def create_online_session(self, name: str, tool: str, grp: str, port: int, volume_gb: int = 1, size: str = "",
+                              repo: str = "", brain: bool = True) -> dict:
+        """Loop 41: an Online machine (its own Fly app, a volume, 443 toward `port` once exposed) and its first
+        session, the one that works on the service. Private until the owner exposes it."""
+        if tool not in TOOLS:
+            raise ValueError(f"unknown tool: {tool}")
+        rec = self.store.add(name[:60], tool, "/work", grp or "Online", repo_id=repo)
+        try:
+            sb = self.sandboxes.create_online(rec["id"], name, int(port), size, int(volume_gb), repo)
+        except Exception:
+            self.store.delete(rec["id"])
+            raise
+        if brain and self.brain and tool in ("claude", "codex"):
+            cid = self.brain.connect(rec["name"])
             if cid:
                 self.store.update(rec["id"], brain_client=cid)
                 self.sandboxes._set(sb["id"], brain_client=cid)

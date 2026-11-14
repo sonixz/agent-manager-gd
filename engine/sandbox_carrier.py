@@ -239,7 +239,7 @@ class Carrier:
         sb = self.sandboxes.get(sbid)
         if sb.get("destroyed"):
             raise ValueError("this sandbox was destroyed")
-        state = {m["id"]: m for m in self.sandboxes.machines()}.get(sb["machine"], {}).get("state")
+        state = {m["id"]: m for m in self.sandboxes.machines(app=sb["app"])}.get(sb["machine"], {}).get("state")
         if state != "started":
             raise ValueError("the sandbox is not running (%s): start it first; opening a connection never starts it" % (state or "gone at Fly.io"))
         port = free_port()

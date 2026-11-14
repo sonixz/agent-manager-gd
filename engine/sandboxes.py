@@ -73,6 +73,17 @@ CREATE TABLE IF NOT EXISTS sandbox_runs (sandbox TEXT NOT NULL, size TEXT NOT NU
 CREATE TABLE IF NOT EXISTS sandbox_sessions (session_id TEXT PRIMARY KEY, sandbox TEXT NOT NULL, tmux TEXT NOT NULL,
     worktree INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL);
 """
+# Loop 41 (owner, 2026-11-14: « quand on va lancer des VM comme ça, ce serait pour lancer des services en ligne… un
+# service sur le port 443. Le reste ce serait en backend, sur la même VM »; the name « Online » is the owner's). An
+# Online machine is a sandbox record of kind « online »: the same terminal, sessions, tunnel and inventory, but its own
+# Fly app (so its own address, <app>.fly.dev), a volume for what must last (/data), and one public door when exposed:
+# 443 (HTTPS, Fly's certificate) and 80 (sent on to HTTPS) toward one port inside. Everything else listens on
+# 127.0.0.1 in the machine and is never public; SSH stays on Fly's private network. Exposed only when the owner asks.
+ONLINE_COLUMNS = [("kind", "TEXT NOT NULL DEFAULT 'sandbox'"), ("name", "TEXT NOT NULL DEFAULT ''"),
+                  ("port", "INTEGER NOT NULL DEFAULT 0"), ("volume_gb", "INTEGER NOT NULL DEFAULT 0"),
+                  ("exposed", "INTEGER NOT NULL DEFAULT 0")]
+ONLINE_PREFIX = "agmgd-on-"
+VOLUME_GB_MONTH = 0.15   # Fly.io's published price of a volume, per GB and month (docs.fly.io/about/pricing)
 MAX_SESSIONS_PER_SANDBOX = 8   # the first one and seven added: each runs an agent on the same machine
 # What our image holds (sandbox/Dockerfile): shown before the owner deploys it
 IMAGE_CONTENTS = [
@@ -159,6 +170,10 @@ class Sandboxes:
         self.health: dict[str, dict] = {}  # Loop 16: the last check of each running sandbox (sandbox_ops.monitor)
         with closing(self._db()) as db, db:
             db.executescript(SCHEMA)
+            have = {row[1] for row in db.execute("PRAGMA table_info(sandboxes)")}
+            for col, decl in ONLINE_COLUMNS:   # Loop 41
+                if col not in have:
+                    db.execute(f"ALTER TABLE sandboxes ADD COLUMN {col} {decl}")
 
     def _db(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.db_path, timeout=5)
@@ -313,24 +328,7 @@ class Sandboxes:
             raise ValueError("cloud sandboxes are not prepared yet (Sandboxes → Prepare)")
         self.guard_new()
         sbid = secrets.token_hex(4)
-        os.makedirs(os.path.dirname(self.key_path(sbid)), mode=0o700, exist_ok=True)
-        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"agent-manager-gd:sandbox-{sbid}",
-                        "-f", self.key_path(sbid)], check=True, capture_output=True, timeout=30)
-        with open(self.key_path(sbid) + ".pub", encoding="utf-8") as f:
-            pub = f.read().strip()
-        kind, cpus, mem = size_parts(size)
-        rc, out = self.fly.run("machine", "run", st["image"], "--app", st["app"], "--region", st["region"],
-                               "--vm-cpu-kind", kind, "--vm-cpus", str(cpus), "--vm-memory", str(mem), "--name", "sandbox-" + sbid,
-                               "--env", "AGMGD_AUTHORIZED_KEY=" + pub, "--metadata", "agmgd=" + sbid, timeout=900)
-        if rc != 0:
-            shutil.rmtree(os.path.dirname(self.key_path(sbid)), ignore_errors=True)
-            raise ValueError("the sandbox did not start: " + out[-300:])
-        machine = ""
-        for _ in range(1 if isinstance(self.fly, DemoFly) else 10):  # a new machine can take a few seconds to show in Fly's list
-            machine = next((m["id"] for m in self.machines(fresh=True) if m.get("name") == "sandbox-" + sbid), "")
-            if machine:  # without its id the sandbox could never be reached (the terminal looks it up again, by name)
-                break
-            time.sleep(1)
+        machine = self._launch(sbid, st["app"], size, [])
         with closing(self._db()) as db, db:
             db.execute("INSERT INTO sandboxes (id, session_id, app, machine, region, size, secret, repo_id, created) "
                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (sbid, session_id, st["app"], machine, st["region"], size,
@@ -338,12 +336,129 @@ class Sandboxes:
         self.forget_machines()
         return self.get(sbid)
 
+    def _launch(self, sbid: str, app: str, size: str, more: list[str]) -> str:
+        """One machine from our image, with the sandbox's own SSH key: its machine id (found again by name when Fly's
+        list is late). Its key folder is removed when the machine did not start."""
+        st = self.status()
+        os.makedirs(os.path.dirname(self.key_path(sbid)), mode=0o700, exist_ok=True)
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"agent-manager-gd:sandbox-{sbid}",
+                        "-f", self.key_path(sbid)], check=True, capture_output=True, timeout=30)
+        with open(self.key_path(sbid) + ".pub", encoding="utf-8") as f:
+            pub = f.read().strip()
+        kind, cpus, mem = size_parts(size)
+        rc, out = self.fly.run("machine", "run", st["image"], "--app", app, "--region", st["region"],
+                               "--vm-cpu-kind", kind, "--vm-cpus", str(cpus), "--vm-memory", str(mem), "--name", "sandbox-" + sbid,
+                               "--env", "AGMGD_AUTHORIZED_KEY=" + pub, "--metadata", "agmgd=" + sbid, *more, timeout=900)
+        if rc != 0:
+            shutil.rmtree(os.path.dirname(self.key_path(sbid)), ignore_errors=True)
+            raise ValueError("the machine did not start: " + out[-300:])
+        machine = ""
+        for _ in range(1 if isinstance(self.fly, DemoFly) else 10):  # a new machine can take a few seconds to show in Fly's list
+            machine = next((m["id"] for m in self.machines(fresh=True, app=app) if m.get("name") == "sandbox-" + sbid), "")
+            if machine:  # without its id the sandbox could never be reached (the terminal looks it up again, by name)
+                break
+            time.sleep(1)
+        return machine
+
+    # ---------------------------------------------------------------- Loop 41: Online machines
+    def create_online(self, session_id: str, name: str, port: int, size: str = "", volume_gb: int = 1, repo_id: str = "") -> dict:
+        """A machine for a service online, private until exposed: its own app, a volume mounted on /data, and the
+        services 443 (HTTPS) and 80 declared toward `port` inside. Without a public address nothing reaches them."""
+        if not re.match(r"^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$|^[a-z0-9]$", name or ""):
+            raise ValueError("a name of 1 to 30 lowercase letters, digits or dashes (it goes in the address)")
+        if not 1 <= int(port) <= 65535 or int(port) in (2222, 22):
+            raise ValueError("the port your service listens on inside the machine (not 22 nor 2222: SSH)")
+        if not 1 <= int(volume_gb) <= 500:
+            raise ValueError("a volume of 1 to 500 GB")
+        size = size or self.config("size", DEFAULT_SIZE)
+        if size not in PRICES:
+            raise ValueError(f"not a size Agent Manager knows: {size}")
+        st = self.status()
+        if not st["ready"]:
+            raise ValueError("cloud machines are not prepared yet (Sandboxes → Prepare: it builds the image)")
+        if any(sb.get("kind") == "online" and sb.get("name") == name and not sb["destroyed"] for sb in self.all()):
+            raise ValueError(f"an Online machine is already called {name}")
+        self.guard_new()
+        sbid = secrets.token_hex(4)
+        app = f"{ONLINE_PREFIX}{name}-{sbid}"[:63]
+        rc, out = self.fly.run("apps", "create", app, "--org", st["org"])
+        if rc != 0:
+            raise ValueError("could not create its Fly app: " + out[-200:])
+        try:
+            rc, out = self.fly.run("volumes", "create", "data", "--app", app, "--region", st["region"], "--size", str(int(volume_gb)),
+                                   "--yes", timeout=300)
+            if rc != 0:
+                raise ValueError("could not create its volume: " + out[-200:])
+            p = str(int(port))
+            machine = self._launch(sbid, app, size, ["--volume", "data:/data", "--port", f"443:{p}/tcp:tls:http",
+                                                     "--port", f"80:{p}/tcp:http"])
+        except Exception:
+            self.fly.run("apps", "destroy", app, "--yes", timeout=300)   # nothing half made is left billed
+            raise
+        with closing(self._db()) as db, db:
+            db.execute("INSERT INTO sandboxes (id, session_id, app, machine, region, size, secret, repo_id, workdir, created, "
+                       "kind, name, port, volume_gb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '/data/work', ?, 'online', ?, ?, ?)",
+                       (sbid, session_id, app, machine, st["region"], size, secrets.token_urlsafe(24), repo_id, time.time(),
+                        name, int(port), int(volume_gb)))
+        self.forget_machines()
+        return self.get(sbid)
+
+    def public_ips(self, sbid: str) -> list[dict]:
+        sb = self._online(sbid)
+        got = self.fly.json("ips", "list", "--app", sb["app"])
+        return [{"address": i.get("Address") or i.get("address", ""), "type": i.get("Type") or i.get("type", ""),
+                 "id": i.get("ID") or i.get("id", "")} for i in (got if isinstance(got, list) else [])]
+
+    def _online(self, sbid: str) -> dict:
+        sb = self.get(sbid)
+        if sb.get("kind") != "online":
+            raise ValueError("this is a sandbox, never public: only an Online machine can be exposed")
+        if sb["destroyed"]:
+            raise ValueError("this machine was destroyed")
+        return sb
+
+    def expose(self, sbid: str, confirmed: bool) -> dict:
+        """On the owner's confirmed request only: public addresses for its app (IPv6, and a shared IPv4, both free),
+        so https://<app>.fly.dev reaches port 443 → the service. SSH and every other port stay private."""
+        if not confirmed:
+            raise ValueError("exposing to the internet needs the owner's confirmation")
+        sb = self._online(sbid)
+        have = {i["type"].lower() for i in self.public_ips(sbid)}
+        if not any("v6" in t for t in have):
+            rc, out = self.fly.run("ips", "allocate-v6", "--app", sb["app"], timeout=120)
+            if rc != 0:
+                raise ValueError("Fly.io gave no IPv6 address: " + out[-200:])
+        if not any("v4" in t for t in have):
+            rc, out = self.fly.run("ips", "allocate-v4", "--shared", "--app", sb["app"], timeout=120)
+            if rc != 0:
+                raise ValueError("Fly.io gave no shared IPv4 address: " + out[-200:])
+        self._set(sbid, exposed=1)
+        return self.online_info(sbid)
+
+    def unexpose(self, sbid: str) -> dict:
+        """Its public addresses given back: nothing of it is reachable from the internet any more (always allowed)."""
+        sb = self._online(sbid)
+        for ip in self.public_ips(sbid):
+            if ip["address"]:
+                self.fly.run("ips", "release", ip["address"], "--app", sb["app"], timeout=120)
+        self._set(sbid, exposed=0)
+        return self.online_info(sbid)
+
+    def online_info(self, sbid: str) -> dict:
+        sb = self.get(sbid)
+        return {"id": sbid, "name": sb.get("name", ""), "app": sb["app"], "port": sb.get("port", 0), "exposed": bool(sb.get("exposed")),
+                "url": f"https://{sb['app']}.fly.dev" if sb.get("exposed") else "", "volume_gb": sb.get("volume_gb", 0),
+                "volume_month": round(VOLUME_GB_MONTH * int(sb.get("volume_gb") or 0), 2)}
+
     MACHINES_FRESH = 10.0   # seconds a list of machines from Fly.io is used as it is
 
-    def machines(self, fresh: bool = False) -> list[dict]:
+    def machines(self, fresh: bool = False, app: str = "") -> list[dict]:
         """The app's machines at Fly.io. Asking Fly.io takes one to a few seconds: the list is kept ten seconds, and
         when it is older the last one is given at once while a new one is asked aside (the page no longer waits on
-        Fly.io at every click). The first time, and when `fresh` is asked, it waits for Fly.io."""
+        Fly.io at every click). The first time, and when `fresh` is asked, it waits for Fly.io. `app`: an Online
+        machine's own app (Loop 41); the sandboxes' app by default."""
+        if app and app != self.config("app"):
+            return self._other_machines(app, fresh)
         app = self.config("app")
         if not app:
             return []
@@ -370,6 +485,28 @@ class Sandboxes:
     def forget_machines(self) -> None:
         """Something changed at Fly.io from here (a machine made, started, stopped, destroyed): ask again next time."""
         self._machines = None
+        self._others = {}
+
+    def _other_machines(self, app: str, fresh: bool = False) -> list[dict]:
+        """An Online machine's app, kept ten seconds like the sandboxes' list (one app, one machine: a short ask)."""
+        others = getattr(self, "_others", None)
+        if others is None:
+            others = self._others = {}
+        got = others.get(app)
+        if fresh or got is None or time.monotonic() - got[0] > self.MACHINES_FRESH:
+            got = others[app] = (time.monotonic(), list(self.fly.json("machine", "list", "--app", app)))
+        return got[1]
+
+    def live_machines(self) -> dict:
+        """Every machine Agent Manager may know, by id: the sandboxes' app, and each live Online machine's own app."""
+        live = {m["id"]: m for m in self.machines()}
+        for sb in self.all():
+            if sb.get("kind") == "online" and not sb["destroyed"]:
+                try:
+                    live.update({m["id"]: m for m in self._other_machines(sb["app"])})
+                except (RuntimeError, ValueError, OSError):
+                    pass
+        return live
 
     def start(self, sbid: str) -> dict:
         sb = self.get(sbid)
@@ -405,9 +542,15 @@ class Sandboxes:
         if not confirmed:
             raise ValueError("destroying needs the owner's confirmation")
         sb = self.get(sbid)
-        rc, out = self.fly.run("machine", "destroy", sb["machine"], "--app", sb["app"], "--force", timeout=300)
-        if rc != 0 and "not found" not in out.lower():
-            raise ValueError(out[-200:])
+        if sb["machine"]:
+            rc, out = self.fly.run("machine", "destroy", sb["machine"], "--app", sb["app"], "--force", timeout=300)
+            if rc != 0 and "not found" not in out.lower():
+                raise ValueError(out[-200:])
+        if sb.get("kind") == "online" and sb["app"].startswith(ONLINE_PREFIX):
+            # its own app: the volume and the public addresses go with it (nothing of it is left billed)
+            rc, out = self.fly.run("apps", "destroy", sb["app"], "--yes", timeout=300)
+            if rc != 0 and "not found" not in out.lower():
+                raise ValueError("the machine is destroyed but not its app (its volume may still be billed): " + out[-200:])
         if brain and sb["brain_client"]:
             brain.revoke(sb["brain_client"])
         shutil.rmtree(os.path.dirname(self.key_path(sbid)), ignore_errors=True)
@@ -588,7 +731,7 @@ class Sandboxes:
         """Estimated spend of this month's sandboxes (running time × published price)."""
         if live is None:
             try:
-                live = {m["id"]: m for m in self.machines()}
+                live = self.live_machines()
             except (RuntimeError, ValueError, OSError):
                 live = {}
         start = time.mktime(time.strptime(time.strftime("%Y-%m-01"), "%Y-%m-%d"))
@@ -606,10 +749,11 @@ class Sandboxes:
                              "(raise it in Sandboxes → Budget)")
 
     def stop_all(self) -> list[str]:
-        """Pauses every started sandbox (nothing is destroyed)."""
+        """Pauses every started sandbox (nothing is destroyed). Never an Online machine: it serves the public, and
+        only its owner pauses it, from its card."""
         stopped = []
         for m in self.machines():
-            if m.get("state") == "started" and any(sb["machine"] == m["id"] and not sb["destroyed"] for sb in self.all()):
+            if m.get("state") == "started" and any(sb["machine"] == m["id"] and not sb["destroyed"] and sb.get("kind", "sandbox") == "sandbox" for sb in self.all()):
                 self.fly.run("machine", "stop", m["id"], "--app", self.config("app"), timeout=300)
                 stopped.append(m["id"])
         return stopped
@@ -624,6 +768,8 @@ class Sandboxes:
         if b["stop_idle_minutes"] > 0:
             started = {m["id"] for m in self.machines() if m.get("state") == "started"}
             for sb in self.all():
+                if sb.get("kind", "sandbox") != "sandbox":   # an Online service is not idle when nobody types in it
+                    continue
                 if sb["machine"] in started and idle_seconds.get(sb["id"], 0) >= b["stop_idle_minutes"] * 60:
                     self.fly.run("machine", "stop", sb["machine"], "--app", sb["app"], timeout=300)
                     paused.append(sb["machine"])
@@ -689,7 +835,7 @@ class Sandboxes:
     def overview(self) -> dict:
         """Every sandbox Agent Manager knows (with its machine's live state and cost), and the orphans."""
         try:
-            live = {m["id"]: m for m in self.machines()}
+            live = self.live_machines()
             reachable = True
         except (RuntimeError, ValueError, OSError):
             live, reachable = {}, False
@@ -700,16 +846,18 @@ class Sandboxes:
             known.add(sb["machine"])
             secs = self.running_seconds(m) if m else 0.0
             rows.append({**{k: v for k, v in sb.items() if k != "secret"}, "sessions": self.sessions_on(sb["id"]),
+                         "online": self.online_info(sb["id"]) if sb.get("kind") == "online" else None,
                          "state": "destroyed" if sb["destroyed"] else (m.get("state") or ("unknown" if not reachable else "gone")),
                          "running_seconds": round(secs), "cost_usd": self.cost(sb["size"], secs)})
         orphans = [{"app": self.config("app"), "machine": mid, "name": m.get("name", ""), "state": m.get("state", "")}
                    for mid, m in live.items() if mid not in known]
+        online_apps = {sb["app"] for sb in self.all() if sb.get("kind") == "online" and not sb["destroyed"]}
         try:  # other Agent Manager apps of the organisation (another computer, an earlier test)
             org = self.org()
             apps = self.fly.json("apps", "list", "--org", org) if org else []
             for a in apps if isinstance(apps, list) else []:
                 name = a.get("Name") or a.get("name", "")
-                if name.startswith("agmgd-") and name != self.config("app"):
+                if name.startswith("agmgd-") and name != self.config("app") and name not in online_apps:
                     orphans.append({"app": name, "machine": "", "name": "(another Agent Manager app)", "state": a.get("Status", "")})
         except (RuntimeError, ValueError, OSError):
             pass

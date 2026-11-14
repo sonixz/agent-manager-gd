@@ -21,6 +21,7 @@ class FakeFly:
     def __init__(self):
         self.calls = []
         self.machines = [{"id": "orphan-1", "name": "sandbox-old", "state": "stopped", "events": []}]
+        self.ips = []
 
     def available(self):
         return True
@@ -37,6 +38,14 @@ class FakeFly:
                 {"type": "start", "timestamp": 1_000_000 + 7_200_000}]})
         if args[:2] == ("machine", "destroy"):
             self.machines = [m for m in self.machines if m["id"] != args[2]]
+        if args[:2] == ("ips", "allocate-v6"):
+            self.ips.append({"Address": "2a09:8280:1::1", "Type": "v6", "ID": "ip6"})
+        if args[:2] == ("ips", "allocate-v4"):
+            self.ips.append({"Address": "66.241.124.10", "Type": "shared_v4", "ID": ""})
+        if args[:2] == ("ips", "release"):
+            self.ips = [i for i in self.ips if i["Address"] != args[2]]
+        if args[:2] == ("volumes", "create") and getattr(self, "fail_volume", False):
+            return 1, "no capacity"
         return 0, "ok"
 
     def json(self, *args):
@@ -45,6 +54,8 @@ class FakeFly:
             return {"agent-manager": "Agent Manager"}
         if args[:2] == ("machine", "list"):
             return self.machines
+        if args[:2] == ("ips", "list"):
+            return list(self.ips)
         if args[:2] == ("apps", "list"):
             return [{"Name": "agmgd-spike-96416e", "Status": "deployed"}] + getattr(self, "apps_extra", [])
         return []
@@ -483,6 +494,63 @@ class SandboxesTest(unittest.TestCase):
         for _ in range(2):
             self.assertEqual(subprocess.run(["bash", "-c", worktree_command(repo, repo + "-x1", "am/s1-x1")]).returncode, 0)
         self.assertEqual(subprocess.run(["git", "-C", repo + "-x1", "branch", "--show-current"], capture_output=True, text=True).stdout.strip(), "am/s1-x1")
+
+    def test_an_online_machine_has_its_own_app_a_volume_and_is_private_until_exposed(self):
+        """Loop 41 (owner, 2026-11-14: « un service sur le port 443. Le reste ce serait en backend »; named « Online »)."""
+        self.s.sandboxes.prepare()
+        with self.assertRaises(ValueError):
+            self.s.create_online_session("Bad Name!", "claude", "", 8080)
+        with self.assertRaises(ValueError):
+            self.s.create_online_session("shop", "claude", "", 2222)                  # SSH's port is never the service's
+        d = self.s.create_online_session("shop", "claude", "", 8080, volume_gb=3)
+        sb = self.s.sandboxes.by_session(d["id"])
+        self.assertEqual(sb["kind"], "online")
+        self.assertTrue(sb["app"].startswith("agmgd-on-shop-"))
+        self.assertEqual(sb["workdir"], "/data/work")                                  # its work lives on the volume
+        self.assertIn(("apps", "create", sb["app"], "--org", "agent-manager"), self.fly.calls)
+        vol = next(c for c in self.fly.calls if c[:2] == ("volumes", "create"))
+        self.assertEqual(vol[vol.index("--size") + 1], "3")
+        run = next(c for c in self.fly.calls if c[:2] == ("machine", "run") and sb["app"] in c)
+        ports = [run[i + 1] for i, a in enumerate(run) if a == "--port"]
+        self.assertEqual(ports, ["443:8080/tcp:tls:http", "80:8080/tcp:http"])          # one door, toward its port
+        self.assertIn("data:/data", run)
+        self.assertFalse(any(c[:2] == ("ips", "allocate-v4") or c[:2] == ("ips", "allocate-v6") for c in self.fly.calls))  # private
+        self.assertEqual(d["sandbox"]["kind"], "online")
+        info = self.s.sandboxes.online_info(sb["id"])
+        self.assertEqual((info["exposed"], info["url"]), (False, ""))
+        # exposed only when confirmed; a sandbox is never exposed
+        with self.assertRaises(ValueError):
+            self.s.sandboxes.expose(sb["id"], confirmed=False)
+        plain = self.s.create("Private", "shell", "", host="sandbox")
+        with self.assertRaises(ValueError):
+            self.s.sandboxes.expose(self.s.sandboxes.by_session(plain["id"])["id"], confirmed=True)
+        info = self.s.sandboxes.expose(sb["id"], confirmed=True)
+        self.assertEqual(info["url"], f"https://{sb['app']}.fly.dev")
+        self.assertIn(("ips", "allocate-v4", "--shared", "--app", sb["app"]), self.fly.calls)   # shared: free
+        self.s.sandboxes.expose(sb["id"], confirmed=True)                                 # again: no second address
+        self.assertEqual(len([c for c in self.fly.calls if c[:2] == ("ips", "allocate-v6")]), 1)
+        info = self.s.sandboxes.unexpose(sb["id"])
+        self.assertEqual((info["exposed"], self.fly.ips), (False, []))
+        # its app is not an orphan; pauses of the owner's caps never touch it
+        over = self.s.sandboxes.overview()
+        self.assertFalse(any(o["app"] == sb["app"] for o in over["orphans"]))
+        self.assertEqual(next(r for r in over["sandboxes"] if r["id"] == sb["id"])["online"]["name"], "shop")
+        self.s.sandboxes.set_budget(0, 1, False)
+        self.assertEqual(self.s.sandboxes.enforce({sb["id"]: 99999}), [])
+        self.assertNotIn(sb["machine"], self.s.sandboxes.stop_all())
+        # destroyed: its whole app goes (volume and addresses with it)
+        self.s.sandboxes.destroy(sb["id"], True)
+        self.assertIn(("apps", "destroy", sb["app"], "--yes"), self.fly.calls)
+
+    def test_an_online_machine_half_made_leaves_nothing_billed(self):
+        self.s.sandboxes.prepare()
+        self.fly.fail_volume = True
+        before = len(self.s.store.all())
+        with self.assertRaises(ValueError):
+            self.s.create_online_session("blog", "shell", "", 3000)
+        app = next(c[2] for c in self.fly.calls if c[:2] == ("apps", "create") and c[2].startswith("agmgd-on-"))
+        self.assertIn(("apps", "destroy", app, "--yes"), self.fly.calls)
+        self.assertEqual(len(self.s.store.all()), before)
 
     def test_the_owner_routes_answer_over_http(self):
         """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
