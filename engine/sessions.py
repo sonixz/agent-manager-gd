@@ -169,6 +169,8 @@ class Sessions:
         from .repos import Repos
         from .keys import Keys
         self.repos = Repos(store.path, self.home)
+        from .gh import GitHub
+        self.github = GitHub()   # Loop 42: the owner's own gh, under Repos; its token is never read
         self.keys_store = Keys(self.home)
         from .vault import Vault
         self.vault = Vault(self.home, self.keys_store)   # named secrets, given session by session (Loop 39)
@@ -1245,6 +1247,46 @@ class Sessions:
         self.tmux.new_session(self.tmux_name(rec["id"]), self.home, [sys.executable or "python3", SANDBOX_ATTACH, sb["id"]],
                               env=self.session_env(rec["id"]))
         return self.get(rec["id"])
+
+    # ---------------------------------------------------------------- GitHub's CLI (Loop 42)
+    def github_terminal(self, what: str) -> dict:
+        """Logging in or out of gh happens in a terminal the owner sees: a shell session here, the command typed in
+        it, the owner answers (the browser code, the account). The app never sees the token."""
+        cmd = self.github.command(what)
+        d = self.create("GitHub " + ("login" if what == "login" else "logout"), "shell", "~", "", brain=False)
+        time.sleep(0.4)  # the shell's prompt first
+        self.tmux.send_text(self.tmux_name(d["id"]), cmd)
+        self.github.forget()
+        return self.get(d["id"])
+
+    def _owner_repo(self, rid: str) -> tuple[dict, str]:
+        r = self.repos.get(rid)
+        if r["host_kind"] != "github":
+            raise ValueError("gh adds deploy keys on GitHub only")
+        from .repos import parse_url
+        return r, parse_url(r["url"])[1].removesuffix(".git")
+
+    def github_deploy_key(self, rid: str, write: bool) -> dict:
+        """The repository's own key added as its deploy key by gh, then checked with that key (git ls-remote)."""
+        r, owner_repo = self._owner_repo(rid)
+        got = self.github.add_deploy_key(owner_repo, self.repos.key_path(rid) + ".pub", f"Agent Manager GD · {r['name']}", write)
+        return {"repo": self.repos.check(rid), "deploy_key": got}
+
+    def github_key_state(self, rid: str) -> dict:
+        r, owner_repo = self._owner_repo(rid)
+        return self.github.deploy_key(owner_repo, self.repos.key_path(rid) + ".pub")
+
+    def github_create(self, name: str, visibility: str = "private", description: str = "", local_path: str = "",
+                      write: bool = True) -> dict:
+        """A new repository on GitHub (private unless chosen), connected here with its own key, added as its deploy
+        key (write access by default: agents push their branches), and checked."""
+        made = self.github.create_repo(name, visibility, description)
+        r = self.repos.add(made["url"], local_path, name)
+        try:
+            out = self.github_deploy_key(r["id"], write)
+        except ValueError as e:
+            return {"created": made, "repo": self.repos.get(r["id"]), "deploy_key": {"found": False, "error": str(e)}}
+        return {"created": made, **out}
 
     def _add_to_sandbox(self, sbid: str, name: str, tool: str, grp: str, parent: str = "") -> dict:
         """Its own tmux session in the machine, its own git worktree when the sandbox holds a repository and the

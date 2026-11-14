@@ -40,7 +40,7 @@ for step in "${@:-hero}"; do
     HOME="$DEV_HOME" USER=dev LANG=C.UTF-8 TERM=xterm-256color DISPLAY="$VDISPLAY" \
     SHOWCASE_SCENES="$REPO/tools/showcase/scenes" SHOWCASE_MAP="$ROOT/map" SHOWCASE_REMOTES="$ROOT/remote" \
     AGMGD_HOME="$ROOT/data" AGMGD_PORT=18791 AGMGD_TMUX_SOCKET=agmgd-showcase AGMGD_BRAIN_HOME="$BRAIN_HOME" AGMGD_BRAIN_REPO="$BRAIN_REPO" SHOWCASE_REAL_AGENT="${SHOWCASE_REAL_AGENT:-}" SHOWCASE_REAL_HOME="${SHOWCASE_REAL_HOME:-}" SHOWCASE_SBGD_HOME="${SHOW_BRAIN_HOME:-}" AGMGD_KEYS_PLAIN=1 AGMGD_HOST_SAMPLE=2 \
-    AGMGD_CARRIER_SSH="$REPO/tests/python/standins/ssh" AGMGD_FLYCTL="$REPO/tests/python/standins/flyctl" STANDIN_SS="$ROOT/ss.txt" STANDIN_HEALTH="$ROOT/health.txt" STANDIN_HOST_KEY=key-one \
+    AGMGD_CARRIER_SSH="$REPO/tests/python/standins/ssh" AGMGD_FLYCTL="$REPO/tests/python/standins/flyctl" AGMGD_GH="$REPO/tests/python/standins/gh" GH_STANDIN="$ROOT/gh.json" STANDIN_SS="$ROOT/ss.txt" STANDIN_HEALTH="$ROOT/health.txt" STANDIN_HOST_KEY=key-one \
     AGMGD_DEMO_FLY="$ROOT/data/demo-fly.json" AGMGD_DEMO_FLY_DELAY="${AGMGD_DEMO_FLY_DELAY:-}" \
     AGMGD_VOICE_FAKE="${AGMGD_VOICE_FAKE:-}" AGMGD_VOICE_FAKE_DELAY="${AGMGD_VOICE_FAKE_DELAY:-}" AGMGD_VOICE_FAKE_WHOLE="${AGMGD_VOICE_FAKE_WHOLE:-}" AGMGD_VOICE_FAKE_WHOLE_DELAY="${AGMGD_VOICE_FAKE_WHOLE_DELAY:-}" FILM_WAIT="${FILM_WAIT:-}" SHOW_STEP="$step" SHOW_OUT="$OUT" SHOW_HOWTO="${SHOW_HOWTO:-$REPO/public/assets/howto}" SHOW_REPORTS="$REPORTS" \
     godot --display-driver x11 --audio-driver Dummy --rendering-driver opengl3 --resolution "${SHOW_SIZE:-1920x1200}" --path app \

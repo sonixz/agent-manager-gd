@@ -4999,6 +4999,13 @@ func _repos_view() -> Control:
 	top.add_child(_small("+ Connect a repository", func() -> void:
 		repos_form_open = not repos_form_open
 		repos_form.visible = repos_form_open or repos_cache.is_empty()))
+	repos_gh_box = VBoxContainer.new()   # Loop 42: GitHub's own CLI, the owner's login
+	repos_gh_box.name = "GitHubCLI"
+	repos_gh_box.add_theme_constant_override("separation", 6)
+	v.add_child(repos_gh_box)
+	if not repos_gh.is_empty():
+		_render_github.call_deferred()
+	_load_github()
 	repos_form = VBoxContainer.new()
 	repos_form.add_theme_constant_override("separation", 8)
 	repos_form.visible = repos_form_open or repos_cache.is_empty()
@@ -5076,6 +5083,124 @@ func _repos_view() -> Control:
 	if not repos_cache.is_empty():
 		_render_repos.call_deferred()  # what was known is shown at once; the engine's answer follows
 	return v
+
+
+# ------------------------------------------------------------------ GitHub's CLI under Repos (Loop 42)
+var repos_gh := {}
+var repos_gh_box: VBoxContainer
+var repos_gh_form := false
+
+
+func _load_github(fresh := false) -> void:
+	var r := await engine.call_api("GET", "/github" + ("?fresh=1" if fresh else ""), null, true, 60.0)
+	if r.has("error"):
+		return
+	var could := bool(repos_gh.get("can_add_keys", false))
+	repos_gh = r
+	_render_github()
+	if could != bool(r.get("can_add_keys", false)):
+		_render_repos()   # the lines' « Add it with gh » follows what gh can do
+
+
+## One band: is gh there, who is logged in, where its token is kept (said plainly when it is a file every program can
+## read), Log in / Log out in a terminal the owner sees, and a new repository on GitHub, private by default.
+func _render_github() -> void:
+	if repos_gh_box == null or not is_instance_valid(repos_gh_box):
+		return
+	for c in repos_gh_box.get_children():
+		repos_gh_box.remove_child(c)
+		c.queue_free()
+	var g := repos_gh
+	var panel := PanelContainer.new()
+	var ok := bool(g.get("logged_in", false))
+	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, Color(AmTheme.col("MINT") if ok else AmTheme.col("FAINT"), 0.45), 1, 12))
+	repos_gh_box.add_child(panel)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	panel.add_child(v)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	v.add_child(row)
+	var t := Label.new()
+	t.text = "GitHub CLI"
+	t.add_theme_font_override("font", AmTheme.ui_font(650))
+	row.add_child(t)
+	if not bool(g.get("installed", false)):
+		row.add_child(_chip("gh is not installed", false))
+		row.add_child(_muted("install it yourself: " + str(g.get("install", ""))))
+	else:
+		row.add_child(_chip("gh " + str(g.get("version", "")), true))
+		row.add_child(_chip(("logged in as " + str(g.get("account", ""))) if ok else "not logged in", true if ok else null))
+		if ok:
+			var where := str(g.get("storage", ""))
+			row.add_child(_chip({"keyring": "token in the system's keyring", "file": "token in a plain file", "environment": "token from the environment"}.get(where, where), true if where == "keyring" else "warn"))
+			var sc: Array = g.get("scopes", [])
+			if not sc.is_empty():
+				row.add_child(_muted("scopes: " + ", ".join(sc)))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = SIZE_EXPAND_FILL
+	row.add_child(spacer)
+	if bool(g.get("installed", false)):
+		var which := "logout" if ok else "login"
+		row.add_child(_small("Log out…" if ok else "Log in with gh…", func() -> void:
+			var d := await engine.call_api("POST", "/github/" + which, {})
+			if d.has("error"):
+				_toast(str(d["error"]))
+				return
+			_toast("A terminal opened with « %s »: answer there. Then come back here." % str(g.get(which, "")))
+			await refresh()
+			select(str(d.get("id", ""))), "Opens a terminal here with « %s ». You answer in it; Agent Manager never sees the token." % str(g.get(which, ""))))
+		row.add_child(_small("↻", func() -> void: _load_github(true), "Read gh's state again"))
+		if ok:
+			row.add_child(_small("+ New repository on GitHub", func() -> void:
+				repos_gh_form = not repos_gh_form
+				_render_github()))
+	if str(g.get("note", "")) != "":
+		var n := _wrap(str(g["note"]))
+		n.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		n.add_theme_font_size_override("font_size", 12)
+		v.add_child(n)
+	if not ok and bool(g.get("installed", false)):
+		v.add_child(_muted("Logged in, gh adds a repository's deploy key in one click and creates new repositories. Agents never get gh's token: each session gets its repository's own key."))
+	if ok and repos_gh_form:
+		var f := HBoxContainer.new()
+		f.add_theme_constant_override("separation", 8)
+		v.add_child(f)
+		var name := LineEdit.new()
+		name.placeholder_text = "new-repository"
+		name.custom_minimum_size.x = 200
+		f.add_child(name)
+		var vis := OptionButton.new()
+		vis.add_item("Private")
+		vis.add_item("Public")
+		vis.tooltip_text = "Private unless you choose otherwise. Agent Manager never changes an existing repository's visibility."
+		f.add_child(vis)
+		var desc := LineEdit.new()
+		desc.placeholder_text = "description (optional)"
+		desc.size_flags_horizontal = SIZE_EXPAND_FILL
+		f.add_child(desc)
+		var go := _small("Create and connect", func() -> void:
+			var nm := name.text.strip_edges()
+			if nm == "":
+				_toast("A name first")
+				return
+			var visibility := "public" if vis.selected == 1 else "private"
+			var create := func() -> void:
+				_toast("Creating %s/%s (%s), its key, its deploy key…" % [g.get("account", ""), nm, visibility])
+				var d := await engine.call_api("POST", "/github/create", {"name": nm, "visibility": visibility, "description": desc.text.strip_edges()}, true, 120.0)
+				if d.has("error"):
+					_toast(str(d["error"]))
+					return
+				var dk: Dictionary = d.get("deploy_key", {})
+				_toast("%s created (%s) and connected%s" % [d["created"]["owner_repo"], visibility, (", its deploy key added with write access" if dk.get("found", false) else ": add its deploy key (" + str(dk.get("error", "")) + ")")])
+				repos_gh_form = false
+				_render_github()
+				await _load_repos()
+			if visibility == "public":
+				_confirm("Create %s as a PUBLIC repository? Anyone will see what is pushed there." % nm, create)
+			else:
+				create.call(), "Creates it on GitHub under your account, connects it here with its own key, and adds that key as its deploy key (write access: agents push their branches)")
+		f.add_child(go)
 
 
 ## The page was opened: the engine is asked to read again what is old (the folders; the keys checked more than ten
@@ -5291,6 +5416,21 @@ func _repo_details(r: Dictionary, tint: Color, now: float) -> Control:
 	if str(help["button"]) != "" and str(r.get("key_page", "")) != "":
 		var page := str(r["key_page"])
 		keyrow.add_child(_small(str(help["button"]), func() -> void: OS.shell_open(page), page))
+	if str(r.get("host_kind", "")) == "github" and bool(repos_gh.get("can_add_keys", false)):   # Loop 42: in one click
+		var write := CheckBox.new()
+		write.text = "write access"
+		write.button_pressed = true
+		write.tooltip_text = "Lets agents push their branches with this key (GitHub's « Allow write access »)"
+		keyrow.add_child(write)
+		keyrow.add_child(_small("Add it with gh", func() -> void:
+			_toast("gh adds the deploy key to %s…" % r["name"])
+			var d := await engine.call_api("POST", "/repos/%s/deploy-key" % rid, {"write": write.button_pressed}, true, 90.0)
+			if d.has("error"):
+				_toast(str(d["error"]))
+				return
+			var dk: Dictionary = d.get("deploy_key", {})
+			_toast("%s: deploy key %s%s · %s" % [r["name"], "on GitHub" if dk.get("found", false) else "not found on GitHub", (", may push" if dk.get("write", false) else ", read only") if dk.get("found", false) else "", d.get("repo", {}).get("status", "")])
+			await _load_repos(), "gh adds this repository's own public key as its deploy key, then Agent Manager checks it. Your gh login is used; its token never passes here."))
 	var then := _wrap(str(help["then"]))
 	then.add_theme_font_size_override("font_size", 12)
 	v.add_child(then)

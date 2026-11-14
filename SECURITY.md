@@ -23,6 +23,10 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   agents to chosen repositories, add it to an account made for them. A key is checked by one SSH connection to the
   repository's host with that key (`git ls-remote`), when you open the Repos page, on « Check all » or on
   « Check »; never while the page is closed.
+- **GitHub's CLI**: Agent Manager runs your own `gh`, with your login, to read its state (`gh auth status`, which
+  masks the token), add a repository's deploy key and create a repository (private unless you choose public). It
+  never reads gh's token, never passes one to gh (a `GH_TOKEN` in its environment is removed), and never changes an
+  existing repository's visibility. Logging in and out happen in a terminal you see.
 - **Online machines (the only public door)**: a machine of ⬡ Online is made private, in its own Fly.io app. It gets a
   public address only when you click *Expose to the internet* and confirm; then `https://<its app>.fly.dev` reaches
   one port inside it (443, HTTPS with Fly.io's certificate; no plain HTTP), and nothing else: its SSH (port

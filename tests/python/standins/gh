@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Tests only: stands for GitHub's CLI. Its state is a JSON file (GH_STANDIN): logged in or not, where the token is
+kept, the scopes, the deploy keys of each repository. Every call is appended to GH_STANDIN + '.calls'. Nothing
+leaves this computer, and no token exists."""
+import json
+import os
+import sys
+
+path = os.environ["GH_STANDIN"]
+st = json.load(open(path)) if os.path.exists(path) else {}
+args = sys.argv[1:]
+with open(path + ".calls", "a") as f:
+    f.write(json.dumps({"args": args, "gh_token_seen": "GH_TOKEN" in os.environ}) + "\n")
+
+
+def save():
+    json.dump(st, open(path, "w"))
+
+
+if args[:1] == ["--version"]:
+    print("gh version 2.45.0 (2025-07-18)")
+elif args[:2] == ["auth", "status"]:
+    if not st.get("logged_in"):
+        print("You are not logged into any GitHub hosts. To log in, run: gh auth login", file=sys.stderr)
+        sys.exit(1)
+    print("github.com")
+    print(f"  ✓ Logged in to github.com account {st.get('account', 'dev')} ({st.get('where', 'keyring')})")
+    print("  - Active account: true")
+    print("  - Git operations protocol: ssh")
+    print("  - Token: gho_************************************")
+    print("  - Token scopes: " + ", ".join(f"'{s}'" for s in st.get("scopes", ["repo", "read:org"])))
+elif args[:3] == ["repo", "deploy-key", "add"]:
+    key = " ".join(open(args[3]).read().split()[:2])
+    repo = args[args.index("--repo") + 1]
+    if repo not in st.get("repos", {}):
+        print("HTTP 404: Not Found", file=sys.stderr)
+        sys.exit(1)
+    st["repos"][repo].append({"id": len(st["repos"][repo]) + 1, "key": key, "title": args[args.index("--title") + 1],
+                              "read_only": "--allow-write" not in args})
+    save()
+    print("✓ Deploy key added to " + repo)
+elif args[:1] == ["api"] and args[1].startswith("repos/") and args[1].endswith("/keys"):
+    repo = args[1][len("repos/"):-len("/keys")]
+    print(json.dumps(st.get("repos", {}).get(repo, [])))
+elif args[:2] == ["repo", "create"]:
+    name = args[2]
+    full = f"{st.get('account', 'dev')}/{name}"
+    st.setdefault("repos", {})[full] = []
+    st.setdefault("visibility", {})[full] = "public" if "--public" in args else "private"
+    save()
+    print(f"✓ Created repository {full} on GitHub\n  https://github.com/{full}")
+else:
+    print("unknown command", file=sys.stderr)
+    sys.exit(1)

@@ -85,6 +85,20 @@ def make_handler(sessions: Sessions, token: str):
                     if b.get("force"):   # « Check all »: whatever their age
                         return self._reply(200, sessions.repos.refresh(True, key_age=-1.0, folder_age=-1.0))
                     return self._reply(200, sessions.repos.refresh(bool(b.get("keys", False))))
+                # Loop 42: GitHub's own CLI, the owner's login; its token never passes here
+                if parts == ["github"] and method == "GET":
+                    return self._reply(200, sessions.github.status(fresh=parse_qs(url.query).get("fresh", [""])[0] == "1"))
+                if parts == ["github", "login"] and method == "POST":
+                    return self._reply(201, sessions.github_terminal("login"))
+                if parts == ["github", "logout"] and method == "POST":
+                    return self._reply(201, sessions.github_terminal("logout"))
+                if parts == ["github", "create"] and method == "POST":
+                    b = self._body()
+                    return self._reply(201, sessions.github_create(str(b.get("name", "")), str(b.get("visibility", "private")),
+                                                                   str(b.get("description", "")), str(b.get("local_path", "")),
+                                                                   bool(b.get("write", True))))
+                if len(parts) == 3 and parts[0] == "repos" and parts[2] == "deploy-key" and method == "GET":
+                    return self._reply(200, sessions.github_key_state(parts[1]))
                 if parts == ["repos", "copy", "inspect"] and method == "POST":  # before /repos/<id>/<action>
                     return self._reply(200, sessions.repos.inspect_copy(str(self._body().get("path", ""))))
                 if parts == ["repos", "copy", "remove"] and method == "POST":
@@ -102,6 +116,8 @@ def make_handler(sessions: Sessions, token: str):
                         return self._reply(200, sessions.repos.rotate(rid))
                     if act == "disconnect":
                         return self._reply(200, sessions.repos.disconnect(rid))
+                    if act == "deploy-key":   # Loop 42: added by gh in one click
+                        return self._reply(200, sessions.github_deploy_key(rid, bool(self._body().get("write", False))))
                     return self._reply(404, {"error": "not found"})
                 if parts == ["keys"] and method == "GET":
                     return self._reply(200, sessions.keys_store.all())

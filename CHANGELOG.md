@@ -5,6 +5,15 @@ Newest first.
 
 ## Unreleased: alpha
 
+### GitHub's CLI under Repos (Loop 42)
+- New: a **GitHub CLI** band at the top of ⎇ Repos: your `gh`, its version, the account, the token's scopes, and
+  where gh keeps its token (in orange when it is a plain file every program can read). **Log in with gh…** and
+  **Log out…** open a terminal with the command; you answer there.
+- **Add it with gh** on a GitHub repository's line adds its deploy key in one click (write access by default), checks
+  it, and reads back from GitHub whether it may push.
+- **+ New repository on GitHub**: private unless you choose Public, connected here with its own key, its deploy key
+  added. Agent Manager never reads gh's token and never changes an existing repository's visibility.
+
 ### Online machines, for a service on the internet (Loop 41)
 - New: **⬡ Online** in the top bar. An Online machine is a Fly.io machine for a website or an API, with its own app
   and address, a volume on `/data`, and one door: port 443 (HTTPS, Fly.io's certificate) toward the port its service

@@ -1411,6 +1411,26 @@ for i in range(600):
 			report.append("online: expose asks first: %s" % main.confirm_dialog.visible)
 			await shot("online-expose")
 			main.confirm_dialog.hide()
+		"github":  # Loop 42: GitHub's CLI under Repos (a stand-in gh, always: AGMGD_GH and GH_STANDIN from tools/showcase.sh)
+			var ghf := FileAccess.open(OS.get_environment("GH_STANDIN"), FileAccess.WRITE)
+			ghf.store_string(JSON.stringify({"logged_in": true, "account": "dev", "where": "keyring", "scopes": ["repo", "read:org", "gist"], "repos": {"dev/shop": []}}))
+			ghf.close()
+			var r: Dictionary = await main.engine.call_api("POST", "/repos", {"url": "git@github.com:dev/shop.git", "local_path": ""})
+			main.repos_open[str(r["id"])] = true
+			main.set_view("repos")
+			await wait(3.0)
+			await main._load_github(true)
+			main.repos_gh_form = true
+			main._render_github()
+			await wait(1.0)
+			var band: Node = main.find_child("GitHubCLI", true, false)
+			var texts: Array = band.find_children("*", "Label", true, false).map(func(x: Node) -> String: return (x as Label).text)
+			var buttons: Array = main.content.find_children("*", "Button", true, false).map(func(x: Node) -> String: return (x as Button).text)
+			report.append("github: band: %s | buttons: %s" % [" ; ".join(texts.filter(func(t: String) -> bool: return t.begins_with("●") or t.begins_with("○"))),
+				", ".join(buttons.filter(func(t: String) -> bool: return t in ["Log out…", "Log in with gh…", "+ New repository on GitHub", "Create and connect", "Add it with gh"]))])
+			await shot("github")
+			var d: Dictionary = await main.engine.call_api("POST", "/repos/%s/deploy-key" % r["id"], {"write": true}, true, 60.0)
+			report.append("github: Add it with gh: found %s, write %s" % [d.get("deploy_key", {}).get("found"), d.get("deploy_key", {}).get("write")])
 		"smooth":  # is the app still fluid: frame times on each page, what a few clicks leave behind (nodes, reload loops), with a running sandbox connected and a dashboard in it
 			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "shell", "cwd": "~", "group": "Orbit API", "brain": false})
 			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})

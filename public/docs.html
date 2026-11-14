@@ -478,6 +478,17 @@
         </ul>
 
         <h2 id="repos">Repositories and their keys</h2>
+        <p><b>GitHub CLI.</b> At the top of ⎇ Repos, a band reads your own <code>gh</code>: installed or not (Agent
+          Manager does not install it), its version, the account logged in, the token's scopes, and where gh keeps its
+          token: the system's keyring, or a plain file of your home folder that every program you run can read, agents
+          included (said in orange). <b>Log in with gh…</b> and <b>Log out…</b> open a terminal with
+          <code>gh auth login --web</code> or <code>gh auth logout</code>: you answer there, and Agent Manager never
+          sees the token. Logged in, a GitHub repository's line has <b>Add it with gh</b> (with <b>write access</b>
+          ticked by default, so agents can push their branches): gh adds the repository's own public key as its deploy
+          key, then Agent Manager checks it and reads back from GitHub whether it may push. <b>+ New repository on
+          GitHub</b> creates one under your account, private unless you choose Public (asked again), connects it here
+          with its own key and adds that key. The visibility of an existing repository is never changed. Agents never
+          get gh's token: each session gets its repository's own key.</p>
         <p><b>⎇ Repos</b> opens on four tiles (the keys that work, the repositories that need a hand, the sessions
           running, the hosts), then lists the connected repositories, one per line, each column a small drawing:
           <b>Host</b>, a chip (a disc for GitHub, a diamond for Azure DevOps, a ring for another host); <b>Key</b>, a
