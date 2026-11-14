@@ -376,6 +376,114 @@ class SandboxesTest(unittest.TestCase):
             self.assertEqual(cmd[1:], [sessions_mod.SANDBOX_ATTACH, sb["id"]], tool)   # the terminal of the sandbox
             self.assertNotEqual(cwd, "/work")
 
+    def test_several_sessions_on_one_sandbox_each_its_own_tmux_and_no_new_machine(self):
+        """Loop 40 (owner, 2026-11-14: « ouvrir plusieurs sessions SSH sur la même VM Fly »)."""
+        self.s.sandboxes.prepare()
+        first = self.s.create("Backend", "claude", "", host="sandbox")
+        sb = self.s.sandboxes.by_session(first["id"])
+        self.assertTrue(sb["first"])
+        runs = len([c for c in self.fly.calls if c[:2] == ("machine", "run")])
+        started = []
+        real = self.tmux.new_session
+        self.tmux.new_session = lambda name, cwd, cmd, env=None: (started.append(cmd), real(name, cwd, cmd, env=env))[1]
+        try:
+            second = self.s.create("Frontend", "codex", "", host="sandbox", sandbox=sb["id"])
+            third = self.s.create("Logs", "shell", "", host="sandbox", sandbox=sb["id"])
+        finally:
+            self.tmux.new_session = real
+        self.assertEqual(len([c for c in self.fly.calls if c[:2] == ("machine", "run")]), runs)   # no new machine
+        self.assertEqual(started[0][1:], [sessions_mod.SANDBOX_ATTACH, sb["id"], second["id"]])     # its own terminal
+        self.assertEqual(self.s.sandboxes.sessions_on(sb["id"]), [first["id"], second["id"], third["id"]])
+        self.assertEqual(second["host"], "sandbox")
+        self.assertFalse(second["sandbox"]["first"])
+        self.assertEqual(self.s.sandboxes.seat(sb["id"], first["id"])["tmux"], "am")             # existing sandboxes unchanged
+        self.assertEqual(self.s.sandboxes.seat(sb["id"], second["id"]), {"tmux": "am-" + second["id"], "first": False, "worktree": False})
+        over = {r["id"]: r for r in self.s.sandboxes.overview()["sandboxes"]}
+        self.assertEqual(over[sb["id"]]["sessions"], [first["id"], second["id"], third["id"]])
+        # started again (after WSL restarted): an added session reaches its own seat, not the first one's
+        self.tmux.kill(second["tmux"])
+        cmd, _ = self.s._in_sandbox(self.s.get(second["id"]))
+        self.assertEqual(cmd[-2:], [sb["id"], second["id"]])
+        # an added session may go; the first one keeps the sandbox in the list
+        self.assertEqual(self.s.archive(third["id"])["state"], "archived")
+        self.s.remove(second["id"])
+        self.assertEqual(self.s.sandboxes.sessions_on(sb["id"]), [first["id"]])
+        with self.assertRaises(ValueError):
+            self.s.archive(first["id"])
+        with self.assertRaises(ValueError):
+            self.s.remove(first["id"])
+
+    def test_an_added_session_gets_a_worktree_only_with_a_repository_and_a_cap_holds(self):
+        from engine import sandboxes as sbmod
+        self.s.sandboxes.prepare()
+        first = self.s.create("Main", "shell", "", host="sandbox")
+        sb = self.s.sandboxes.by_session(first["id"])
+        self.s.sandboxes._set(sb["id"], repo_id="r1")
+        a = self.s.create("Agent", "claude", "", host="sandbox", sandbox=sb["id"])
+        b = self.s.create("Shell", "shell", "", host="sandbox", sandbox=sb["id"])
+        self.assertTrue(self.s.sandboxes.seat(sb["id"], a["id"])["worktree"])     # an agent: its own worktree
+        self.assertFalse(self.s.sandboxes.seat(sb["id"], b["id"])["worktree"])    # a shell: the sandbox's folder
+        self.assertEqual(self.s.get(a["id"])["repo_id"], "r1")
+        while len(self.s.sandboxes.sessions_on(sb["id"])) < sbmod.MAX_SESSIONS_PER_SANDBOX:
+            self.s.create("More", "shell", "", host="sandbox", sandbox=sb["id"])
+        before = len(self.s.store.all())
+        with self.assertRaises(ValueError):
+            self.s.create("One too many", "shell", "", host="sandbox", sandbox=sb["id"])
+        self.assertEqual(len(self.s.store.all()), before)                           # nothing half made
+        # an agent (a parent) may add a session to a sandbox, never make a machine
+        with self.assertRaises(ValueError):
+            self.s.create("Machine", "shell", "", host="sandbox", parent=first["id"])
+        # destroyed: nobody can be added, and every session is free to go
+        self.s.sandboxes.destroy(sb["id"], True)
+        with self.assertRaises(ValueError):
+            self.s.create("Late", "shell", "", host="sandbox", sandbox=sb["id"])
+        self.assertIsNone(self.s.sandboxes.by_session(a["id"]))
+        self.s.remove(a["id"])
+
+    def test_the_idle_cap_looks_at_every_session_of_a_sandbox(self):
+        self.s.sandboxes.prepare()
+        first = self.s.create("Quiet", "shell", "", host="sandbox")
+        sb = self.s.sandboxes.by_session(first["id"])
+        busy = self.s.create("Busy", "shell", "", host="sandbox", sandbox=sb["id"])
+        self.s.sandboxes.set_budget(0, 1, False)
+        seen = {}
+        self.s.sandboxes.enforce = lambda idle: seen.update(idle) or []
+
+        class T:
+            def __init__(self, activity):
+                self.activity = activity
+        import time as _t
+        self.tmux.sessions = lambda: {self.s.tmux_name(first["id"]): T(_t.time() - 3600), self.s.tmux_name(busy["id"]): T(_t.time() - 5)}
+        self.s._last_enforce = 0
+        self.s.enforce_caps()
+        self.assertLess(seen[sb["id"]], 60)        # before: only the first session's terminal counted (an hour idle)
+
+    def test_an_added_sessions_terminal_starts_its_own_tool_and_is_found_again(self):
+        """The command run in the machine, against a real tmux on this computer (no SSH, no Fly)."""
+        from engine.sandbox_attach import seat_command, worktree_command
+        import subprocess
+        # Never the owner's tmux: inside a session of Agent Manager $TMUX names its server and wins over TMUX_TMPDIR
+        # (a « kill-server » here once ended every session of the owner, 2026-11-14). A socket of this test only.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("TMUX")}
+        env["TMUX_TMPDIR"] = self.tmp
+        sock = os.path.join(self.tmp, f"tmux-{os.getuid()}", "default")
+        work = os.path.join(self.tmp, "it's here")
+        os.makedirs(work)
+        cmd = seat_command("am-x1", work, "sleep 60").replace("exec tmux attach -t am-x1", "true")
+        for _ in range(2):                                                  # the second time finds it, starts nothing more
+            subprocess.run(["bash", "-c", cmd], env=env, check=True, timeout=20)
+        out = subprocess.run(["tmux", "-S", sock, "list-panes", "-a", "-F", "#{session_name} #{pane_current_path}"], env=env,
+                             capture_output=True, text=True, timeout=20).stdout.splitlines()
+        subprocess.run(["tmux", "-S", sock, "kill-server"], env=env, capture_output=True, timeout=20)
+        self.assertEqual(out, ["am-x1 " + work])
+        # its worktree: made once beside the clone, on its own branch; asked again, it is there
+        repo = os.path.join(self.tmp, "repo")
+        subprocess.run(["git", "init", "-q", repo], check=True)
+        subprocess.run(["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        for _ in range(2):
+            self.assertEqual(subprocess.run(["bash", "-c", worktree_command(repo, repo + "-x1", "am/s1-x1")]).returncode, 0)
+        self.assertEqual(subprocess.run(["git", "-C", repo + "-x1", "branch", "--show-current"], capture_output=True, text=True).stdout.strip(), "am/s1-x1")
+
     def test_the_owner_routes_answer_over_http(self):
         """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
         tok = load_token(self.tmp)

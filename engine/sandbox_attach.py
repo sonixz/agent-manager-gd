@@ -2,7 +2,7 @@
 `flyctl proxy` to its sshd, set it up the first time, then `ssh -t … tmux new -A -s am` with the reverse tunnel that
 lets the sandbox reach the Second Brain through the engine (sandbox 127.0.0.1:8765 → engine /sandbox-brain/<secret>).
 Secrets travel on ssh's standard input into 0600 files, never on a command line.
-  python3 sandbox_attach.py <sandbox id>      (AGMGD_HOME and AGMGD_PORT from the session's environment)"""
+  python3 sandbox_attach.py <sandbox id> [<added session id>]      (AGMGD_HOME and AGMGD_PORT from the session's environment)"""
 import json
 import os
 import socket
@@ -15,12 +15,36 @@ from engine.keys import Keys                      # noqa: E402
 from engine.sandboxes import FLYCTL, Fly, Sandboxes  # noqa: E402
 from engine.store import Store                    # noqa: E402
 
-def _forget_port(home: str, sbid: str) -> None:
+def port_file(home: str, sbid: str, sid: str = "") -> str:
+    """Each terminal's local proxy port: the first session's under the sandbox's name, an added one's beside it."""
+    return os.path.join(home, "runtime", f"sandbox-{sbid}~{sid}.port" if sid else f"sandbox-{sbid}.port")
+
+
+def _forget_port(home: str, sbid: str, sid: str = "") -> None:
     """The terminal is closed: its local proxy port means nothing any more."""
     try:
-        os.remove(os.path.join(home, "runtime", f"sandbox-{sbid}.port"))
+        os.remove(port_file(home, sbid, sid))
     except OSError:
         pass
+
+
+def q(text: str) -> str:
+    """One word for the sandbox's shell, whatever it holds."""
+    return "'" + text.replace("'", "'\\''") + "'"
+
+
+def seat_command(name: str, workdir: str, agent: str) -> str:
+    """Loop 40: an added session's terminal in the machine. Its own tmux session, started with its own tool the first
+    time (then a shell when the tool ends, as the first session does), found again on a reconnect."""
+    inner = "bash -lc " + q(f". /root/.agmgd/env; {agent}; exec bash -l")
+    return (f"tmux has-session -t {name} 2>/dev/null || tmux new -d -s {name} -c {q(workdir)} {q(inner)}; "
+            f"exec tmux attach -t {name}")
+
+
+def worktree_command(base: str, path: str, branch: str) -> str:
+    """Loop 40: an added session's own git worktree beside the sandbox's clone (two agents never edit one checkout)."""
+    return (f"test -d {q(path)} || git -C {q(base)} worktree add -b {q(branch)} {q(path)} >/dev/null 2>&1 || "
+            f"git -C {q(base)} worktree add {q(path)} {q(branch)} >/dev/null 2>&1; test -d {q(path)}")
 
 
 TMUX_CLIPBOARD = ["set -s set-clipboard on", "set -s terminal-features[90] *:clipboard", "set -g mouse on",
@@ -106,13 +130,17 @@ def keep_connected(connect, tell=say, ask=input, pause: float = 5.0, rounds: int
         failed, may_start = 0, True
 
 
-def connect(sbid: str, home: str, engine_port: int, may_start: bool = True) -> int:
-    """One connection, from the machine's start to the end of the terminal in the sandbox: ssh's exit code."""
+def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid: str = "") -> int:
+    """One connection, from the machine's start to the end of the terminal in the sandbox: ssh's exit code.
+    `sid`: a session added to the sandbox (Loop 40); none for its first session."""
     keys = Keys(home)
     store = Store(os.path.join(home, "data", "sessions.sqlite3"))
     sbs = Sandboxes(store.path, home, keys)
     sb = sbs.get(sbid)
     rec = store.get(sb["session_id"]) or {}
+    seat = sbs.seat(sbid, sid)
+    if seat["first"]:
+        sid = ""
     fly = Fly(lambda: keys.get("fly"))
     machines = sbs.machines()
     if not sb["machine"]:  # the machine was not in Fly's list yet when the sandbox was made: find it by its name
@@ -148,7 +176,7 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True) -> i
 
     proxy = open_tunnel()
     try:
-        with open(os.path.join(home, "runtime", f"sandbox-{sbid}.port"), "w") as f:
+        with open(port_file(home, sbid, sid), "w") as f:
             f.write(str(port))
         say("connecting to the sandbox…")
         ok, proxy = wait_until_reachable(answers, proxy, open_tunnel)
@@ -161,6 +189,19 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True) -> i
             say("first start: setting up the sandbox…")
             setup(sbs, sb, rec, keys, base, store)
             sb = sbs.get(sbid)  # the setup chose its working folder
+        remote = "cd " + sb["workdir"] + " 2>/dev/null; tmux new -A -s am"
+        if not seat["first"]:
+            mine = store.get(sid) or {}
+            workdir = sb["workdir"]
+            if seat["worktree"]:
+                path = f"{sb['workdir']}-{sid}"
+                ok = subprocess.run(base + ["root@127.0.0.1", worktree_command(sb["workdir"], path, f"am/{sbid}-{sid}")],
+                                    capture_output=True, timeout=120).returncode == 0
+                if ok:
+                    workdir = path
+                else:
+                    say("its own worktree could not be made: it works in the sandbox's folder")
+            remote = seat_command(seat["tmux"], workdir, AGENT_CMD.get(mine.get("tool", "shell"), "bash -l"))
         # The way back to the Second Brain lands on a relay of this terminal that lets through only the Brain's
         # route and the health, request by request; the rest of the engine is not reachable from the sandbox. When
         # the sandbox's lasting connection holds that port already, this one is not needed and fails quietly.
@@ -169,19 +210,20 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True) -> i
         way = back.open(engine_port, label="the way back", guard=brain_paths)
         tunnel = ["-R", f"8765:127.0.0.1:{way['port']}"]
         try:
-            return subprocess.call(base + tunnel + ["-t", "root@127.0.0.1", "cd " + sb["workdir"] + " 2>/dev/null; tmux new -A -s am"])
+            return subprocess.call(base + tunnel + ["-t", "root@127.0.0.1", remote])
         finally:
             back.close_all()
     finally:
         proxy.kill()
-        _forget_port(home, sbid)
+        _forget_port(home, sbid, sid)
 
 
 def main() -> int:
     sbid = sys.argv[1]
+    sid = sys.argv[2] if len(sys.argv) > 2 else ""
     home = os.environ["AGMGD_HOME"]
     engine_port = int(os.environ.get("AGMGD_PORT", "8790"))
-    return keep_connected(lambda may_start: connect(sbid, home, engine_port, may_start))
+    return keep_connected(lambda may_start: connect(sbid, home, engine_port, may_start, sid))
 
 
 def setup(sbs, sb, rec, keys, base, store) -> None:

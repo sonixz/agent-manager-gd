@@ -241,8 +241,10 @@ def make_handler(sessions: Sessions, token: str):
                         rec = sessions.store.get(sbx.get(sbid)["session_id"]) or {}
                         return self._reply(200, health(sbx, sbid, bool(rec.get("brain_client"))))
                     if act == "destroy" and method == "POST":
+                        on = sbx.sessions_on(sbid)   # Loop 40: every session on the machine loses its terminal
                         out = sbx.destroy(sbid, bool(self._body().get("confirmed", False)), sessions.brain)
-                        sessions.tmux.kill(sessions.tmux_name(out["session_id"]))
+                        for x in on:
+                            sessions.tmux.kill(sessions.tmux_name(x))
                         return self._reply(200, {k: v for k, v in out.items() if k != "secret"})
                 if parts == ["brain", "keys"] and method == "GET":
                     return self._reply(200, {"keys": sessions.brain_keys()})
@@ -340,7 +342,8 @@ def make_handler(sessions: Sessions, token: str):
                                                             (bool(b["remote"]) if "remote" in b else None), bool(b.get("document", False)),
                                                             str(b.get("level", "")), str(b.get("model", "")), "",
                                                             str(b.get("access", "")), b.get("extra_dirs") or [],
-                                                            bool(b.get("os_sandbox", False)), b.get("secrets") or []))
+                                                            bool(b.get("os_sandbox", False)), b.get("secrets") or [],
+                                                            str(b.get("sandbox", ""))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""

@@ -732,9 +732,11 @@ class Sessions:
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
                repo: str = "", host: str = "local", remote: bool | None = None, document: bool = False,
                level: str = "", model: str = "", role: str = "", access: str = "", extra_dirs: list | None = None,
-               os_sandbox: bool = False, secrets: list | None = None) -> dict:
+               os_sandbox: bool = False, secrets: list | None = None, sandbox: str = "") -> dict:
         if host == "sandbox":
-            return self.create_sandbox_session(name, tool, grp, repo, brain)
+            if parent and not sandbox:   # an agent never makes a machine (a cost): it may add a session to one
+                raise ValueError("an agent may add a session to an existing sandbox (sandbox), never make a new machine")
+            return self.create_sandbox_session(name, tool, grp, repo, brain, on=sandbox, parent=parent)
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
@@ -894,7 +896,7 @@ class Sessions:
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",
-                "sandbox": {k: sb_info[k] for k in ("id", "region", "finished", "destroyed", "machine")} if sb_info else None,
+                "sandbox": {k: sb_info[k] for k in ("id", "region", "finished", "destroyed", "machine", "first")} if sb_info else None,
                 "branch": self.branch(rec["cwd"]),
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
@@ -1053,9 +1055,12 @@ class Sessions:
         live = self.tmux.sessions()
         idle = {}
         for sb in self.sandboxes.all():
-            t = live.get(self.tmux_name(sb["session_id"]))
-            if t and t.activity:
-                idle[sb["id"]] = time.time() - t.activity
+            if sb["destroyed"]:
+                continue
+            # Loop 40: a sandbox is idle only when none of its sessions shows activity
+            seen = [t.activity for t in (live.get(self.tmux_name(x)) for x in self.sandboxes.sessions_on(sb["id"])) if t and t.activity]
+            if seen:
+                idle[sb["id"]] = time.time() - max(seen)
         try:
             self.sandboxes.enforce(idle)
         except Exception:
@@ -1129,7 +1134,12 @@ class Sessions:
         sb = self.sandboxes.by_session(d["id"]) if d.get("cwd") == "/work" else None
         if not sb or sb.get("destroyed"):
             return None
-        return [sys.executable or "python3", SANDBOX_ATTACH, sb["id"]], self.home
+        return self._attach_cmd(sb, d["id"]), self.home
+
+    @staticmethod
+    def _attach_cmd(sb: dict, sid: str) -> list[str]:
+        """The terminal of a sandbox session: its first session's, or an added one's (Loop 40)."""
+        return [sys.executable or "python3", SANDBOX_ATTACH, sb["id"]] + ([] if sb.get("first", True) else [sid])
 
     def restart(self, sid: str) -> dict:
         """Starts the tool again in the same session (fresh conversation); recreates the tmux session if it is gone."""
@@ -1160,8 +1170,11 @@ class Sessions:
 
     def remove(self, sid: str) -> None:
         rec = self.store.get(sid) or {}
-        if self.sandboxes.by_session(sid):
+        sb = self.sandboxes.by_session(sid)
+        if sb and sb["first"]:
             raise ValueError("this session has a cloud sandbox: destroy it first in Sandboxes")
+        if sb:
+            self._leave_sandbox(sb, sid)
         if self.brain and rec.get("brain_client"):
             self.brain.revoke(rec["brain_client"])  # its key stops working at once
         self.tmux.kill(self.tmux_name(sid))
@@ -1173,11 +1186,30 @@ class Sessions:
             pass
 
     # ---------------------------------------------------------------- cloud sandboxes (Loop 13)
-    def create_sandbox_session(self, name: str, tool: str, grp: str, repo: str, brain: bool) -> dict:
+    def _leave_sandbox(self, sb: dict, sid: str) -> None:
+        """Loop 40: an added session leaves its sandbox: its tmux session in the machine is closed when the machine
+        can be reached (aside, never waited for), its record removed. Its worktree and files stay in the machine."""
+        name = self.sandboxes.seat(sb["id"], sid)["tmux"]
+        self.sandboxes.drop_session(sid)
+        sbx = self.sandboxes
+
+        def close() -> None:
+            try:
+                from .sandbox_ops import ssh_run
+                ssh_run(sbx, sb["id"], f"tmux kill-session -t {name} 2>/dev/null; true", 40)
+            except Exception:
+                pass
+        if sb.get("machine"):
+            import threading
+            threading.Thread(target=close, daemon=True).start()
+
+    def create_sandbox_session(self, name: str, tool: str, grp: str, repo: str, brain: bool, on: str = "", parent: str = "") -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
             raise ValueError("a name of 1 to 60 characters")
+        if on:  # Loop 40: one more session on a sandbox that is there already: no new machine
+            return self._add_to_sandbox(on, name.strip(), tool, grp, parent)
         rec = self.store.add(name.strip(), tool, "/work", grp, repo_id=repo)
         try:
             sb = self.sandboxes.create(rec["id"], repo_id=repo)
@@ -1190,6 +1222,25 @@ class Sessions:
                 self.store.update(rec["id"], brain_client=cid)
                 self.sandboxes._set(sb["id"], brain_client=cid)
         self.tmux.new_session(self.tmux_name(rec["id"]), self.home, [sys.executable or "python3", SANDBOX_ATTACH, sb["id"]],
+                              env=self.session_env(rec["id"]))
+        return self.get(rec["id"])
+
+    def _add_to_sandbox(self, sbid: str, name: str, tool: str, grp: str, parent: str = "") -> dict:
+        """Its own tmux session in the machine, its own git worktree when the sandbox holds a repository and the
+        tool is an agent (two agents never edit one checkout), the sandbox's Second Brain (one per machine)."""
+        sb = self.sandboxes.get(sbid)
+        if sb["destroyed"]:
+            raise ValueError("this sandbox was destroyed")
+        first = self.store.get(sb["session_id"]) or {}
+        if parent and not self.store.get(parent):
+            raise ValueError(f"unknown parent session: {parent}")
+        rec = self.store.add(name, tool, "/work", grp or first.get("grp", ""), parent=parent, repo_id=sb["repo_id"])
+        try:
+            self.sandboxes.add_session(sbid, rec["id"], worktree=tool in ("claude", "codex"))
+        except Exception:
+            self.store.delete(rec["id"])
+            raise
+        self.tmux.new_session(self.tmux_name(rec["id"]), self.home, self._attach_cmd({**sb, "first": False}, rec["id"]),
                               env=self.session_env(rec["id"]))
         return self.get(rec["id"])
 
@@ -1323,8 +1374,10 @@ class Sessions:
         return finished
 
     def _no_hidden_sandbox(self, sid: str) -> None:
-        """Loop 16: a sandbox always has its session in the list; archiving it would hide a running cost."""
-        if self.sandboxes.by_session(sid):
+        """Loop 16: a sandbox always has its session in the list; archiving it would hide a running cost. An added
+        session (Loop 40) may go: the first one keeps the sandbox in the list."""
+        sb = self.sandboxes.by_session(sid)
+        if sb and sb["first"]:
             raise ValueError("this session has a cloud sandbox: destroy the sandbox first (it shows the work not pushed), "
                              "then archive or wrap up")
 
@@ -1332,6 +1385,9 @@ class Sessions:
         """Out of the way but never forgotten: the record and every conversation id stay (History)."""
         self.get(sid)
         self._no_hidden_sandbox(sid)
+        sb = self.sandboxes.by_session(sid)
+        if sb:  # an added session (the first one was refused above): its tmux in the machine closes with it
+            self._leave_sandbox(sb, sid)
         self.tmux.kill(self.tmux_name(sid))
         self.store.update(sid, archived=1, archived_at=time.time())
         return self.get(sid)

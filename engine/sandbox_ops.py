@@ -10,11 +10,16 @@ from .sandbox_attach import free_port, ssh_base
 
 
 def _port(sbx, sbid: str) -> int:
-    try:
-        with open(os.path.join(sbx.home, "runtime", f"sandbox-{sbid}.port")) as f:
-            return int(f.read().strip())
-    except (OSError, ValueError):
-        return 0
+    """The local proxy port of one of the sandbox's open terminals (its first session's, or an added one's)."""
+    import glob
+    run = os.path.join(sbx.home, "runtime")
+    for path in [os.path.join(run, f"sandbox-{sbid}.port")] + sorted(glob.glob(os.path.join(run, f"sandbox-{sbid}~*.port"))):
+        try:
+            with open(path) as f:
+                return int(f.read().strip())
+        except (OSError, ValueError):
+            continue
+    return 0
 
 
 def attach_running(sbid: str) -> bool:

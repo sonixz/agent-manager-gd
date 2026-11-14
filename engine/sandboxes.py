@@ -67,7 +67,13 @@ CREATE TABLE IF NOT EXISTS sandbox_config (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 -- Loop 16: every period a machine ran, copied from Fly's machine history (kept after the machine is destroyed)
 CREATE TABLE IF NOT EXISTS sandbox_runs (sandbox TEXT NOT NULL, size TEXT NOT NULL, start REAL NOT NULL, stop REAL,
     PRIMARY KEY (sandbox, start));
+-- Loop 40: more sessions on the same machine (owner, 2026-11-14: « ouvrir plusieurs sessions SSH sur la même VM »).
+-- The first session stays in sandboxes.session_id; each added one has its row, its own tmux session in the machine
+-- (am-<session id>) and its folder (its own git worktree when the sandbox has a repository).
+CREATE TABLE IF NOT EXISTS sandbox_sessions (session_id TEXT PRIMARY KEY, sandbox TEXT NOT NULL, tmux TEXT NOT NULL,
+    worktree INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL);
 """
+MAX_SESSIONS_PER_SANDBOX = 8   # the first one and seven added: each runs an agent on the same machine
 # What our image holds (sandbox/Dockerfile): shown before the owner deploys it
 IMAGE_CONTENTS = [
     ("Ubuntu 24.04", "the base system"),
@@ -239,9 +245,49 @@ class Sandboxes:
         return dict(r)
 
     def by_session(self, sid: str) -> dict | None:
+        """The live sandbox a session works in, its first session or one added to it (Loop 40), with « first »."""
         with closing(self._db()) as db:
             r = db.execute("SELECT * FROM sandboxes WHERE session_id = ? AND destroyed = 0", (sid,)).fetchone()
-        return dict(r) if r else None
+            if r:
+                return {**dict(r), "first": True}
+            r = db.execute("SELECT s.* FROM sandboxes s JOIN sandbox_sessions x ON x.sandbox = s.id "
+                           "WHERE x.session_id = ? AND s.destroyed = 0", (sid,)).fetchone()
+        return {**dict(r), "first": False} if r else None
+
+    # ---------------------------------------------------------------- Loop 40: several sessions on one machine
+    def sessions_on(self, sbid: str) -> list[str]:
+        """Every session of a sandbox: its first one, then those added, oldest first."""
+        sb = self.get(sbid)
+        with closing(self._db()) as db:
+            added = [r[0] for r in db.execute("SELECT session_id FROM sandbox_sessions WHERE sandbox = ? ORDER BY created, rowid", (sbid,))]
+        return ([sb["session_id"]] if sb["session_id"] else []) + added
+
+    def seat(self, sbid: str, sid: str) -> dict:
+        """Where a session lives in the machine: its tmux session's name, whether it has its own worktree."""
+        sb = self.get(sbid)
+        if sid in ("", sb["session_id"]):
+            return {"tmux": "am", "first": True, "worktree": False}
+        with closing(self._db()) as db:
+            r = db.execute("SELECT * FROM sandbox_sessions WHERE sandbox = ? AND session_id = ?", (sbid, sid)).fetchone()
+        if not r:
+            raise KeyError(f"session {sid} is not on sandbox {sbid}")
+        return {"tmux": r["tmux"], "first": False, "worktree": bool(r["worktree"])}
+
+    def add_session(self, sbid: str, sid: str, worktree: bool = False) -> dict:
+        """One more session on a live sandbox: no new machine, its own tmux session in it."""
+        sb = self.get(sbid)
+        if sb["destroyed"]:
+            raise ValueError("this sandbox was destroyed")
+        if len(self.sessions_on(sbid)) >= MAX_SESSIONS_PER_SANDBOX:
+            raise ValueError(f"at most {MAX_SESSIONS_PER_SANDBOX} sessions on one sandbox")
+        with closing(self._db()) as db, db:
+            db.execute("INSERT INTO sandbox_sessions (session_id, sandbox, tmux, worktree, created) VALUES (?, ?, ?, ?, ?)",
+                       (sid, sbid, "am-" + sid, int(bool(worktree and sb["repo_id"])), time.time()))
+        return self.seat(sbid, sid)
+
+    def drop_session(self, sid: str) -> None:
+        with closing(self._db()) as db, db:
+            db.execute("DELETE FROM sandbox_sessions WHERE session_id = ?", (sid,))
 
     def by_secret(self, secret: str) -> dict | None:
         with closing(self._db()) as db:
@@ -365,10 +411,13 @@ class Sandboxes:
         if brain and sb["brain_client"]:
             brain.revoke(sb["brain_client"])
         shutil.rmtree(os.path.dirname(self.key_path(sbid)), ignore_errors=True)
-        try:  # its terminal's proxy port, if one was left
-            os.remove(os.path.join(self.home, "runtime", f"sandbox-{sbid}.port"))
-        except OSError:
-            pass
+        import glob
+        run = os.path.join(self.home, "runtime")
+        for left in [os.path.join(run, f"sandbox-{sbid}.port")] + glob.glob(os.path.join(run, f"sandbox-{sbid}~*.port")):  # its terminals' proxy ports
+            try:
+                os.remove(left)
+            except OSError:
+                pass
         self._set(sbid, destroyed=1)
         self.forget_machines()
         return self.get(sbid)
@@ -650,7 +699,7 @@ class Sandboxes:
             m = live.get(sb["machine"], {})
             known.add(sb["machine"])
             secs = self.running_seconds(m) if m else 0.0
-            rows.append({**{k: v for k, v in sb.items() if k != "secret"},
+            rows.append({**{k: v for k, v in sb.items() if k != "secret"}, "sessions": self.sessions_on(sb["id"]),
                          "state": "destroyed" if sb["destroyed"] else (m.get("state") or ("unknown" if not reachable else "gone")),
                          "running_seconds": round(secs), "cost_usd": self.cost(sb["size"], secs)})
         orphans = [{"app": self.config("app"), "machine": mid, "name": m.get("name", ""), "state": m.get("state", "")}

@@ -32,7 +32,8 @@ TOOLS = [
                      "model": {"type": "string", "description": "the model to run, e.g. opus, sonnet, haiku (Claude Code) or a Codex model"},
                      "document": {"type": "boolean", "description": "Claude Code: documents itself in the Second Brain"},
                      "access": {"type": "string", "enum": ["open", "contained", "readonly"], "description": "file access: open, contained (its file tools stay in its folder) or readonly; never less restricted than yours"},
-                     "remote": {"type": "boolean", "description": "Claude Code: Remote Control, so the owner can follow it from claude.ai/code or the Claude app; yours by default"}}, "required": ["name", "tool"]}},
+                     "remote": {"type": "boolean", "description": "Claude Code: Remote Control, so the owner can follow it from claude.ai/code or the Claude app; yours by default"},
+                     "sandbox": {"type": "string", "description": "a cloud sandbox's id (list_sessions shows each session's): the session runs on that machine, beside its other sessions, in its own git worktree; never a new machine"}}, "required": ["name", "tool"]}},
     {"name": "send_to_session", "description": "Types a message into one of YOUR child sessions and presses Enter.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]}},
     {"name": "wait_for_session", "description": "Waits until a session stops working (done, waiting for an answer or an OK, ended), then returns its state and screen.",
@@ -93,7 +94,10 @@ class Engine:
 
     @staticmethod
     def brief(s):
-        return {k: s.get(k) for k in ("id", "name", "tool", "grp", "cwd", "state", "activity", "message", "parent", "branch", "level", "model", "worktree")}
+        out = {k: s.get(k) for k in ("id", "name", "tool", "grp", "cwd", "state", "activity", "message", "parent", "branch", "level", "model", "worktree")}
+        if s.get("sandbox"):  # Loop 40: which machine it runs on (start_session can add a session there)
+            out["sandbox"] = s["sandbox"].get("id")
+        return out
 
 
 def run_tool(eng, name, a):
@@ -116,6 +120,8 @@ def run_tool(eng, name, a):
             body["access"] = str(a["access"])
         if "remote" in a:  # otherwise the engine gives the child its parent's Remote Control
             body["remote"] = bool(a["remote"])
+        if a.get("sandbox"):  # Loop 40: on a sandbox that is there already
+            body.update(host="sandbox", sandbox=str(a["sandbox"]))
         r = eng.call("POST", "/sessions", body)
         return r if "error" in r else eng.brief(r)
     if name == "send_to_session":
