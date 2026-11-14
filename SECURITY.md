@@ -23,9 +23,17 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   agents to chosen repositories, add it to an account made for them. A key is checked by one SSH connection to the
   repository's host with that key (`git ls-remote`), when you open the Repos page, on « Check all » or on
   « Check »; never while the page is closed.
+- **Online machines (the only public door)**: a machine of ⬡ Online is made private, in its own Fly.io app. It gets a
+  public address only when you click *Expose to the internet* and confirm; then `https://<its app>.fly.dev` reaches
+  one port inside it (443, HTTPS with Fly.io's certificate, and 80 sent on to it), and nothing else: its SSH (port
+  2222) stays on Fly.io's private network, and what listens on `127.0.0.1` in it is never reachable. *Close to the
+  internet* gives the addresses back at any time. The service there sees the machine's files: it is yours to make
+  sure it shows only what it should. The budget's automatic pauses never stop an Online machine; destroying it
+  destroys its app, its volume and its addresses. A sandbox can never be exposed, and no tool of Agent Manager's MCP
+  server makes or exposes an Online machine.
 - **A sandbox's ports on this computer**: a port of a sandbox is brought here only when asked, through one lasting
   SSH connection per sandbox. It listens on `127.0.0.1` and nowhere else; what passes is counted, never read; it can
-  be paused or closed. No public address is ever made. The sandbox's host key is remembered at that connection's
+  be paused or closed. A sandbox never gets a public address. The sandbox's host key is remembered at that connection's
   first use, and a key that changed refuses. Opening a connection never starts a paused machine. A SOCKS proxy toward
   a cloud sandbox, when you open one, is on `127.0.0.1` too. In the other direction, a cloud sandbox reaches nothing
   of this computer except its way back to the Second Brain, through its SSH tunnel. That way lands on a relay that

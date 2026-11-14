@@ -820,7 +820,8 @@ class Sandboxes:
                 seconds += took
                 cost += self.cost(r["size"], took)
                 spans.append([float(r["start"]), None if r["stop"] is None else float(r["stop"])])
-            out.append({"id": row["id"], "session_id": row.get("session_id", ""), "app": row["app"], "machine": row["machine"],
+            out.append({"id": row["id"], "kind": row.get("kind", "sandbox"), "name": row.get("name", ""),
+                        "session_id": row.get("session_id", ""), "app": row["app"], "machine": row["machine"],
                         "region": row["region"], "size": row["size"], "created": float(row["created"]), "state": row["state"],
                         "destroyed": bool(row["destroyed"]), "finished": bool(row.get("finished", 0)),
                         "runs": spans, "run_seconds": round(seconds), "cost_usd": round(cost, 4),

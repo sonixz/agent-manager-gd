@@ -60,6 +60,9 @@ If you are an AI agent working in this repository, or plugged into these apps ov
 
 ## In this repository
 
+- **Only an Online machine faces the internet, and only when you say so.** ⬡ Online makes a cloud machine for a
+  service (a website, an API) that is private until you expose it, with your confirmation: then one port of it is
+  public over HTTPS, nothing else. The engine, the MCP server and the sandboxes are never exposed.
 - **Agents run in real terminals, with your rights.** Claude Code and Codex are your own installed CLIs, started in a
   private tmux server under your user account. They run commands and change files with your permissions.
 - **Choose each session's level knowingly.** Ask before acting (`ask`), Auto edits (`edits`), Auto (`auto`, the

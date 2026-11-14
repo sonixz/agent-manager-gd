@@ -80,7 +80,7 @@ class FakeSandboxes:
     def key_path(self, sbid):
         return os.path.join(self.home, "keys", "sandbox-" + sbid, "id_ed25519")
 
-    def machines(self):
+    def machines(self, fresh=False, app=""):
         return [{"id": "m-1", "state": self.state}]
 
 

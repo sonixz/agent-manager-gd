@@ -5,6 +5,15 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Online machines, for a service on the internet (Loop 41)
+- New: **⬡ Online** in the top bar. An Online machine is a Fly.io machine for a website or an API, with its own app
+  and address, a volume on `/data`, and one door: port 443 (HTTPS, Fly.io's certificate) toward the port its service
+  listens on. Everything else in it stays on `127.0.0.1`. It is made private.
+- **Expose to the internet…** (confirmed) gives it free public addresses, so `https://<its app>.fly.dev` reaches the
+  service; **Close to the internet** gives them back. The door is drawn on its card, lit when public.
+- Managed like a sandbox (terminal, sessions, tunnel and ports, Stop, Destroy), but never paused by the budget, and
+  never listed among the sandboxes. Sessions on it show ⬡ instead of ☁.
+
 ### Several sessions on one cloud sandbox (Loop 40)
 - New: a sandbox's card lists **Sessions on this machine**, and **+ Claude Code**, **+ Codex** or **+ Shell** opens one
   more on the same Fly.io machine, with no new machine. Each has its own terminal there and its own connection; an

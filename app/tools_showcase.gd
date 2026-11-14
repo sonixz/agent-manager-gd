@@ -3,6 +3,7 @@ extends SceneTree
 ## (user « dev », projects in ~/code). Agent terminals replay recorded real screens (tools/showcase/bin/agent-replay).
 ## SHOW_STEP = measure | hero | … ; screenshots go to SHOW_OUT as webp.
 
+const OnlineWidgetsRef := preload("res://scripts/online_widgets.gd")
 const HostView := preload("res://scripts/host_view.gd")
 const RepoView := preload("res://scripts/repo_view.gd")
 const SandboxView := preload("res://scripts/sandbox_view.gd")
@@ -1375,6 +1376,41 @@ for i in range(600):
 				scroller.scroll_vertical = int(maxf(0.0, (head as Control).global_position.y - main.sbx_box.global_position.y - 330.0))
 			await wait(0.8)
 			await shot("sandbox-sessions")
+		"online":  # Loop 41: machines for services on the internet, one public door (443), the rest private
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
+			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
+			var c: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Shop", "tool": "claude", "cwd": "~", "brain": false})
+			var d: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Blog", "tool": "codex", "cwd": "~", "brain": false})
+			_map(str(c["id"]), "limiter-question")
+			var home := OS.get_environment("AGMGD_HOME")
+			var tools := ProjectSettings.globalize_path("res://").path_join("../tools/")
+			OS.execute("python3", [tools.path_join("demo_sandboxes.py"), home, str(a["id"]), str(b["id"])], [])
+			OS.execute("python3", [tools.path_join("demo_online.py"), home, str(c["id"]), str(d["id"])], [])
+			await main.refresh()
+			main.set_view("online")
+			await wait(3.0)
+			await main._load_sandboxes()
+			await wait(2.0)
+			var cards: Array = main.online_box.find_children("Online_*", "", true, false)
+			var doors: Array = main.online_box.find_children("*", "Control", true, false).filter(func(x: Node) -> bool: return x.get_script() == OnlineWidgetsRef.Door)
+			var labels: Array = main.online_box.find_children("*", "Label", true, false).map(func(x: Node) -> String: return (x as Label).text)
+			report.append("online: %d cards, %d doors drawn, badges: %s | make button: %s" % [cards.size(), doors.size(),
+				", ".join(labels.filter(func(t: String) -> bool: return t in ["PUBLIC", "PRIVATE"])), main.online_box.find_child("OnlineMake", true, false) != null])
+			main.view_buttons["sandboxes"].pressed.emit()
+			await wait(3.0)
+			var names: Array = (main.sbx_box.find_children("Sandbox_*", "", true, false) as Array).map(func(x: Node) -> String: return str(x.name))
+			report.append("online: the Sandboxes page lists only sandboxes: %s" % ", ".join(names))
+			main.set_view("online")
+			await wait(2.5)
+			await shot("online")
+			for btn in main.online_box.find_children("*", "Button", true, false):
+				if (btn as Button).text.begins_with("Expose to the internet"):
+					(btn as Button).pressed.emit()
+					break
+			await wait(0.8)
+			report.append("online: expose asks first: %s" % main.confirm_dialog.visible)
+			await shot("online-expose")
+			main.confirm_dialog.hide()
 		"smooth":  # is the app still fluid: frame times on each page, what a few clicks leave behind (nodes, reload loops), with a running sandbox connected and a dashboard in it
 			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "shell", "cwd": "~", "group": "Orbit API", "brain": false})
 			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})

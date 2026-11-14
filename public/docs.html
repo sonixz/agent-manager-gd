@@ -70,6 +70,7 @@
         <a href="#repos">Repositories and their keys</a>
         <a href="#remote-control">Remote Control</a>
         <a href="#sandboxes">Cloud sandboxes and costs</a>
+        <a href="#online">Online machines</a>
         <p class="group">Reference</p>
         <a href="#keys">Keys and secrets</a>
         <a href="#api">Local engine and settings</a>
@@ -425,6 +426,29 @@
           <b>◐ › Connect other tools</b> gives the command to plug the same server into Claude Code, Codex or any MCP
           client outside the app; such a tool can list, read and start sessions, never type into one or approve.</p>
 
+        <h2 id="online">Online machines</h2>
+        <p><b>⬡ Online</b>, in the top bar, is for services on the internet: a website, an API, with its database beside
+          it. It is not a sandbox: a sandbox is private and throw-away, an Online machine lasts and may have one public
+          door. It needs the same Fly.io token (⚷ Keys, step 2) and the image built once in ☁ Sandboxes.</p>
+        <ul>
+          <li><b>A new Online machine</b>: a name (it goes in its address), the port its service listens on inside, a
+            volume in GB, and the tool of its first session. <b>Make it (private)</b> creates its own Fly.io app, a
+            volume mounted on <code>/data</code> (where its work and your data live, kept across restarts; about $0.15 per
+            GB a month), and the machine, with the services 443 (HTTPS) and 80 declared toward that port. It has no
+            public address yet: nothing reaches it from the internet.</li>
+          <li><b>Expose to the internet…</b> asks first, then gives its app two public addresses (an IPv6 and a shared
+            IPv4, both free): <code>https://&lt;its app&gt;.fly.dev</code> then reaches its port, with Fly.io's
+            certificate. Only that port: its SSH and everything that listens on <code>127.0.0.1</code> (a database, a
+            cache, workers) stay private. The card shows <b>PUBLIC</b> and the address. <b>Close to the internet</b>
+            gives the addresses back; the machine, its service and its data stay.</li>
+          <li><b>The door, drawn</b>: the internet, the gate 443 (lit and with visitors flowing when public, barred when
+            private), your service's port, what stays private, and Agent Manager's own way in from below.</li>
+          <li><b>Managed like a sandbox</b>: under the door comes the sandbox card: its state, its sessions (several on
+            one machine, see above), Stop and Start, its <i>Tunnel and ports</i> to bring a port to your localhost, and
+            Destroy, which destroys its whole app, volume and addresses included. The budget's automatic pauses never
+            stop an Online machine. Its runs and costs are in the Sandboxes inventory.</li>
+        </ul>
+
         <h2 id="orchestrator">The orchestrator</h2>
         <p>One Claude Code session with an orchestrator's instructions, for all your connected repositories, in a panel on
           the right (<b>Ctrl+O</b>, or Start in that panel). It plans, delegates, follows and checks; it rarely codes.</p>
@@ -642,6 +666,9 @@
         <h2 id="security">Security and privacy</h2>
         <ul>
           <li><b>Local-first</b>: nothing leaves your computer unless you ask (a transcription, a sandbox, a push).</li>
+          <li><b>One public door, on your word</b>: only an <a href="#online">Online machine</a> can face the internet,
+            once you expose it, and then only its port 443 toward its service. The engine, the MCP server and the
+            sandboxes never get a public address.</li>
           <li><b>Your agents, your login</b>: agents run as you installed them; their subscription tokens are never read.</li>
           <li><b>No administrator rights</b>: installs for your user only.</li>
           <li><b>No silent downloads</b>: third-party binaries only with your OK, pinned and checked against a published

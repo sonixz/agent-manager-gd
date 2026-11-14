@@ -11,6 +11,7 @@ const RepoView := preload("res://scripts/repo_view.gd")
 const RepoWidgets := preload("res://scripts/repo_widgets.gd")
 const SandboxView := preload("res://scripts/sandbox_view.gd")
 const SandboxWidgets := preload("res://scripts/sandbox_widgets.gd")
+const OnlineWidgets := preload("res://scripts/online_widgets.gd")
 const SecretView := preload("res://scripts/secret_view.gd")
 const SecretWidgets := preload("res://scripts/secret_widgets.gd")
 const KeyWidgets := preload("res://scripts/key_widgets.gd")
@@ -328,6 +329,7 @@ const MANAGERS := [
 	["setup", "", "", ""],  # the ground: WSL on Windows, the computer on Linux. Its button is alive: see _render_ground_button
 	["keys", "⚷ Keys", "⚷", "Your keys, step by step: the voice (OpenAI), cloud sandboxes (Fly.io), your projects' secrets (dotenvx)"],
 	["sandboxes", "☁ Sandboxes", "☁", "Cloud sandboxes: the manager and their connections"],
+	["online", "⬡ Online", "⬡", "Machines for services on the internet: one public door (443), the rest private"],
 	["repos", "⎇ Repos", "⎇", "Connected repositories and their deploy keys"],
 ]
 
@@ -1772,7 +1774,7 @@ func _render_list() -> void:
 		if r[0] == "session" and cards.get(r[1]) == r[3]:
 			cards.erase(r[1])
 	rows = next
-	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]
+	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "setup", "shortcuts", "connect", "permissions"]
 
 
 func _row(w: Array) -> Control:
@@ -2028,7 +2030,7 @@ func select(id: String) -> void:
 	if not grid_ids.has(id):
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
-	if view in ["board", "history", "repos", "keys", "usage", "sandboxes", "permissions"]:
+	if view in ["board", "history", "repos", "keys", "usage", "sandboxes", "online", "permissions"]:
 		view = "focus"  # picking a session opens it (Review follows the selected session)
 	if view == "review":
 		review_file = 0
@@ -2257,7 +2259,7 @@ func set_view(v: String) -> void:
 	if v == "setup":
 		_setup_read()
 	content.modulate.a = 0.6  # the new view is there at once, a little soft, then sharp: it was 0.18 s from nothing, read as a delay
-	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]
+	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "online", "setup", "shortcuts", "connect", "permissions"]
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.08)
 	_render_header()
@@ -2307,7 +2309,7 @@ func _park_all() -> void:
 func _layout_view() -> void:
 	_park_all()
 	_mount_orchestrator.call_deferred()
-	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "setup", "shortcuts", "connect", "permissions"]:
+	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "setup", "shortcuts", "connect", "permissions"]:
 		return
 	match view:
 		"focus":
@@ -2352,6 +2354,11 @@ func _layout_view() -> void:
 			content.add_child(_page(_shortcut_rows()))
 		"connect":
 			content.add_child(_page(_connect_rows()))
+		"online":
+			content.add_child(_online_view())
+			if not sbx_last.is_empty():
+				_render_online.call_deferred(sbx_last)
+			_load_sandboxes()
 		"sandboxes":
 			content.add_child(_sandboxes_view())
 			if not sbx_last.is_empty():
@@ -3444,6 +3451,8 @@ func _load_sandboxes() -> void:
 	sbx_loading = false
 	if not r.has("error"):
 		sbx_last = r
+	if view == "online":
+		_render_online(r)
 	var sig := _sbx_page_sig(r)
 	if sig != sbx_page_sig or not is_instance_valid(sbx_box) or sbx_box.get_child_count() == 0:
 		_render_sandboxes(r)   # built again only when something it shows changed: a click is not swallowed by a rebuild
@@ -3497,7 +3506,9 @@ func _render_sandboxes(r: Dictionary) -> void:
 		sbx_box.add_child(need)
 	# A dashboard (owner, 2026-11-12: « une interface un peu plus dense »): the tiles across, then two columns; a
 	# narrow window stacks them.
-	var inv: Dictionary = r.get("inventory", {})
+	var inv: Dictionary = r.get("inventory", {}).duplicate()
+	if inv.has("sandboxes"):  # Loop 41: an Online machine is on its own page, never among the sandboxes
+		inv["sandboxes"] = (inv["sandboxes"] as Array).filter(func(x: Dictionary) -> bool: return str(x.get("kind", "sandbox")) != "online")
 	if not inv.is_empty():
 		var tiles = RepoWidgets.Tiles.new(SandboxView.tiles(inv))
 		tiles.name = "SandboxTiles"
@@ -3537,7 +3548,7 @@ func _render_sandboxes(r: Dictionary) -> void:
 	said.add_theme_font_size_override("font_size", 11)
 	said.size_flags_horizontal = SIZE_EXPAND_FILL
 	rh.add_child(said)
-	var finished: Array = (r.get("sandboxes", []) as Array).filter(func(x): return int(x["destroyed"]) == 0 and int(x["finished"]) == 1)
+	var finished: Array = (r.get("sandboxes", []) as Array).filter(func(x): return int(x["destroyed"]) == 0 and int(x["finished"]) == 1 and str(x.get("kind", "sandbox")) != "online")
 	if not finished.is_empty():
 		rh.add_child(_small("Destroy the finished ones (%d)…" % finished.size(), func() -> void:
 			_confirm("Destroy %d finished sandbox(es): %s?\nTheir machines, files and keys are deleted for good." % [finished.size(), ", ".join(finished.map(func(x): return str(x["id"])))], func() -> void:
@@ -3811,13 +3822,13 @@ func _sbx_second() -> void:
 	# the page is asked again every thirty seconds while it is shown, by this one clock. Before, every drawing of the
 	# page started a timer of its own that asked again, so each click added a loop: eight clicks, ten reloads in
 	# thirty seconds (measured), each one rebuilding the page.
-	if view == "sandboxes" and sbx_seconds % 30 == 0 and is_instance_valid(sbx_box):
+	if (view == "sandboxes" and is_instance_valid(sbx_box) or view == "online" and is_instance_valid(online_box)) and sbx_seconds % 30 == 0:
 		_load_sandboxes()
-	if view == "sandboxes" and sbx_seconds % 3 == 0:  # what passes and what listens, asked again while one looks (the engine answers from what it last read)
+	if view in ["sandboxes", "online"] and sbx_seconds % 3 == 0:  # what passes and what listens, asked again while one looks (the engine answers from what it last read)
 		for sbid in sbx_tunnel_boxes.keys():
 			if is_instance_valid(sbx_tunnel_boxes[sbid]) and str(sbx_tunnels.get(sbid, {}).get("state", "closed")) in ["open", "lost"]:
 				_sbx_tunnel_ask(sbid)
-	if view != "sandboxes":
+	if view not in ["sandboxes", "online"]:
 		return
 	for pair in sbx_live:
 		var l = pair[0]  # not typed: a label freed when the cards were rebuilt cannot be put in a typed variable (it raised an error every second)
@@ -4096,7 +4107,7 @@ func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 	v.add_child(top)
 	var sess := _session(str(sb["session_id"]))
 	var n := Label.new()
-	n.text = "☁ " + str(sess.get("name", "session " + str(sb["session_id"])))
+	n.text = ("⬡ " if str(sb.get("kind", "")) == "online" else "☁ ") + str(sess.get("name", "session " + str(sb["session_id"])))
 	n.add_theme_font_size_override("font_size", 16)
 	n.add_theme_font_override("font", AmTheme.ui_font(650))
 	top.add_child(n)
@@ -4178,6 +4189,187 @@ func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 	if st == "started":  # Loop 38: its ports, brought to this computer on a click, with what passes
 		v.add_child(_sbx_tunnel(sbid, str(sess.get("name", "sandbox " + sbid))))
 	return card
+
+
+# ------------------------------------------------------------------ Online machines (Loop 41)
+var online_box: VBoxContainer
+var online_sig := ""
+var online_form := {}
+
+
+## Machines for services on the internet (owner, 2026-11-14: « ce serait pour lancer des services en ligne… un
+## service sur le port 443. Le reste ce serait en backend »; the name « Online » is the owner's). Never mixed with
+## the sandboxes: a sandbox is private and throw-away, an Online machine lasts and may have one public door.
+func _online_view() -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	online_box = VBoxContainer.new()
+	online_box.size_flags_horizontal = SIZE_EXPAND_FILL
+	online_box.add_theme_constant_override("separation", 12)
+	scroll.add_child(online_box)
+	online_sig = ""
+	online_box.add_child(SandboxWidgets.Loading.new("Asking Fly.io for your Online machines…", 300.0))
+	return scroll
+
+
+func _render_online(r: Dictionary) -> void:
+	if online_box == null or not is_instance_valid(online_box):
+		return
+	var mine: Array = (r.get("sandboxes", []) as Array).filter(func(x: Dictionary) -> bool: return str(x.get("kind", "")) == "online")
+	var sig := JSON.stringify([mine.map(func(x: Dictionary) -> Array: return [x["id"], x["state"], x["destroyed"], x.get("online", {}), x.get("sessions", []), x.get("health", {}).get("tunnel", "") if x.get("health") is Dictionary else ""]),
+		r.get("token", false), r.get("ready", false), r.has("error")])
+	if sig == online_sig and online_box.get_child_count() > 0:
+		return
+	online_sig = sig
+	if sbx_tick == null:
+		sbx_tick = Timer.new()
+		sbx_tick.wait_time = 1.0
+		add_child(sbx_tick)
+		sbx_tick.timeout.connect(_sbx_second)
+		sbx_tick.start()
+	for c in online_box.get_children():
+		online_box.remove_child(c)
+		c.queue_free()
+	sbx_live.clear()
+	var title := Label.new()
+	title.text = "Online"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	online_box.add_child(title)
+	var head := _wrap("Machines for services on the internet: a website, an API, with its database beside it. Each has its own Fly.io app and address, a volume for what must last (/data), and one door: port 443 (HTTPS, Fly's certificate) toward the port your service listens on. Everything else in it listens on 127.0.0.1 and is never public. It is made private: it becomes public only when you expose it, and you can close it again at any time. You manage it like a sandbox: its terminal, its sessions, its tunnel, over Fly's private network.")
+	head.add_theme_font_size_override("font_size", 12)
+	online_box.add_child(head)
+	if r.has("error"):
+		online_box.add_child(_muted(str(r["error"])))
+		return
+	if not (r.get("token", false) and r.get("flyctl", false)):
+		var need := _wrap("First paste your Fly.io token in ⚷ Keys (step 2).")
+		need.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		online_box.add_child(need)
+	elif not r.get("ready", false):
+		var need2 := _wrap("Build the image once in ☁ Sandboxes (step 1): Online machines start from it.")
+		need2.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		online_box.add_child(need2)
+	online_box.add_child(_online_new())
+	var live := mine.filter(func(x: Dictionary) -> bool: return int(x["destroyed"]) == 0)
+	online_box.add_child(_section_label("Your Online machines (%d)" % live.size()))
+	if live.is_empty():
+		online_box.add_child(_muted("None yet. Make one above: it starts private."))
+	for sb in live:
+		online_box.add_child(_online_card(sb, r))
+	var gone := mine.filter(func(x: Dictionary) -> bool: return int(x["destroyed"]) == 1)
+	if not gone.is_empty():
+		online_box.add_child(_muted("Destroyed, kept in ☁ Sandboxes' inventory with what they cost: " + ", ".join(gone.map(func(x: Dictionary) -> String: return str(x.get("name", x["id"]))))))
+
+
+## Making one: its name (in its address), the port its service listens on, its volume, the tool of its first session.
+func _online_new() -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, Color(AmTheme.col("MINT"), 0.35), 1, 14))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	panel.add_child(v)
+	v.add_child(_section_label("A new Online machine"))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	row.add_child(_muted("name"))
+	var name_edit := LineEdit.new()
+	name_edit.placeholder_text = "shop"
+	name_edit.custom_minimum_size.x = 160
+	name_edit.tooltip_text = "Lowercase letters, digits, dashes: it goes in the address (agmgd-on-<name>-….fly.dev)"
+	row.add_child(name_edit)
+	row.add_child(_muted("its service listens on port"))
+	var port := SpinBox.new()
+	port.min_value = 1
+	port.max_value = 65535
+	port.value = 8080
+	row.add_child(port)
+	row.add_child(_muted("volume (GB)"))
+	var vol := SpinBox.new()
+	vol.min_value = 1
+	vol.max_value = 500
+	vol.value = 1
+	row.add_child(vol)
+	var tool := OptionButton.new()
+	for t in [["claude", "Claude Code"], ["codex", "Codex"], ["shell", "Shell"]]:
+		tool.add_item(t[1])
+		tool.set_item_metadata(tool.item_count - 1, t[0])
+	tool.tooltip_text = "The first session on it: the one that builds and runs the service"
+	row.add_child(tool)
+	var est: Dictionary = sbx_last.get("estimate", {})
+	var cost := _muted("about %s a month while it runs (%s) + $%.2f per GB of volume a month · the addresses are free" % [
+		CostChart.money(float(est.get("per_month_on", 6.70))), str(est.get("size", "shared-cpu-1x-1024")), 0.15])
+	cost.add_theme_font_size_override("font_size", 12)
+	v.add_child(cost)
+	var go := _small("Make it (private)", func() -> void:
+		var n := name_edit.text.strip_edges().to_lower()
+		if n == "":
+			_toast("Give it a name first")
+			return
+		_toast("Making the Online machine « %s »: its app, its volume, its machine (about a minute)…" % n)
+		var d := await engine.call_api("POST", "/online", {"name": n, "port": int(port.value), "volume_gb": int(vol.value),
+			"tool": str(tool.get_selected_metadata())}, true, 900.0)
+		if d.has("error"):
+			_toast(str(d["error"]))
+			return
+		_toast("« %s » is made, private. Expose it when its service is ready." % n)
+		await refresh()
+		await _load_sandboxes(), "Its own Fly app, a volume on /data, the services 443 and 80 declared toward its port: no public address until you expose it.")
+	go.name = "OnlineMake"
+	v.add_child(go)
+	return panel
+
+
+## One Online machine: the door drawn, whether it is public, its address, Expose / Close, then what a sandbox's card
+## has (state, sessions, actions, tunnel and ports).
+func _online_card(sb: Dictionary, r: Dictionary) -> Control:
+	var sbid := str(sb["id"])
+	var on: Dictionary = sb.get("online") if sb.get("online") is Dictionary else {}
+	var exposed := bool(on.get("exposed", false))
+	var box := VBoxContainer.new()
+	box.name = "Online_" + sbid
+	box.add_theme_constant_override("separation", 6)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 12)
+	box.add_child(top)
+	var n := Label.new()
+	n.text = "⬡ " + str(on.get("name", sbid))
+	n.add_theme_font_size_override("font_size", 17)
+	n.add_theme_font_override("font", AmTheme.ui_font(650))
+	top.add_child(n)
+	var badge := Label.new()
+	badge.text = "PUBLIC" if exposed else "PRIVATE"
+	badge.add_theme_color_override("font_color", AmTheme.col("WARN") if exposed else AmTheme.col("FAINT"))
+	badge.add_theme_font_override("font", AmTheme.ui_font(650))
+	top.add_child(badge)
+	if exposed:
+		var url := str(on.get("url", ""))
+		top.add_child(_small(url + "  ↗", func() -> void: OS.shell_open(url), "Opens it in your browser"))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = SIZE_EXPAND_FILL
+	top.add_child(spacer)
+	if exposed:
+		top.add_child(_small("Close to the internet", func() -> void:
+			var d := await engine.call_api("POST", "/sandboxes/%s/unexpose" % sbid, {}, true, 120.0)
+			_toast(str(d.get("error", "Closed: nothing of it is reachable from the internet any more")))
+			await _load_sandboxes(), "Gives its public addresses back. The machine, its service and its data stay."))
+	else:
+		top.add_child(_small("Expose to the internet…", func() -> void:
+			_confirm("Expose « %s » to the internet?
+
+Anyone will reach https://%s.fly.dev, which goes to port %d inside the machine. Only that port: SSH and everything on 127.0.0.1 stay private.
+The service there sees the machine's files: make sure it shows only what it should.
+
+Two public addresses are given (IPv6 and a shared IPv4, both free). Close it again at any time." % [
+				on.get("name", sbid), sb["app"], int(on.get("port", 0))], func() -> void:
+				var d := await engine.call_api("POST", "/sandboxes/%s/expose" % sbid, {"confirmed": true}, true, 180.0)
+				_toast(str(d.get("error", "Public: " + str(d.get("url", "")))))
+				await _load_sandboxes()), "Gives it public addresses, on your confirmation"))
+	box.add_child(OnlineWidgets.Door.new(exposed, int(on.get("port", 8080)), str(sb["app"])))
+	box.add_child(_muted("volume %d GB (≈ $%.2f a month) · port %d inside · app %s" % [int(on.get("volume_gb", 0)), float(on.get("volume_month", 0)), int(on.get("port", 0)), sb["app"]]))
+	box.add_child(_sandbox_card(sb, r))
+	return box
 
 
 ## Loop 40: every session on this machine (owner, 2026-11-14: « ouvrir plusieurs sessions SSH sur la même VM
@@ -5473,6 +5665,7 @@ func open_palette() -> void:
 	items.append({"label": "Agent permissions", "hint": "every agent: level, file access, Claude Code's sandbox, git rights", "run": set_view.bind("permissions")})
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
 	items.append({"label": "Sandboxes", "hint": "cloud sandboxes: manager, connections, costs", "run": set_view.bind("sandboxes")})
+	items.append({"label": "Online", "hint": "machines for services on the internet: 443 public, the rest private", "run": set_view.bind("online")})
 	items.append({"label": "Dictate (hold %s)" % key_text("dictate"), "hint": "what you say is put together in the box; Enter there sends it all", "run": func() -> void: _toast("Hold %s and speak. Release, read it in the box, then Enter sends it all" % key_text("dictate"))})
 	items.append({"label": "Voice command (hold %s)" % key_text("command"), "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold %s and say a command" % key_text("command"))})
 	items.append({"label": "Shortcuts", "hint": "change the keyboard shortcuts", "run": set_view.bind("shortcuts")})

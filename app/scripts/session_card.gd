@@ -82,7 +82,7 @@ func setup(s: Dictionary, selected: bool, activity: Array, line := false) -> voi
 	var top := HBoxContainer.new()
 	top.mouse_filter = MOUSE_FILTER_IGNORE
 	v.add_child(top)
-	var name := _label(("☁ " if str(s.get("host", "")) == "sandbox" else "") + str(s["name"]), AmTheme.col("TEXT"), 14, 600)
+	var name := _label(_cloud(s) + str(s["name"]), AmTheme.col("TEXT"), 14, 600)
 	name.size_flags_horizontal = SIZE_EXPAND_FILL
 	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	top.add_child(name)
@@ -175,7 +175,7 @@ func _setup_line(s: Dictionary, selected: bool, activity: Array) -> void:
 	glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	h.add_child(glyph)
 	var quiet := act in ["exited", "missing", "archived"] or str(s.get("state", "")) in ["exited", "missing"]
-	var name := _label(("☁ " if str(s.get("host", "")) == "sandbox" else "") + str(s["name"]), AmTheme.col("MUTED") if quiet else AmTheme.col("TEXT"), 13, 600 if selected or attention else 400)
+	var name := _label(_cloud(s) + str(s["name"]), AmTheme.col("MUTED") if quiet else AmTheme.col("TEXT"), 13, 600 if selected or attention else 400)
 	name.size_flags_horizontal = SIZE_EXPAND_FILL
 	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name.custom_minimum_size = Vector2(10, 0)
@@ -340,3 +340,11 @@ static func _ago(t: float) -> String:
 	if d < 86400:
 		return "%d h" % (d / 3600)
 	return "%d d" % (d / 86400)
+
+
+## ☁ a session in a cloud sandbox, ⬡ one on an Online machine (Loop 41), nothing on this computer.
+static func _cloud(s: Dictionary) -> String:
+	if str(s.get("host", "")) != "sandbox":
+		return ""
+	var sb = s.get("sandbox")
+	return "⬡ " if sb is Dictionary and str(sb.get("kind", "")) == "online" else "☁ "
