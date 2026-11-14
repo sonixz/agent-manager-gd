@@ -213,16 +213,20 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
         # tmux in the sandbox passes a program's « copy to clipboard » (OSC 52) on to Agent Manager's terminal
         subprocess.run(base + ["root@127.0.0.1", "printf '%s\\n' " + " ".join(f"'{line}'" for line in TMUX_CLIPBOARD)
                                + " > /root/.tmux.conf; tmux source-file /root/.tmux.conf 2>/dev/null; true"], capture_output=True, timeout=60)
+        # the machine's secrets first: the setup starts the first session's tool, which must find them (live test of
+        # 2026-11-14: written after the setup, the first session had none in its environment)
+        give_secrets(sbs, sb, store, keys, base)
         if subprocess.run(base + ["root@127.0.0.1", "test -e /root/.agmgd/ready"], capture_output=True, timeout=60).returncode != 0:
             say("first start: setting up the sandbox…")
             setup(sbs, sb, rec, keys, base, store)
             sb = sbs.get(sbid)  # the setup chose its working folder
-        give_secrets(sbs, sb, store, keys, base)
         if sb.get("kind") == "online":
             guide = online_guide(int(sb.get("port") or 0), sb["app"])
             subprocess.run(base + ["root@127.0.0.1", "mkdir -p /root/.claude /root/.codex && cat > /root/.claude/CLAUDE.md && "
                                    "cp /root/.claude/CLAUDE.md /root/.codex/AGENTS.md"], input=guide, text=True, capture_output=True, timeout=60)
-        remote = "cd " + sb["workdir"] + " 2>/dev/null; tmux new -A -s am"
+        # the first session's tmux, found again; started again with its tool and its secrets when it was gone (before,
+        # `tmux new -A` opened a bare shell then, without them)
+        remote = seat_command("am", sb["workdir"], AGENT_CMD.get(rec.get("tool", "shell"), "bash -l"))
         if not seat["first"]:
             mine = store.get(sid) or {}
             workdir = sb["workdir"]
