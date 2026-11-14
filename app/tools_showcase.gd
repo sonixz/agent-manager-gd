@@ -1463,6 +1463,18 @@ for i in range(600):
 			await wait(1.0)
 			report.append("experts: a skill read: %s" % (main.exp_reader != null and main.exp_reader.visible))
 			main.exp_reader.hide()
+		"machine-request":  # Loop 46: an agent asks for a cloud machine; the owner decides in « They wait for you »
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
+			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
+			var lead: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "loop0", "tool": "shell", "cwd": "~", "group": "Orbit API"})
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), OS.get_environment("AGMGD_HOME"), str(a["id"]), str(b["id"])], [])
+			var req: Dictionary = await main.engine.call_api("POST", "/sessions/%s/machine-requests" % lead["id"], {"kind": "create",
+				"params": {"kind": "online", "online_name": "loop0", "name": "loop0", "port": 8080, "tool": "claude"}})
+			await main.refresh()
+			await wait(2.5)
+			var yes: Node = main.find_child("MachineApprove", true, false)
+			report.append("machine-request: asked: %s · in the queue with Approve: %s" % [str(req.get("what", req.get("error", ""))).left(120), yes != null])
+			await shot("machine-request")
 		"smooth":  # is the app still fluid: frame times on each page, what a few clicks leave behind (nodes, reload loops), with a running sandbox connected and a dashboard in it
 			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "shell", "cwd": "~", "group": "Orbit API", "brain": false})
 			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})

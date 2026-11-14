@@ -53,6 +53,21 @@ AGENT_CMD = {"claude": "claude --mcp-config /root/.agmgd/mcp.json", "codex": "co
 SOURCE_SECRETS = "[ -f /root/.agmgd/secrets ] && . /root/.agmgd/secrets"   # Loop 43: the machine's secrets, if any
 
 
+def agent_command(rec: dict, exposed: bool = False) -> str:
+    """The tool's command in the machine. A session an agent started (Loop 46) gets its level, which is never more than
+    its parent's, and on an exposed machine it only reads (Claude Code's plan mode, Codex's read-only sandbox). The
+    owner's own sessions run as before: the tool's own defaults, which ask."""
+    tool = rec.get("tool", "shell")
+    base = AGENT_CMD.get(tool, "bash -l")
+    if tool not in ("claude", "codex") or not rec.get("parent"):
+        return base
+    if exposed:
+        return base + (" --permission-mode plan" if tool == "claude" else " -a never -s read-only")
+    from engine.sessions import LEVEL_FLAGS
+    flags = LEVEL_FLAGS[tool].get(rec.get("level") or "ask") or []
+    return base + "".join(" " + f for f in flags)   # constants of ours: no quoting (the setup wraps it in quotes)
+
+
 def secrets_text(values: dict) -> str:
     """The machine's secrets file: one `export NAME='value'` per secret, quoted for the shell whatever it holds."""
     import shlex
@@ -227,7 +242,7 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
                                    "cp /root/.claude/CLAUDE.md /root/.codex/AGENTS.md"], input=guide, text=True, capture_output=True, timeout=60)
         # the first session's tmux, found again; started again with its tool and its secrets when it was gone (before,
         # `tmux new -A` opened a bare shell then, without them)
-        remote = seat_command("am", sb["workdir"], AGENT_CMD.get(rec.get("tool", "shell"), "bash -l"))
+        remote = seat_command("am", sb["workdir"], agent_command(rec, bool(sb.get("exposed"))))
         if not seat["first"]:
             mine = store.get(sid) or {}
             workdir = sb["workdir"]
@@ -239,7 +254,7 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
                     workdir = path
                 else:
                     say("its own worktree could not be made: it works in the sandbox's folder")
-            remote = seat_command(seat["tmux"], workdir, AGENT_CMD.get(mine.get("tool", "shell"), "bash -l"))
+            remote = seat_command(seat["tmux"], workdir, agent_command(mine, bool(sb.get("exposed"))))
         # The way back to the Second Brain lands on a relay of this terminal that lets through only the Brain's
         # route and the health, request by request; the rest of the engine is not reachable from the sandbox. When
         # the sandbox's lasting connection holds that port already, this one is not needed and fails quietly.
@@ -359,7 +374,7 @@ def setup(sbs, sb, rec, keys, base, store) -> None:
     else:
         subprocess.run(base + ["root@127.0.0.1", f"mkdir -p {workdir}"], timeout=60)
     sbs._set(sb["id"], workdir=workdir)
-    agent = AGENT_CMD.get(rec.get("tool", "shell"), "bash -l")
+    agent = agent_command(rec, bool(sb.get("exposed")))   # Loop 46: a child of an agent gets its level
     start = (f"tmux has-session -t am 2>/dev/null || tmux new -d -s am -c {workdir} "
              f"\"bash -lc '. /root/.agmgd/env; {SOURCE_SECRETS}; {agent}; exec bash -l'\"; touch /root/.agmgd/ready")
     subprocess.run(base + ["root@127.0.0.1", start], timeout=60)

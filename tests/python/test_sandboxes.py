@@ -633,6 +633,120 @@ class SandboxesTest(unittest.TestCase):
         self.s.sandboxes.set_config("image_version", "1")
         self.assertTrue(self.s.sandboxes.image_info()["outdated"])
 
+    def _lead(self, level="auto"):
+        work = os.path.join(self.tmp, "lead")
+        os.makedirs(work, exist_ok=True)
+        d = self.s.create("Lead", "shell", work, brain=False)
+        self.s.store.update(d["id"], level=level)
+        return d["id"]
+
+    def _settle(self, rid, timeout=10):
+        import time as _t
+        end = _t.time() + timeout
+        while _t.time() < end:
+            r = self.s.machine_requests.get(rid)
+            if r["status"] in ("done", "failed", "refused"):
+                return r
+            _t.sleep(0.1)
+        return self.s.machine_requests.get(rid)
+
+    def test_an_agent_asks_for_a_machine_and_the_owner_decides(self):
+        """Loop 46: creating costs money: asked by the agent, decided by the owner in the app, done by the engine."""
+        self.s.sandboxes.prepare()
+        lead = self._lead(level="edits")
+        runs = len([c for c in self.fly.calls if c[:2] == ("machine", "run")])
+        req = self.s.machine_request(lead, "create", {"kind": "sandbox", "name": "Builder", "tool": "claude"})
+        self.assertEqual(req["status"], "pending")
+        self.assertIn("create a private cloud sandbox", req["what"])
+        self.assertEqual(len([c for c in self.fly.calls if c[:2] == ("machine", "run")]), runs)   # nothing yet
+        d = self.s.get(lead)
+        self.assertEqual((d["activity"], d["machine_request"]["id"]), ("waiting", req["id"]))       # in « They wait for you »
+        self.s.decide_machine_request(req["id"], False)
+        self.assertEqual(self.s.machine_requests.get(req["id"])["status"], "refused")
+        with self.assertRaises(ValueError):
+            self.s.decide_machine_request(req["id"], True)                     # answered once
+        req = self.s.machine_request(lead, "create", {"kind": "sandbox", "name": "Builder", "tool": "claude"})
+        self.s.decide_machine_request(req["id"], True)
+        done = self._settle(req["id"])
+        self.assertEqual(done["status"], "done", done["result"])
+        child = self.s.store.get(done["result"]["session"])
+        self.assertEqual((child["parent"], child["level"]), (lead, "edits"))  # its child, never above it
+        mine = {m["id"]: m for m in self.s.agent_machines(lead)}
+        self.assertTrue(mine[done["result"]["sandbox"]]["yours"])
+        owners = self.s.create("Owner's", "shell", "", host="sandbox")                 # the owner's own machine
+        self.assertFalse({m["id"]: m for m in self.s.agent_machines(lead)}[self.s.sandboxes.by_session(owners["id"])["id"]]["yours"])
+        with self.assertRaises(PermissionError):
+            self.s.agent_machine_action(lead, self.s.sandboxes.by_session(owners["id"])["id"], "stop")
+        self.s.agent_machine_action(lead, done["result"]["sandbox"], "stop")     # its own: at once
+        self.assertIn(("machine", "stop"), [c[:2] for c in self.fly.calls])
+
+    def test_caps_secrets_and_what_only_an_online_machine_can_do(self):
+        self.s.sandboxes.prepare()
+        lead = self._lead()
+        self.s.vault.set("HELD", "v", "")
+        self.s.vault.set("NOT_HELD", "v", "")
+        self.s.set_secrets(lead, ["HELD"])
+        with self.assertRaises(ValueError):                                    # never a secret it does not hold
+            self.s.machine_request(lead, "create", {"kind": "sandbox", "secrets": ["NOT_HELD"]})
+        with self.assertRaises(ValueError):
+            self.s.machine_request(lead, "create", {"kind": "online"})       # an Online machine needs its name
+        a = self.s.machine_request(lead, "create", {"kind": "online", "online_name": "shop", "port": 3000, "secrets": ["HELD"]})
+        self.s.machine_request(lead, "create", {"kind": "sandbox"})
+        with self.assertRaises(ValueError):                                    # two per root session, waiting ones counted
+            self.s.machine_request(lead, "create", {"kind": "sandbox"})
+        self.s.decide_machine_request(a["id"], True)
+        done = self._settle(a["id"])
+        self.assertEqual(done["status"], "done", done["result"])
+        sbid = done["result"]["sandbox"]
+        self.assertEqual(self.s.sandboxes.get(sbid)["kind"], "online")
+        self.assertEqual(self.s.secrets_of(done["result"]["session"]), ["HELD"])
+        ex = self.s.machine_request(lead, "expose", {"sandbox": sbid})
+        self.assertIn("https://", ex["what"])
+        self.assertFalse(self.fly.ips)                                          # asked, not done
+        self.s.decide_machine_request(ex["id"], True)
+        self.assertEqual(self._settle(ex["id"])["status"], "done")
+        self.assertTrue(self.fly.ips)
+        self.s.agent_machine_action(lead, sbid, "unexpose")                     # closing: at once
+        self.assertEqual(self.fly.ips, [])
+        de = self.s.machine_request(lead, "destroy", {"sandbox": sbid})
+        self.s.decide_machine_request(de["id"], True)
+        self.assertEqual(self._settle(de["id"])["status"], "done")
+        self.assertTrue(self.s.sandboxes.get(sbid)["destroyed"])
+
+    def test_a_childs_tool_in_the_machine_gets_its_level_and_only_reads_when_exposed(self):
+        from engine.sandbox_attach import agent_command
+        self.assertEqual(agent_command({"tool": "claude"}), "claude --mcp-config /root/.agmgd/mcp.json")       # the owner's: unchanged
+        self.assertEqual(agent_command({"tool": "claude", "parent": "p", "level": "edits"}),
+                         "claude --mcp-config /root/.agmgd/mcp.json --permission-mode acceptEdits")
+        self.assertIn("--permission-mode plan", agent_command({"tool": "claude", "parent": "p", "level": "full"}, exposed=True))
+        self.assertIn("-s read-only", agent_command({"tool": "codex", "parent": "p", "level": "auto"}, exposed=True))
+        self.assertEqual(agent_command({"tool": "shell", "parent": "p"}), "bash -l")
+
+    def test_the_machine_tools_wait_for_the_owners_answer(self):
+        from engine import mcp_agents as m
+        answers = iter([{"id": "r1", "status": "pending"}, {"id": "r1", "status": "running"}, {"id": "r1", "status": "done", "result": {"sandbox": "s1"}}])
+        calls = []
+
+        class Eng:
+            me = "lead"
+
+            def call(self, method, path, body=None):
+                calls.append((method, path, body))
+                return next(answers)
+        real = m.time.sleep
+        m.time.sleep = lambda s: None
+        try:
+            out = m.run_tool(Eng(), "create_machine", {"kind": "sandbox", "name": "B", "secrets": ["HELD"]})
+        finally:
+            m.time.sleep = real
+        self.assertEqual(out["status"], "done")
+        self.assertEqual(calls[0][1], "/sessions/lead/machine-requests")
+        self.assertEqual(calls[0][2]["params"]["secrets"], ["HELD"])
+        names = [t["name"] for t in m.TOOLS]
+        for t in ("list_machines", "create_machine", "machine_status", "stop_machine", "start_machine", "destroy_machine",
+                  "expose_machine", "unexpose_machine"):
+            self.assertIn(t, names)
+
     def test_the_owner_routes_answer_over_http(self):
         """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
         tok = load_token(self.tmp)

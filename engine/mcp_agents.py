@@ -37,6 +37,28 @@ TOOLS = [
                      "sandbox": {"type": "string", "description": "a cloud sandbox's id (list_sessions shows each session's): the session runs on that machine, beside its other sessions, in its own git worktree; never a new machine"}}, "required": ["name", "tool"]}},
     {"name": "list_experts", "description": "The experts the owner made (Loop 45): name, title, what they know (their skills), the tool by default, the secrets they need. start_session with expert: <name> starts one.",
      "inputSchema": {"type": "object", "properties": {}}},
+    # Loop 46: cloud machines. Creating, destroying and exposing are asked: the owner approves in the app.
+    {"name": "list_machines", "description": "Every cloud machine (private sandboxes and Online machines): state, size, sessions on it, whether it is exposed and its address, and « yours » when you may act on it. No secret.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "create_machine", "description": "Asks the owner for a new cloud machine (it costs money): kind sandbox (private) or online (one public door, 443 → port, once exposed). Waits for the owner's answer (up to timeout_s), then returns the machine and its first session (your child: write to it, read its screen like any session).",
+     "inputSchema": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["sandbox", "online"]},
+                     "name": {"type": "string", "description": "the first session's name"}, "tool": {"type": "string", "enum": ["claude", "codex", "shell"]},
+                     "repo": {"type": "string", "description": "a connected repository's id: cloned on the machine"},
+                     "size": {"type": "string", "description": "e.g. shared-cpu-1x-1024 (the owner's default if not said)"},
+                     "online_name": {"type": "string", "description": "online only: its name in its address, lowercase"},
+                     "port": {"type": "integer", "description": "online only: the port the service listens on inside"},
+                     "volume_gb": {"type": "integer"}, "expert": {"type": "string"},
+                     "secrets": {"type": "array", "items": {"type": "string"}, "description": "names of secrets your session holds; never values"},
+                     "timeout_s": {"type": "integer", "minimum": 10, "maximum": 900}}, "required": ["kind"]}},
+    {"name": "machine_status", "description": "One machine as list_machines shows it, or a request's answer (request: its id).",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "request": {"type": "string"}}}},
+    {"name": "stop_machine", "description": "Pauses one of YOUR machines (only its disk is billed).", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+    {"name": "start_machine", "description": "Starts one of YOUR paused machines again (within the owner's monthly budget).", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+    {"name": "destroy_machine", "description": "Asks the owner to destroy one of YOUR machines (its files are lost). Waits for the answer (up to timeout_s).",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "timeout_s": {"type": "integer", "minimum": 10, "maximum": 900}}, "required": ["id"]}},
+    {"name": "expose_machine", "description": "Asks the owner to expose one of YOUR Online machines to the internet (https://<its app>.fly.dev → its port). Waits for the answer. Test it first on the owner's localhost (Tunnel and ports).",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "timeout_s": {"type": "integer", "minimum": 10, "maximum": 900}}, "required": ["id"]}},
+    {"name": "unexpose_machine", "description": "Closes one of YOUR Online machines to the internet at once (gives its addresses back).", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
     {"name": "send_to_session", "description": "Types a message into one of YOUR child sessions and presses Enter.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]}},
     {"name": "wait_for_session", "description": "Waits until a session stops working (done, waiting for an answer or an OK, ended), then returns its state and screen.",
@@ -103,6 +125,41 @@ class Engine:
         return out
 
 
+def _wait_request(eng, req: dict, timeout_s: int) -> dict:
+    """Until the owner answers (approved and done, refused, or failed), or the time is up: then its id, to ask again."""
+    if "error" in req:
+        return req
+    end = time.time() + min(900, max(10, int(timeout_s or 300)))
+    while time.time() < end:
+        r = eng.call("GET", f"/machine-requests/{req['id']}")
+        if "error" in r or r.get("status") in ("done", "refused", "failed"):
+            return r
+        time.sleep(3)
+    return {"id": req["id"], "status": "pending", "note": "the owner has not answered yet: machine_status with request: this id"}
+
+
+def machine_tool(eng, name, a):
+    me = eng.me
+    if not me:
+        return {"error": "only a session of Agent Manager can use cloud machines"}
+    if name == "list_machines":
+        return eng.call("GET", f"/sessions/{me}/machines")
+    if name == "machine_status":
+        if a.get("request"):
+            return eng.call("GET", f"/machine-requests/{a['request']}")
+        r = eng.call("GET", f"/sessions/{me}/machines")
+        return r if "error" in r else next((m for m in r["machines"] if m["id"] == str(a.get("id", ""))), {"error": "no such machine"})
+    if name in ("stop_machine", "start_machine", "unexpose_machine"):
+        return eng.call("POST", f"/sessions/{me}/machines/{a.get('id', '')}/{name.split('_')[0]}", {})
+    if name == "create_machine":
+        params = {k: a[k] for k in ("kind", "name", "tool", "repo", "size", "online_name", "port", "volume_gb", "expert", "secrets") if k in a}
+        req = eng.call("POST", f"/sessions/{me}/machine-requests", {"kind": "create", "params": params})
+        return _wait_request(eng, req, a.get("timeout_s", 300))
+    kind = {"destroy_machine": "destroy", "expose_machine": "expose"}[name]
+    req = eng.call("POST", f"/sessions/{me}/machine-requests", {"kind": kind, "params": {"sandbox": str(a.get("id", ""))}})
+    return _wait_request(eng, req, a.get("timeout_s", 300))
+
+
 def run_tool(eng, name, a):
     if name == "list_sessions":
         r = eng.call("GET", "/sessions")
@@ -129,6 +186,9 @@ def run_tool(eng, name, a):
             body.update(host="sandbox", sandbox=str(a["sandbox"]))
         r = eng.call("POST", "/sessions", body)
         return r if "error" in r else eng.brief(r)
+    if name in ("list_machines", "create_machine", "machine_status", "stop_machine", "start_machine", "destroy_machine",
+                "expose_machine", "unexpose_machine"):
+        return machine_tool(eng, name, a)
     if name == "list_experts":
         r = eng.call("GET", "/experts")
         return r if "error" in r else {"experts": [{"name": e["name"], "title": e.get("title", ""), "tool": e.get("tool", ""),

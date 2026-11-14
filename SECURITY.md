@@ -37,6 +37,12 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   masks the token), add a repository's deploy key and create a repository (private unless you choose public). It
   never reads gh's token, never passes one to gh (a `GH_TOKEN` in its environment is removed), and never changes an
   existing repository's visibility. Logging in and out happen in a terminal you see.
+- **Agents and cloud machines**: through Agent Manager's MCP server an agent can only *ask* for a machine, its
+  destruction or its exposure: the request waits in « They wait for you » and the engine does it only on your
+  approval. It acts at once only on its own machines (pause, start within the budget, close to the internet), at most
+  two per root session; a session it starts in a machine never gets more than its own level, and only reads on an
+  exposed machine; it can pass only secrets its own session holds, by name. Like every agent tool, this is enforced by
+  the engine behind the MCP server; a program that reads the engine's token on this computer is not stopped by it.
 - **Online machines (the only public door)**: a machine of ⬡ Online is made private, in its own Fly.io app. It gets a
   public address only when you click *Expose to the internet* and confirm; then `https://<its app>.fly.dev` reaches
   one port inside it (443, HTTPS with Fly.io's certificate; no plain HTTP), and nothing else: its SSH (port

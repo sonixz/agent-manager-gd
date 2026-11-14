@@ -415,6 +415,18 @@ def make_handler(sessions: Sessions, token: str):
                                                             str(b.get("access", "")), b.get("extra_dirs") or [],
                                                             bool(b.get("os_sandbox", False)), b.get("secrets") or [],
                                                             str(b.get("sandbox", "")), str(b.get("expert", ""))))
+                # Loop 46: agents and cloud machines; what costs or faces the internet waits for the owner
+                if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "machines" and method == "GET":
+                    return self._reply(200, {"machines": sessions.agent_machines(parts[1])})
+                if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "machine-requests" and method == "POST":
+                    b = self._body()
+                    return self._reply(201, sessions.machine_request(parts[1], str(b.get("kind", "")), b.get("params") or {}))
+                if len(parts) == 5 and parts[0] == "sessions" and parts[2] == "machines" and method == "POST":
+                    return self._reply(200, sessions.agent_machine_action(parts[1], parts[3], parts[4]))
+                if len(parts) == 2 and parts[0] == "machine-requests" and method == "GET":
+                    return self._reply(200, sessions.machine_requests.get(parts[1]))
+                if len(parts) == 3 and parts[0] == "machine-requests" and parts[2] == "decide" and method == "POST":
+                    return self._reply(200, sessions.decide_machine_request(parts[1], bool(self._body().get("approve", False))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
@@ -514,6 +526,8 @@ def make_handler(sessions: Sessions, token: str):
                 return self._reply(404, {"error": "not found"})
             except KeyError:
                 return self._reply(404, {"error": "no such session"})
+            except PermissionError as e:   # Loop 46: not one of the agent's machines
+                return self._reply(403, {"error": str(e)})
             except (ValueError, json.JSONDecodeError) as e:
                 return self._reply(400, {"error": str(e)})
             except RuntimeError as e:

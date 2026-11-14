@@ -174,6 +174,8 @@ class Sessions:
         self.repos = Repos(store.path, self.home)
         from .experts import Experts
         self.experts = Experts(self.home)   # Loop 44: skills and the experts made of them
+        from .machine_requests import Requests
+        self.machine_requests = Requests(store.path)   # Loop 46: what agents ask for cloud machines
         from .gh import GitHub
         self.github = GitHub()   # Loop 42: the owner's own gh, under Repos; its token is never read
         self.keys_store = Keys(self.home)
@@ -909,6 +911,12 @@ class Sessions:
                 self._conv_seen[key] = now
                 self.store.touch_conversation(rec["id"], rec["tool"], hs["conversation"])
         activity, message = self.activity(rec, t, hs) if state == "running" else (state, "")
+        asks = next((r for r in self._pending_machine_requests() if r["sid"] == rec["id"]), None)
+        machine_request = None
+        if asks and state == "running":   # Loop 46: it waits for the owner's answer to a machine request
+            from .machine_requests import describe as _say
+            machine_request = {"id": asks["id"], "kind": asks["kind"], "what": _say(asks)}
+            activity, message = "waiting", "asks you to " + machine_request["what"]
         if rec.get("archived"):
             state, activity = "archived", "archived"
         elif rec["id"] in self._wrapping and state == "running":
@@ -939,6 +947,7 @@ class Sessions:
                 "host": "sandbox" if sb_info else "local",
                 "sandbox": {k: sb_info[k] for k in ("id", "region", "finished", "destroyed", "machine", "first", "kind")} if sb_info else None,
                 "branch": self.branch(rec["cwd"]),
+                "machine_request": machine_request,
                 "tmux": self.tmux_name(rec["id"]), "attached": bool(t and t.attached),
                 "command": t.pane_command if t else ""}
 
@@ -1245,18 +1254,20 @@ class Sessions:
             threading.Thread(target=close, daemon=True).start()
 
     def create_sandbox_session(self, name: str, tool: str, grp: str, repo: str, brain: bool, on: str = "", parent: str = "",
-                               secrets: list | None = None, expert: str = "") -> dict:
+                               secrets: list | None = None, expert: str = "", size: str = "") -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
             raise ValueError("a name of 1 to 60 characters")
         if on:  # Loop 40: one more session on a sandbox that is there already: no new machine
             return self._add_to_sandbox(on, name.strip(), tool, grp, parent, secrets=secrets, expert=expert)
-        rec = self.store.add(name.strip(), tool, "/work", grp, repo_id=repo)
-        # what the machine gets at its first connection: written before the terminal starts (Loops 43, 45)
-        self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert)
+        rec = self.store.add(name.strip(), tool, "/work", grp, repo_id=repo, parent=parent)
+        # what the machine gets at its first connection: written before the terminal starts (Loops 43, 45); a child of an
+        # agent never more than its parent (Loop 46: its level is passed to the tool in the machine)
+        self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert,
+                          **({"level": self.level_for("", grp, parent)} if parent else {}))
         try:
-            sb = self.sandboxes.create(rec["id"], repo_id=repo)
+            sb = self.sandboxes.create(rec["id"], size=size, repo_id=repo)
         except Exception:
             self.store.delete(rec["id"])
             raise
@@ -1270,7 +1281,8 @@ class Sessions:
         return self.get(rec["id"])
 
     def create_online_session(self, name: str, tool: str, grp: str, port: int, volume_gb: int = 1, size: str = "",
-                              repo: str = "", brain: bool = True, secrets: list | None = None, expert: str = "") -> dict:
+                              repo: str = "", brain: bool = True, secrets: list | None = None, expert: str = "",
+                              parent: str = "") -> dict:
         """Loop 41: an Online machine (its own Fly app, a volume, 443 toward `port` once exposed) and its first
         session, the one that works on the service. Private until the owner exposes it."""
         if tool not in TOOLS:
@@ -1281,8 +1293,8 @@ class Sessions:
             if missing:
                 raise ValueError("add these secrets in Keys › Secrets first: " + ", ".join(missing))
             secrets = list(dict.fromkeys(list(secrets or []) + e["secrets"]))
-        rec = self.store.add(name[:60], tool, "/work", grp or "Online", repo_id=repo)
-        self.store.update(rec["id"], expert=expert)
+        rec = self.store.add(name[:60], tool, "/work", grp or "Online", repo_id=repo, parent=parent)
+        self.store.update(rec["id"], expert=expert, **({"level": self.level_for("", grp, parent)} if parent else {}))
         if secrets:   # Loop 43: written before its terminal first connects, so the machine has them from the start
             self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets)))
         try:
@@ -1298,6 +1310,159 @@ class Sessions:
         self.tmux.new_session(self.tmux_name(rec["id"]), self.home, [sys.executable or "python3", SANDBOX_ATTACH, sb["id"]],
                               env=self.session_env(rec["id"]))
         return self.get(rec["id"])
+
+    # ---------------------------------------------------------------- agents and cloud machines (Loop 46)
+    def machine_owner_root(self, sb: dict) -> str:
+        """The root session a machine belongs to: its first session's root (the owner's own machines: that session)."""
+        return self.root_of(sb["session_id"]) if sb.get("session_id") else ""
+
+    def agent_machines(self, sid: str) -> list[dict]:
+        """Every live machine, as an agent sees it: no secret, and « yours » when it may act on it."""
+        root = self.root_of(sid)
+        out = []
+        for row in self.sandboxes.overview()["sandboxes"]:
+            if row["destroyed"]:
+                continue
+            on = row.get("online") or {}
+            out.append({"id": row["id"], "kind": row.get("kind", "sandbox"), "state": row["state"], "size": row["size"],
+                        "region": row["region"], "sessions": row.get("sessions", []), "repo": self._repo_name(row.get("repo_id", "")),
+                        "yours": False, "exposed": bool(on.get("exposed")), "url": on.get("url", ""), "port": on.get("port", 0),
+                        "cost_today": row.get("cost_today", 0.0)})
+        for m in out:   # an agent's own machines: their first session descends from its root (never the owner's own)
+            sb = self.sandboxes.get(m["id"])
+            first = self.store.get(sb["session_id"]) or {}
+            m["yours"] = bool(first.get("parent")) and self.root_of(sb["session_id"]) == root
+        return out
+
+    _mr_cache: tuple = (0.0, [])
+
+    def _pending_machine_requests(self) -> list[dict]:
+        """Read at most once a second (the list describes every session every 2 seconds)."""
+        now = time.monotonic()
+        if now - self._mr_cache[0] > 1.0:
+            self._mr_cache = (now, self.machine_requests.pending())
+        return self._mr_cache[1]
+
+    def _own_machine(self, sid: str, sbid: str) -> dict:
+        sb = self.sandboxes.get(sbid)
+        first = self.store.get(sb["session_id"]) or {}
+        if sb["destroyed"] or not first.get("parent") or self.root_of(sb["session_id"]) != self.root_of(sid):
+            raise PermissionError("not one of your machines: only machines your session (or its root) asked for")
+        return sb
+
+    def machine_request(self, sid: str, kind: str, params: dict) -> dict:
+        """An agent asks; the owner decides in the app. Checked now: what it asks for is possible and within caps."""
+        from .machine_requests import KINDS, MAX_PER_ROOT
+        from .sandboxes import PRICES, DEFAULT_SIZE
+        if kind not in KINDS:
+            raise ValueError("create, destroy or expose")
+        if not self.store.get(sid):
+            raise KeyError(sid)
+        p: dict = {}
+        if kind == "create":
+            root = self.root_of(sid)
+            mine = [m for m in self.agent_machines(sid) if m["yours"]]
+            waiting = [r for r in self.machine_requests.pending() if r["kind"] == "create" and self.root_of(r["sid"]) == root]
+            if len(mine) + len(waiting) >= MAX_PER_ROOT:
+                raise ValueError(f"at most {MAX_PER_ROOT} machines per root session (with the requests waiting)")
+            mk = str(params.get("kind", "sandbox"))
+            if mk not in ("sandbox", "online"):
+                raise ValueError("kind: sandbox (private) or online (can face the internet once exposed)")
+            tool = str(params.get("tool", "shell"))
+            if tool not in TOOLS:
+                raise ValueError(f"unknown tool: {tool}")
+            size = str(params.get("size") or self.sandboxes.config("size", DEFAULT_SIZE))
+            if size not in PRICES:
+                raise ValueError("a size of: " + ", ".join(PRICES))
+            if not self.sandboxes.status()["ready"]:
+                raise ValueError("cloud machines are not prepared (the owner builds the image in Sandboxes)")
+            repo = str(params.get("repo", ""))
+            repo_name = self._repo_name(repo) if repo else ""
+            if repo and not repo_name:
+                raise ValueError(f"no connected repository {repo}")
+            held = self.secrets_of(sid)
+            want = [str(x) for x in params.get("secrets") or []]
+            expert = str(params.get("expert", ""))
+            if expert:
+                want = list(dict.fromkeys(want + self.experts.expert(expert)["secrets"]))
+            beyond = [n for n in want if n not in held]
+            if beyond:   # an agent never gets a secret it does not hold already
+                raise ValueError("secrets your session was not given: " + ", ".join(beyond))
+            name = str(params.get("name", "") or "cloud " + mk)[:60]
+            if not NAME_OK.match(name):
+                raise ValueError("a name of 1 to 60 characters")
+            p = {"kind": mk, "name": name, "tool": tool, "size": size, "repo": repo, "repo_name": repo_name, "expert": expert,
+                 "secrets": want, "month": PRICES[size]}
+            if mk == "online":
+                p.update(online_name=str(params.get("online_name") or "")[:30], port=int(params.get("port", 8080)),
+                         volume_gb=int(params.get("volume_gb", 1)))
+                if not p["online_name"]:
+                    raise ValueError("online_name: the machine's name in its address (lowercase letters, digits, dashes)")
+        else:
+            sb = self._own_machine(sid, str(params.get("sandbox", "")))
+            if kind == "expose" and sb.get("kind") != "online":
+                raise ValueError("only an Online machine can be exposed; a sandbox stays private")
+            first = self.store.get(sb["session_id"]) or {}
+            p = {"sandbox": sb["id"], "label": first.get("name", sb["id"]), "app": sb["app"], "port": sb.get("port", 0)}
+        req = self.machine_requests.add(sid, kind, p)
+        self._mr_cache = (0.0, [])
+        from .machine_requests import describe
+        self._log(sid, {"machine_request": [req["id"], kind]})
+        return {**req, "what": describe(req)}
+
+    def decide_machine_request(self, rid: str, approve: bool) -> dict:
+        """The owner's answer (from the app). Approved, it runs aside: a machine takes up to a minute."""
+        from .machine_requests import run_later
+        req = self.machine_requests.get(rid)
+        if req["status"] != "pending":
+            raise ValueError("already answered")
+        self._mr_cache = (0.0, [])
+        if not approve:
+            self.machine_requests.set(rid, status="refused", decided=time.time())
+            return self.machine_requests.get(rid)
+        self.machine_requests.set(rid, status="running", decided=time.time())
+        run_later(lambda: self._run_machine_request(rid))
+        return self.machine_requests.get(rid)
+
+    def _run_machine_request(self, rid: str) -> None:
+        req = self.machine_requests.get(rid)
+        p, sid = req["params"], req["sid"]
+        try:
+            if req["kind"] == "create":
+                if p["kind"] == "online":
+                    # an Online machine's name is in its address: the session is named after it
+                    d = self.create_online_session(p["online_name"], p["tool"], "", int(p["port"]), int(p["volume_gb"]), p["size"],
+                                                   p.get("repo", ""), True, p.get("secrets") or [], p.get("expert", ""), parent=sid)
+                else:
+                    d = self.create_sandbox_session(p["name"], p["tool"], "", p.get("repo", ""), True, parent=sid,
+                                                    secrets=p.get("secrets") or [], expert=p.get("expert", ""), size=p["size"])
+                sb = self.sandboxes.by_session(d["id"]) or {}
+                result = {"session": d["id"], "sandbox": sb.get("id", ""), "kind": p["kind"]}
+            elif req["kind"] == "destroy":
+                on = self.sandboxes.sessions_on(p["sandbox"])
+                self.sandboxes.destroy(p["sandbox"], True, self.brain)
+                for x in on:
+                    self.tmux.kill(self.tmux_name(x))
+                result = {"destroyed": p["sandbox"]}
+            else:
+                result = self.sandboxes.expose(p["sandbox"], True)
+            self.machine_requests.set(rid, status="done", result=result)
+        except Exception as e:   # said to the agent and to the owner
+            self.machine_requests.set(rid, status="failed", result={"error": str(e)[:300]})
+
+    def agent_machine_action(self, sid: str, sbid: str, act: str) -> dict:
+        """Done at once on the agent's own machine: stop (saves money), start (within the budget), unexpose."""
+        sb = self._own_machine(sid, sbid)
+        if act == "stop":
+            self.sandboxes.stop(sb["id"])
+        elif act == "start":
+            self.sandboxes.guard_new()   # the monthly budget holds for starting again too
+            self.sandboxes.start(sb["id"])
+        elif act == "unexpose":
+            self.sandboxes.unexpose(sb["id"])
+        else:
+            raise ValueError("stop, start or unexpose")
+        return next((m for m in self.agent_machines(sid) if m["id"] == sb["id"]), {"id": sb["id"]})
 
     # ---------------------------------------------------------------- GitHub's CLI (Loop 42)
     def github_terminal(self, what: str) -> dict:
@@ -1350,7 +1515,8 @@ class Sessions:
         if parent and not self.store.get(parent):
             raise ValueError(f"unknown parent session: {parent}")
         rec = self.store.add(name, tool, "/work", grp or first.get("grp", ""), parent=parent, repo_id=sb["repo_id"])
-        self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert)
+        self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert,
+                          **({"level": self.level_for("", grp, parent)} if parent else {}))
         try:
             self.sandboxes.add_session(sbid, rec["id"], worktree=tool in ("claude", "codex"))
         except Exception:

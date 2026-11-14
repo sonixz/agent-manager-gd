@@ -419,11 +419,23 @@
           <tr><td><code>list_sessions</code></td><td>every session and its state</td><td>any session</td></tr>
           <tr><td><code>session_status</code></td><td>working, waits, asks, done</td><td>any session</td></tr>
           <tr><td><code>read_screen</code></td><td>what a terminal shows now</td><td>any session</td></tr>
+          <tr><td><code>list_machines</code></td><td>every cloud machine: state, sessions, exposed or not, « yours »</td><td>all machines</td></tr>
+          <tr><td><code>create_machine</code></td><td>asks you for a private sandbox or an Online machine (repository, size, port, expert, secrets it holds); waits for your answer; its first session is the agent's child</td><td>on your approval</td></tr>
+          <tr><td><code>destroy_machine</code>, <code>expose_machine</code></td><td>ask you to destroy one, or to expose an Online machine; wait for your answer</td><td>its own machines, on your approval</td></tr>
+          <tr><td><code>stop_machine</code>, <code>start_machine</code>, <code>unexpose_machine</code>, <code>machine_status</code></td><td>pause, start again (within the budget), close to the internet, read one machine or a request</td><td>its own machines, at once</td></tr>
           <tr><td><code>list_experts</code></td><td>the experts: what they know, the tool, the secrets they need</td><td>the owner's experts</td></tr>
           <tr><td><code>start_session</code></td><td>a child session: Claude Code, Codex or a shell; with <code>sandbox</code>, on that cloud sandbox's machine (never a new machine); with <code>expert</code>, as that expert (its secrets only if the parent holds them)</td><td>new, shown « ↳ parent »</td></tr>
           <tr><td><code>send_to_session</code></td><td>write to a session</td><td>its own children only</td></tr>
           <tr><td><code>wait_for_session</code></td><td>until a child is done or waits</td><td>its own children only</td></tr>
         </table>
+        <p><b>Cloud machines for agents.</b> What costs money or faces the internet is asked, never done, by an agent:
+          <code>create_machine</code>, <code>destroy_machine</code> and <code>expose_machine</code> put a request in
+          <b>They wait for you</b> (« loop0 · Approve… · Refuse »); the confirmation says exactly what (kind, size, the
+          monthly price while it runs, repository, port, expert, secrets). Agent Manager does it only once you approve,
+          and the agent's tool waits for your answer. An agent acts only on its own machines (their first session descends
+          from its root session), at most two per root session (requests waiting counted); a session it starts in a machine
+          gets its level, never more than its own, and only reads on an exposed machine; it can give a machine only the
+          secrets its own session holds, by name. The pause after idle time still applies to sandboxes.</p>
         <p>No tool presses keys in someone else's session: an agent never approves on another's behalf.
           <b>◐ › Connect other tools</b> gives the command to plug the same server into Claude Code, Codex or any MCP
           client outside the app; such a tool can list, read and start sessions, never type into one or approve.</p>

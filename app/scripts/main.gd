@@ -1931,7 +1931,10 @@ func _render_queue() -> void:
 			who.tooltip_text = "%s · %s%s\nClick to open it" % [x["name"], act[1], ("\n" + msg.left(300)) if msg != "" else ""]
 			who.pressed.connect(func() -> void: select(id))
 			row.add_child(who)
-			if str(x["activity"]) == "approval":
+			if x.get("machine_request") is Dictionary:   # Loop 46: a cloud machine asked for: the owner decides here
+				for b in _machine_request_buttons(x):
+					row.add_child(b)
+			elif str(x["activity"]) == "approval":
 				row.add_child(_small("Approve", func() -> void: _answer(id, ["Enter"], card, "✓  Approved · %s carries on" % x["name"]), (msg + "\n" if msg != "" else "") + "Enter: the agent's highlighted choice (Yes) · Ctrl+Shift+A"))
 				row.add_child(_small("Refuse", func() -> void: _answer(id, ["Escape"], card, "✕  Refused · %s stops this step" % x["name"]), "Escape"))
 			else:
@@ -1962,7 +1965,10 @@ func _render_queue() -> void:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 6)
 		v.add_child(h)
-		if str(x["activity"]) == "approval":
+		if x.get("machine_request") is Dictionary:
+			for b in _machine_request_buttons(x):
+				h.add_child(b)
+		elif str(x["activity"]) == "approval":
 			h.add_child(_small("Approve", func() -> void: _answer(id, ["Enter"], card, "✓  Approved · %s carries on" % x["name"]), "Enter: the agent's highlighted choice (Yes) · Ctrl+Shift+A"))
 			h.add_child(_small("Refuse", func() -> void: _answer(id, ["Escape"], card, "✕  Refused · %s stops this step" % x["name"]), "Escape"))
 		else:
@@ -1975,6 +1981,25 @@ func _render_queue() -> void:
 		more.add_theme_color_override("font_color", AmTheme.col("FAINT"))
 		more.add_theme_font_size_override("font_size", 12)
 		queue_box.add_child(more)
+
+
+## Loop 46: an agent asked for a cloud machine (create, destroy, expose). It costs money or faces the internet:
+## the owner reads what exactly, then approves (the engine does it) or refuses (the agent is told).
+func _machine_request_buttons(x: Dictionary) -> Array:
+	var mr: Dictionary = x["machine_request"]
+	var rid := str(mr.get("id", ""))
+	var what := str(mr.get("what", ""))
+	var yes := _small("Approve…", func() -> void:
+		_confirm("%s asks you to %s.\n\nApprove? Agent Manager does it now; the agent is told when it is done." % [x["name"], what], func() -> void:
+			var d := await engine.call_api("POST", "/machine-requests/%s/decide" % rid, {"approve": true}, true, 30.0)
+			_toast(str(d.get("error", "Approved: Agent Manager is doing it (about a minute)")))
+			await refresh()), "%s asks you to %s" % [x["name"], what])
+	yes.name = "MachineApprove"
+	var no := _small("Refuse", func() -> void:
+		var d := await engine.call_api("POST", "/machine-requests/%s/decide" % rid, {"approve": false}, true, 30.0)
+		_toast(str(d.get("error", "Refused: %s is told" % x["name"])))
+		await refresh(), "Nothing is made; the agent is told it was refused")
+	return [yes, no]
 
 
 func _small(text: String, cb: Callable, tip := "") -> Button:
