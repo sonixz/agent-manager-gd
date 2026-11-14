@@ -3487,7 +3487,7 @@ func _render_sandboxes(r: Dictionary) -> void:
 	if r.has("error"):
 		sbx_box.add_child(_muted(str(r["error"])))
 		return
-	var head := _wrap("Fly.io · organisation %s · region %s · one sandbox per agent session, always listed on the left · Agent Manager never destroys a sandbox on its own." % [
+	var head := _wrap("Fly.io · organisation %s · region %s · one machine per sandbox, one or more sessions on it, always listed on the left · Agent Manager never destroys a sandbox on its own." % [
 		r.get("org", "—") if str(r.get("org", "")) != "" else "—", r.get("region", "yyz")])
 	head.add_theme_font_size_override("font_size", 12)
 	sbx_box.add_child(head)
@@ -3958,7 +3958,7 @@ func _sbx_deploy_step(r: Dictionary) -> Control:
 		x.tooltip_text = "" if ready else "Deploy the image first (step 1)"
 		row.add_child(x)
 	v.add_child(row)
-	v.add_child(_muted("Each sandbox belongs to its session: it is on the left with ☁, and goes away only when you destroy it."))
+	v.add_child(_muted("Each sandbox belongs to the session that made it: it is on the left with ☁, and goes away only when you destroy it. More sessions can open on the same machine from its card."))
 	return parts[0]
 
 
@@ -4144,6 +4144,8 @@ func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 	money.add_theme_font_size_override("font_size", 12)
 	money.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(money)
+	if int(sb.get("destroyed", 0)) == 0:
+		v.add_child(_sbx_sessions(sb, st))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	v.add_child(row)
@@ -4176,6 +4178,73 @@ func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 	if st == "started":  # Loop 38: its ports, brought to this computer on a click, with what passes
 		v.add_child(_sbx_tunnel(sbid, str(sess.get("name", "sandbox " + sbid))))
 	return card
+
+
+## Loop 40: every session on this machine (owner, 2026-11-14: « ouvrir plusieurs sessions SSH sur la même VM
+## Fly »), each with its state and its own terminal; one more opens beside them, no new machine.
+func _sbx_sessions(sb: Dictionary, st: String) -> Control:
+	var sbid := str(sb["id"])
+	var ids: Array = sb.get("sessions", [sb["session_id"]])
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	var t := Label.new()
+	t.text = "Sessions on this machine · %d" % ids.size()
+	t.add_theme_font_override("font", AmTheme.ui_font(650))
+	t.add_theme_font_size_override("font_size", 13)
+	head.add_child(t)
+	head.add_child(_muted("each its own terminal in the machine; agents added get their own git worktree"))
+	box.add_child(head)
+	for i in ids.size():
+		var s := _session(str(ids[i]))
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 10)
+		var act := activity_of(s) if not s.is_empty() else [AmTheme.col("FAINT"), "not in the list"]
+		var dot := Label.new()
+		dot.text = "●"
+		dot.add_theme_color_override("font_color", act[0])
+		line.add_child(dot)
+		var n := Label.new()
+		n.text = str(s.get("name", ids[i])) + ("  · first" if i == 0 else "")
+		n.custom_minimum_size.x = 200
+		n.clip_text = true
+		line.add_child(n)
+		var tool := _muted(str(s.get("tool_label", s.get("tool", ""))))
+		tool.custom_minimum_size.x = 110
+		line.add_child(tool)
+		var a := Label.new()
+		a.text = str(act[1])
+		a.add_theme_color_override("font_color", act[0])
+		a.add_theme_font_size_override("font_size", 12)
+		a.size_flags_horizontal = SIZE_EXPAND_FILL
+		line.add_child(a)
+		if not s.is_empty():
+			var sid := str(ids[i])
+			line.add_child(_small("Open", func() -> void: select(sid)))
+		box.add_child(line)
+	if st == "started" or st == "stopped":
+		var add := HBoxContainer.new()
+		add.add_theme_constant_override("separation", 6)
+		add.add_child(_muted("+ a session on this machine:"))
+		for tool in [["claude", "Claude Code"], ["codex", "Codex"], ["shell", "Shell"]]:
+			var id: String = tool[0]
+			var label: String = tool[1]
+			add.add_child(_small("+ " + label, func() -> void:
+				_ask("A %s session on this sandbox: its name" % label, label + " " + str(ids.size() + 1), func(text: String) -> void:
+					if text.strip_edges() == "":
+						return
+					_toast("Opening a %s session on the sandbox…" % label)
+					var d := await engine.call_api("POST", "/sessions", {"name": text.strip_edges(), "tool": id, "host": "sandbox", "sandbox": sbid}, true, 60.0)
+					if d.has("error"):
+						_toast(str(d["error"]))
+						return
+					await refresh()
+					await _load_sandboxes()
+					select(str(d.get("id", "")))),
+				"One more session on this machine: no new machine, no extra cost but its share of the processor. " + ("Its own git worktree, on its own branch." if id != "shell" else "In the sandbox's folder.")))
+		box.add_child(add)
+	return box
 
 
 # ------------------------------------------------------------------ usage (Loop 14)

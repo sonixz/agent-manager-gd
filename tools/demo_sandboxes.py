@@ -1,6 +1,8 @@
 """Captures only: fills a throw-away data folder with two demo sandboxes, a month of run history, a budget, and the
 file the engine's demo Fly reads (AGMGD_DEMO_FLY). Nothing reaches Fly.io.
-  python3 tools/demo_sandboxes.py <data folder> <session id running> <session id paused>  -> prints the demo file path"""
+  python3 tools/demo_sandboxes.py <data folder> <session id running> <session id paused> [<added session id>…]
+  -> prints the demo file path. Added sessions (Loop 40) go on the running sandbox, as « + a session on this machine »
+  records them; all its sessions are marked as living in the sandbox (/work)."""
 import json
 import os
 import random
@@ -25,6 +27,12 @@ for sbid, sid, mid, created in rows:
 db.execute("INSERT OR REPLACE INTO sandboxes (id, session_id, app, machine, region, size, secret, workdir, destroyed, created) "
            "VALUES ('old-5e21', '', 'agmgd-demo0001', '3d8c0b77a1e254', 'yyz', 'shared-cpu-1x-1024', 'demo', '/work', 1, ?)", (now - 86400 * 26,))
 db.execute("UPDATE sessions SET brain_client = 'demo-key' WHERE id = ?", (s_run,))
+added = sys.argv[4:]
+for i, sid in enumerate(added):   # the first added one is an agent (its own worktree), the others shells
+    db.execute("INSERT OR REPLACE INTO sandbox_sessions VALUES (?, 'a1c4e9f2', ?, ?, ?)", (sid, "am-" + sid, int(i == 0), now - 600 + i))
+if added:
+    for sid in [s_run] + added:
+        db.execute("UPDATE sessions SET cwd = '/work' WHERE id = ?", (sid,))
 # a month of past runs: a few hours most working days
 random.seed(7)
 for d in range(1, 26):

@@ -417,7 +417,7 @@
           <tr><td><code>list_sessions</code></td><td>every session and its state</td><td>any session</td></tr>
           <tr><td><code>session_status</code></td><td>working, waits, asks, done</td><td>any session</td></tr>
           <tr><td><code>read_screen</code></td><td>what a terminal shows now</td><td>any session</td></tr>
-          <tr><td><code>start_session</code></td><td>a child session: Claude Code, Codex or a shell</td><td>new, shown « ↳ parent »</td></tr>
+          <tr><td><code>start_session</code></td><td>a child session: Claude Code, Codex or a shell; with <code>sandbox</code>, on that cloud sandbox's machine (never a new machine)</td><td>new, shown « ↳ parent »</td></tr>
           <tr><td><code>send_to_session</code></td><td>write to a session</td><td>its own children only</td></tr>
           <tr><td><code>wait_for_session</code></td><td>until a child is done or waits</td><td>its own children only</td></tr>
         </table>
@@ -518,7 +518,17 @@
           this computer only.</p>
 
         <h2 id="sandboxes">Cloud sandboxes and costs</h2>
-        <p>A cloud sandbox is a throw-away <b>Fly.io machine for one session</b>, with your Fly token (Keys).</p>
+        <p>A cloud sandbox is a throw-away <b>Fly.io machine</b> made for a session, with your Fly token (Keys).</p>
+        <p><b>Several sessions on one machine.</b> A sandbox's card lists <b>Sessions on this machine</b>, each with its
+          state and <b>Open</b>. <b>+ Claude Code</b>, <b>+ Codex</b> or <b>+ Shell</b> opens one more on the same
+          machine: no new machine, no cost but its share of the processor, up to 8 sessions. Each has its own terminal
+          in the machine (its own tmux session, found again after a reconnection) and its own SSH connection, so a
+          connection that falls touches one terminal only. A Claude Code or Codex session added to a sandbox that holds
+          a repository works in its own git worktree, on its own branch, beside the sandbox's clone: two agents never
+          edit the same checkout. A shell works in the sandbox's folder. The Second Brain is the sandbox's, one for the
+          machine. An added session can be archived or removed (its terminal in the machine closes; its worktree and
+          files stay); the session that made the sandbox stays until the sandbox is destroyed, and destroying it
+          closes every session on the machine. The pause after idle time counts the activity of all of them.</p>
         <p>The <b>☁ Sandboxes</b> tab is a dashboard: four tiles across, then two columns. On the left, what you use
           to make one: <b>Deploy</b> with the sizes, the <b>Costs</b>, and the <b>Image</b> (one line once it is built;
           <b>Contents ▸</b> shows what it holds). On the right, the cloud sandboxes, one per line like the

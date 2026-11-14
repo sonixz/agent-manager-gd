@@ -5,6 +5,15 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Several sessions on one cloud sandbox (Loop 40)
+- New: a sandbox's card lists **Sessions on this machine**, and **+ Claude Code**, **+ Codex** or **+ Shell** opens one
+  more on the same Fly.io machine, with no new machine. Each has its own terminal there and its own connection; an
+  agent added to a sandbox with a repository works in its own git worktree, on its own branch. Up to 8 per machine.
+- An added session can be archived or removed; the one that made the sandbox stays until the sandbox is destroyed,
+  which closes every session on it. The pause after idle time now looks at all the sessions of a sandbox.
+- For agents: `start_session` on Agent Manager's MCP server takes a `sandbox`, to add a session there (an agent never
+  makes a machine).
+
 ## 0.39.1-alpha · 2026-11-13
 
 Download for Windows: `AgentManagerGD-0.39.1-alpha-win64.zip` on the

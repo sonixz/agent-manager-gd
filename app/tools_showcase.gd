@@ -1340,6 +1340,41 @@ for i in range(600):
 			await process_frame
 			var unfolded: bool = main.sbx_box.find_child("Sandbox_a1c4e9f2", true, false).find_children("*", "Button", true, false).any(func(b: Node) -> bool: return (b as Button).text == "▾")
 			report.append("latency: a sandbox's line unfolded in %d ms (unfolded: %s)" % [Time.get_ticks_msec() - t1, unfolded])
+		"sandbox-sessions":  # Loop 40: several sessions on one cloud sandbox, each its own terminal in the machine
+			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Backend", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
+			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
+			var c: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Frontend", "tool": "codex", "cwd": "~", "group": "Orbit API", "brain": false})
+			var d: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Logs and psql", "tool": "shell", "cwd": "~", "group": "Orbit API"})
+			_map(str(a["id"]), "limiter-question")
+			var home := OS.get_environment("AGMGD_HOME")
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_sandboxes.py"), home, str(a["id"]), str(b["id"]), str(c["id"]), str(d["id"])], [])
+			await main.refresh()
+			main.set_view("sandboxes")
+			await wait(3.0)
+			await main._load_sandboxes()
+			await wait(2.0)
+			var line: Node = main.sbx_box.find_child("Sandbox_a1c4e9f2", true, false)
+			for btn in line.find_children("*", "Button", true, false):
+				if (btn as Button).text == "▸":
+					(btn as Button).pressed.emit()
+			await wait(1.5)
+			var over: Dictionary = await main.engine.call_api("GET", "/sandboxes", null, true, 60.0)
+			var row: Dictionary = (over["sandboxes"] as Array).filter(func(x: Dictionary) -> bool: return str(x["id"]) == "a1c4e9f2")[0]
+			var adds: Array = main.sbx_box.find_children("*", "Button", true, false).filter(func(x: Node) -> bool: return (x as Button).text.begins_with("+ "))
+			var lst: Dictionary = await main.engine.call_api("GET", "/sessions")
+			var hosts: Array = (lst["sessions"] as Array).filter(func(x: Dictionary) -> bool: return str(x.get("host", "")) == "sandbox").map(func(x: Dictionary) -> String: return "%s (%s)" % [x["name"], "first" if x["sandbox"]["first"] else "added"])
+			report.append("sandbox-sessions: the engine lists %d sessions on a1c4e9f2 | in the session list as sandbox sessions: %s | add buttons: %s" % [
+				(row["sessions"] as Array).size(), ", ".join(hosts), ", ".join(adds.map(func(x: Node) -> String: return (x as Button).text))])
+			var head: Node = null
+			for l in main.sbx_box.find_children("*", "Label", true, false):
+				if (l as Label).text.begins_with("Sessions on this machine"):
+					head = l
+			report.append("sandbox-sessions: the card's block: %s" % (str((head as Label).text) if head else "MISSING"))
+			if head:
+				var scroller: ScrollContainer = main.sbx_box.get_parent()
+				scroller.scroll_vertical = int(maxf(0.0, (head as Control).global_position.y - main.sbx_box.global_position.y - 330.0))
+			await wait(0.8)
+			await shot("sandbox-sessions")
 		"smooth":  # is the app still fluid: frame times on each page, what a few clicks leave behind (nodes, reload loops), with a running sandbox connected and a dashboard in it
 			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "shell", "cwd": "~", "group": "Orbit API", "brain": false})
 			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
