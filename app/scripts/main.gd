@@ -4297,6 +4297,40 @@ func _online_new() -> Control:
 		tool.set_item_metadata(tool.item_count - 1, t[0])
 	tool.tooltip_text = "The first session on it: the one that builds and runs the service"
 	row.add_child(tool)
+	# Loop 43: its connected repository (cloned on the volume with its own key) and the secrets the machine gets
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 8)
+	v.add_child(row2)
+	row2.add_child(_muted("repository"))
+	var repo := OptionButton.new()
+	repo.name = "OnlineRepo"
+	repo.add_item("none (an empty folder)")
+	repo.set_item_metadata(0, "")
+	repo.tooltip_text = "A connected repository (⎇ Repos): cloned on its volume (/data/work) with its own deploy key"
+	row2.add_child(repo)
+	row2.add_child(_muted("secrets"))
+	var picks := HBoxContainer.new()
+	picks.name = "OnlineSecrets"
+	picks.add_theme_constant_override("separation", 6)
+	row2.add_child(picks)
+	var fill := func() -> void:
+		var rr := await engine.call_api("GET", "/repos")
+		for x in rr.get("repos", []):
+			repo.add_item("⎇ " + str(x["name"]) + ("" if str(x.get("status", "")) == "connected" else "  (key not working yet)"))
+			repo.set_item_metadata(repo.item_count - 1, str(x["id"]))
+		var sr := await engine.call_api("GET", "/secrets")
+		for x in sr.get("secrets", []):
+			var cb := CheckBox.new()
+			cb.text = str(x.get("name", ""))
+			cb.tooltip_text = "Given to the machine: its sessions and its start script get it in their environment"
+			picks.add_child(cb)
+		if picks.get_child_count() == 0:
+			picks.add_child(_muted("none in Keys › Secrets"))
+	fill.call()
+	if bool(sbx_last.get("image_info", {}).get("outdated", false)):
+		var old := _wrap("Your image was built before start scripts: Rebuild it in ☁ Sandboxes (step 1) so a service starts again by itself after a restart.")
+		old.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		v.add_child(old)
 	var est: Dictionary = sbx_last.get("estimate", {})
 	var cost := _muted("about %s a month while it runs (%s) + $%.2f per GB of volume a month · the addresses are free" % [
 		CostChart.money(float(est.get("per_month_on", 6.70))), str(est.get("size", "shared-cpu-1x-1024")), 0.15])
@@ -4308,8 +4342,12 @@ func _online_new() -> Control:
 			_toast("Give it a name first")
 			return
 		_toast("Making the Online machine « %s »: its app, its volume, its machine (about a minute)…" % n)
+		var chosen := []
+		for c in picks.get_children():
+			if c is CheckBox and (c as CheckBox).button_pressed:
+				chosen.append((c as CheckBox).text)
 		var d := await engine.call_api("POST", "/online", {"name": n, "port": int(port.value), "volume_gb": int(vol.value),
-			"tool": str(tool.get_selected_metadata())}, true, 900.0)
+			"tool": str(tool.get_selected_metadata()), "repo": str(repo.get_selected_metadata()), "secrets": chosen}, true, 900.0)
 		if d.has("error"):
 			_toast(str(d["error"]))
 			return
@@ -4367,6 +4405,19 @@ Two public addresses are given (IPv6 and a shared IPv4, both free). Close it aga
 				_toast(str(d.get("error", "Public: " + str(d.get("url", "")))))
 				await _load_sandboxes()), "Gives it public addresses, on your confirmation"))
 	box.add_child(OnlineWidgets.Door.new(exposed, int(on.get("port", 8080)), str(sb["app"])))
+	var hl: Dictionary = sb.get("health") if sb.get("health") is Dictionary else {}
+	var svc := HBoxContainer.new()
+	svc.add_theme_constant_override("separation", 14)
+	box.add_child(svc)
+	var ss = hl.get("start_script")
+	svc.add_child(_chip("start script /data/start.sh " + ("ready" if ss == true else ("missing: the service will not come back after a restart" if ss == false else "not checked")), ss if ss != null else null))
+	svc.add_child(_muted("test it on your localhost first: Tunnel and ports › Bring it to my localhost (port %d), then expose" % int(on.get("port", 0))))
+	if str(hl.get("service_log", "")) != "":
+		var lg := _muted("/data/start.log: " + str(hl["service_log"]).replace("\n", "  ⏎  "))
+		lg.add_theme_font_override("font", font)
+		lg.add_theme_font_size_override("font_size", 11)
+		lg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(lg)
 	box.add_child(_muted("volume %d GB (≈ $%.2f a month) · port %d inside · app %s" % [int(on.get("volume_gb", 0)), float(on.get("volume_month", 0)), int(on.get("port", 0)), sb["app"]]))
 	box.add_child(_sandbox_card(sb, r))
 	return box
@@ -4649,7 +4700,7 @@ func _fill_secret_boxes() -> void:
 
 
 func _ticked_secrets() -> Array:
-	if f_secrets == null or str(f_where.get_selected_metadata()) == "sandbox":
+	if f_secrets == null:   # Loop 43: a cloud sandbox's session may be given secrets too (they reach its machine)
 		return []
 	var out := []
 	for c in f_secrets.get_children():

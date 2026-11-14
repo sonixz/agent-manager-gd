@@ -50,7 +50,8 @@ def health(sbx, sbid: str, mcp_expected: bool) -> dict:
     """Loop 16: one SSH round trip for everything the card shows: tunnel and Brain, the agent's MCP configuration,
     the repository's branch, uncommitted files and commits not pushed. Cached in sbx.health."""
     rep = connection(sbx, sbid)
-    rep.update({"mcp": None, "branch": "", "dirty": None, "unpushed": None, "checked": time.time()})
+    rep.update({"mcp": None, "branch": "", "dirty": None, "unpushed": None, "checked": time.time(), "start_script": None,
+                "service_log": ""})
     if rep["tunnel"] == "up":
         sb = sbx.get(sbid)
         wd = sb["workdir"]
@@ -58,7 +59,13 @@ def health(sbx, sbid: str, mcp_expected: bool) -> dict:
                f"cd {wd} 2>/dev/null && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && "
                f"git rev-parse --abbrev-ref HEAD && git status --porcelain | wc -l && "
                f"(git rev-list --count @{{u}}..HEAD 2>/dev/null || git rev-list --count HEAD --not --remotes)")
+        if sb.get("kind") == "online":   # Loop 43: its start script, and the last lines it wrote
+            cmd = ("(test -x /data/start.sh && echo START-SCRIPT; echo ===; tail -n 4 /data/start.log 2>/dev/null; echo ===); " + cmd)
         rc, out = ssh_run(sbx, sbid, cmd, 30)
+        if rc in (0, 1) and sb.get("kind") == "online" and out.count("===") >= 2:
+            first, log, out = out.split("===", 2)
+            rep["start_script"] = "START-SCRIPT" in first
+            rep["service_log"] = log.strip()[-400:]
         if rc in (0, 1):
             head, _, git = out.partition("---")
             rep["mcp"] = ("MCP-CONF" in head and bool(rep["brain"])) if mcp_expected else None

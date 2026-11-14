@@ -76,7 +76,8 @@ If you are an AI agent working in this repository, or plugged into these apps ov
   runs is not stopped by them, and Codex has its own sandbox instead.
 - **Secrets go to the sessions you choose, and they can read them.** Keys › Secrets hands a secret to a session's
   program in its environment when it starts, and to no other session. That agent can print it: give it the smallest
-  key that does the job, and take it back when the work is done.
+  key that does the job, and take it back when the work is done. Given to a session on a cloud machine, a secret is
+  written on that machine (root only) and every session there can read it.
 - **One Second Brain key per session.** When the Second Brain is connected, each Claude Code or Codex session gets its
   own key. Removing the session revokes it at once; an archived session keeps it so it can be resumed. You can also
   revoke a key yourself.

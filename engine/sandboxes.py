@@ -95,7 +95,9 @@ IMAGE_CONTENTS = [
     ("Node.js + Python 3", "for the agents and your tools"),
     ("Claude Code", "latest version at build time; uses your Anthropic key from Keys"),
     ("Codex", "latest version at build time; uses your OpenAI key from Keys"),
+    ("Start script", "an Online machine runs /data/start.sh at boot (its service starts again by itself)"),
 ]
+IMAGE_VERSION = 2   # 2: the start script at boot (Loop 43). An image built before says so and offers Rebuild.
 HOURS_PER_MONTH = 730
 IMAGE_GB = 1.0  # a machine's root disk, roughly our image: what a stopped (paused) machine is billed for
 
@@ -247,6 +249,7 @@ class Sandboxes:
             raise ValueError("the image did not build: " + out[-300:])
         self.set_config("image", f"registry.fly.io/{app}:v1")
         self.set_config("image_built", str(time.time()))
+        self.set_config("image_version", str(IMAGE_VERSION))
         return self.status()
 
     # ---------------------------------------------------------------- records
@@ -393,7 +396,8 @@ class Sandboxes:
             p = str(int(port))
             # 443 only (owner: « un service sur le port 443 »). A port 80 served the page in plain HTTP, not sent on
             # to HTTPS (seen in the live test of 2026-11-14): it is not declared.
-            machine = self._launch(sbid, app, size, ["--volume", "data:/data", "--port", f"443:{p}/tcp:tls:http"])
+            machine = self._launch(sbid, app, size, ["--volume", "data:/data", "--port", f"443:{p}/tcp:tls:http",
+                                                     "--restart", "always"])   # a service: Fly starts it again
         except Exception:
             self.fly.run("apps", "destroy", app, "--yes", timeout=300)   # nothing half made is left billed
             raise
@@ -572,6 +576,7 @@ class Sandboxes:
         built = float(self.config("image_built", "0") or 0)
         return {"name": "Agent Manager sandbox image", "recipe": "sandbox/Dockerfile", "contents": [list(c) for c in IMAGE_CONTENTS],
                 "ready": bool(self.config("image")), "built": built, "image": self.config("image"),
+                "outdated": bool(self.config("image")) and int(self.config("image_version", "1") or 1) < IMAGE_VERSION,
                 "build_note": "Fly builds it in your organisation's private registry, about 2 minutes, once"}
 
     def sizes(self) -> dict:

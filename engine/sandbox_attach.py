@@ -36,7 +36,7 @@ def q(text: str) -> str:
 def seat_command(name: str, workdir: str, agent: str) -> str:
     """Loop 40: an added session's terminal in the machine. Its own tmux session, started with its own tool the first
     time (then a shell when the tool ends, as the first session does), found again on a reconnect."""
-    inner = "bash -lc " + q(f". /root/.agmgd/env; {agent}; exec bash -l")
+    inner = "bash -lc " + q(f". /root/.agmgd/env; {SOURCE_SECRETS}; {agent}; exec bash -l")
     return (f"tmux has-session -t {name} 2>/dev/null || tmux new -d -s {name} -c {q(workdir)} {q(inner)}; "
             f"exec tmux attach -t {name}")
 
@@ -50,6 +50,34 @@ def worktree_command(base: str, path: str, branch: str) -> str:
 TMUX_CLIPBOARD = ["set -s set-clipboard on", "set -s terminal-features[90] *:clipboard", "set -g mouse on",
                   "set -g history-limit 50000"]
 AGENT_CMD = {"claude": "claude --mcp-config /root/.agmgd/mcp.json", "codex": "codex", "shell": "bash -l"}
+SOURCE_SECRETS = "[ -f /root/.agmgd/secrets ] && . /root/.agmgd/secrets"   # Loop 43: the machine's secrets, if any
+
+
+def secrets_text(values: dict) -> str:
+    """The machine's secrets file: one `export NAME='value'` per secret, quoted for the shell whatever it holds."""
+    import shlex
+    return "".join(f"export {k}={shlex.quote(v)}\n" for k, v in sorted(values.items()))
+
+
+def online_guide(port: int, app: str) -> str:
+    """Loop 43: what an agent on an Online machine is told (Claude Code reads ~/.claude/CLAUDE.md, Codex
+    ~/.codex/AGENTS.md). The owner's way: test on localhost first, then the owner exposes it."""
+    return f"""# This machine is an Online machine of Agent Manager GD
+
+It is made to serve one service on the internet, when the owner decides. Until then it is private.
+
+- The public service listens on 0.0.0.0:{port}. Only this port can ever be public: when the owner exposes the
+  machine, https://{app}.fly.dev reaches it (HTTPS by Fly.io, port 443 → {port}). You never expose it yourself.
+- Everything else (a database, a cache, workers, admin pages) listens on 127.0.0.1 only.
+- Test first: the owner opens your port on their own computer (Agent Manager › Tunnel and ports › Bring it to my
+  localhost) and tries it there. Say which port to bring and what to look at.
+- Keep what must last on the volume /data (your work is in /data/work). The rest of the disk is reset by an update.
+- Write /data/start.sh (executable, `chmod +x`): it must start everything the service needs, in the background or
+  in the foreground, from a fresh boot. The machine runs it at every start; its output goes to /data/start.log.
+  Fly.io starts the machine again if it stops, so the service comes back by itself.
+- Secrets given to this machine (Agent Manager › Keys › Secrets) are in the environment of your session and of
+  /data/start.sh (file /data/.agmgd/secrets, readable by root only). Never print them, never commit them.
+"""
 
 
 def free_port() -> int:
@@ -189,6 +217,11 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
             say("first start: setting up the sandbox…")
             setup(sbs, sb, rec, keys, base, store)
             sb = sbs.get(sbid)  # the setup chose its working folder
+        give_secrets(sbs, sb, store, keys, base)
+        if sb.get("kind") == "online":
+            guide = online_guide(int(sb.get("port") or 0), sb["app"])
+            subprocess.run(base + ["root@127.0.0.1", "mkdir -p /root/.claude /root/.codex && cat > /root/.claude/CLAUDE.md && "
+                                   "cp /root/.claude/CLAUDE.md /root/.codex/AGENTS.md"], input=guide, text=True, capture_output=True, timeout=60)
         remote = "cd " + sb["workdir"] + " 2>/dev/null; tmux new -A -s am"
         if not seat["first"]:
             mine = store.get(sid) or {}
@@ -226,6 +259,34 @@ def main() -> int:
     return keep_connected(lambda may_start: connect(sbid, home, engine_port, may_start, sid))
 
 
+def give_secrets(sbs, sb, store, keys, base) -> None:
+    """Loop 43: the secrets given to the sessions of this machine (Keys › Secrets), written at each connection in
+    one file only root reads (/root/.agmgd/secrets; on an Online machine also /data/.agmgd/secrets, for its start
+    script). An empty list empties the file: a secret taken back is gone at the next connection. Each handover is in
+    the vault's journal, never a value."""
+    from engine.vault import Vault
+    names = []
+    for sid in sbs.sessions_on(sb["id"]):
+        try:
+            for n in json.loads((store.get(sid) or {}).get("secrets") or "[]"):
+                if n not in names:
+                    names.append(str(n))
+        except ValueError:
+            pass
+    vault = Vault(sbs.home, keys)
+    values = {}
+    for n in names:
+        v = vault.get(n)
+        if v:
+            values[n] = v
+            vault.log(n, "given to cloud machine " + sb["id"], sb["session_id"], (store.get(sb["session_id"]) or {}).get("name", ""))
+    text = secrets_text(values)
+    dest = "/root/.agmgd/secrets" + (" /data/.agmgd/secrets" if sb.get("kind") == "online" else "")
+    cmd = ("umask 077 && mkdir -p /root/.agmgd" + (" /data/.agmgd" if sb.get("kind") == "online" else "")
+           + f" && tee {dest} > /dev/null")
+    subprocess.run(base + ["root@127.0.0.1", cmd], input=text, text=True, capture_output=True, timeout=60)
+
+
 def setup(sbs, sb, rec, keys, base, store) -> None:
     secret_files = {}
     if keys.get("anthropic"):
@@ -259,7 +320,7 @@ def setup(sbs, sb, rec, keys, base, store) -> None:
     sbs._set(sb["id"], workdir=workdir)
     agent = AGENT_CMD.get(rec.get("tool", "shell"), "bash -l")
     start = (f"tmux has-session -t am 2>/dev/null || tmux new -d -s am -c {workdir} "
-             f"\"bash -lc '. /root/.agmgd/env; {agent}; exec bash -l'\"; touch /root/.agmgd/ready")
+             f"\"bash -lc '. /root/.agmgd/env; {SOURCE_SECRETS}; {agent}; exec bash -l'\"; touch /root/.agmgd/ready")
     subprocess.run(base + ["root@127.0.0.1", start], timeout=60)
 
 

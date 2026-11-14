@@ -5,6 +5,17 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Online machines, ready for a real service (Loop 43)
+- New: the Online form takes a **repository** (cloned on the volume with its own key) and **secrets** from
+  Keys › Secrets.
+- A service **comes back by itself**: the agent writes `/data/start.sh`, run at every start with the machine's
+  secrets (log in `/data/start.log`); Fly.io starts the machine again if it stops. The card shows whether the start
+  script is there and the log's last lines. Rebuild the image once (☁ Sandboxes) for this.
+- An agent on an Online machine is told how to build for it: its port on `0.0.0.0`, the rest on `127.0.0.1`, what
+  lasts on `/data`, test on the owner's localhost first, never expose it itself.
+- Changed: Keys › Secrets can now go to cloud sandboxes and Online machines (root-only file there; every session on
+  the machine can read them).
+
 ### GitHub's CLI under Repos (Loop 42)
 - New: a **GitHub CLI** band at the top of ⎇ Repos: your `gh`, its version, the account, the token's scopes, and
   where gh keeps its token (in orange when it is a plain file every program can read). **Log in with gh…** and

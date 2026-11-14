@@ -227,7 +227,8 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(201, sessions.create_online_session(str(b.get("name", "")), str(b.get("tool", "claude")),
                                                                            str(b.get("group", "")), int(b.get("port", 8080)),
                                                                            int(b.get("volume_gb", 1)), str(b.get("size", "")),
-                                                                           str(b.get("repo", "")), bool(b.get("brain", True))))
+                                                                           str(b.get("repo", "")), bool(b.get("brain", True)),
+                                                                           b.get("secrets") or []))
                 if parts == ["sandboxes", "size"] and method == "POST":   # the size the next sandboxes get
                     return self._reply(200, sessions.sandboxes.choose_size(str(self._body().get("size", ""))))
                 if parts == ["sandboxes", "budget"] and method == "POST":

@@ -552,6 +552,87 @@ class SandboxesTest(unittest.TestCase):
         self.assertIn(("apps", "destroy", app, "--yes"), self.fly.calls)
         self.assertEqual(len(self.s.store.all()), before)
 
+    def test_secrets_go_to_a_cloud_machine_quoted_and_only_when_given(self):
+        """Loop 43 (owner, 2026-11-14: « go pour 1, 2 et 3 »): Keys › Secrets reach cloud machines."""
+        from engine import sandbox_attach as sa
+        import subprocess
+        tricky = "a'b $HOME `x` \\ \"q\""
+        script = sa.secrets_text({"API_KEY": tricky, "OTHER": "plain"})
+        out = subprocess.run(["bash", "-c", script + 'printf %s "$API_KEY"'], capture_output=True, text=True).stdout
+        self.assertEqual(out, tricky)                                         # whatever it holds, exactly
+        self.s.sandboxes.prepare()
+        self.s.vault.set("API_KEY", "v1", "")
+        self.s.vault.set("DB_URL", "postgres://x", "")
+        first = self.s.create("Main", "shell", "", host="sandbox", secrets=["API_KEY"])
+        sb = self.s.sandboxes.by_session(first["id"])
+        added = self.s.create("Worker", "shell", "", host="sandbox", sandbox=sb["id"], secrets=["DB_URL", "API_KEY"])
+        self.assertEqual(self.s.secrets_of(added["id"]), ["DB_URL", "API_KEY"])
+        self.assertEqual(self.s.machine_secrets(sb["id"]), ["API_KEY", "DB_URL"])   # the machine has them all
+        sent = []
+        real = sa.subprocess.run
+        sa.subprocess.run = lambda cmd, **kw: (sent.append((cmd[-1], kw.get("input", ""))), real(["true"]))[1]
+        try:
+            sa.give_secrets(self.s.sandboxes, self.s.sandboxes.get(sb["id"]), self.s.store, self.s.keys_store, ["ssh"])
+        finally:
+            sa.subprocess.run = real
+        cmd, text = sent[-1]
+        self.assertIn("umask 077", cmd)
+        self.assertIn("/root/.agmgd/secrets", cmd)
+        self.assertNotIn("/data/", cmd)                                       # a sandbox has no volume
+        self.assertEqual(text, "export API_KEY=v1\nexport DB_URL=postgres://x\n")
+        self.assertFalse(any("v1" in a for c, _ in sent for a in [c]))       # values on stdin, never in the command
+        journal = self.s.vault.journal(limit=10)
+        self.assertTrue(any("cloud machine" in str(j) for j in journal))
+
+    def test_an_online_machine_gets_its_repository_its_secrets_a_restart_policy_and_its_guide(self):
+        from engine import sandbox_attach as sa
+        self.s.sandboxes.prepare()
+        self.s.vault.set("STRIPE_KEY", "sk", "")
+        d = self.s.create_online_session("shop", "claude", "", 8080, repo="r42", secrets=["STRIPE_KEY"])
+        sb = self.s.sandboxes.by_session(d["id"])
+        self.assertEqual((sb["repo_id"], self.s.secrets_of(d["id"])), ("r42", ["STRIPE_KEY"]))
+        run = next(c for c in self.fly.calls if c[:2] == ("machine", "run") and sb["app"] in c)
+        self.assertEqual(run[run.index("--restart") + 1], "always")            # Fly starts a service again
+        sent = []
+        real = sa.subprocess.run
+        sa.subprocess.run = lambda cmd, **kw: (sent.append((cmd[-1], kw.get("input", ""))), real(["true"]))[1]
+        try:
+            sa.give_secrets(self.s.sandboxes, self.s.sandboxes.get(sb["id"]), self.s.store, self.s.keys_store, ["ssh"])
+        finally:
+            sa.subprocess.run = real
+        self.assertIn("/data/.agmgd/secrets", sent[-1][0])                     # for its start script, on the volume
+        guide = sa.online_guide(8080, sb["app"])
+        self.assertIn("0.0.0.0:8080", guide)
+        self.assertIn("/data/start.sh", guide)
+        self.assertIn("localhost", guide)
+        self.assertIn("never expose it yourself", guide)
+
+    def test_the_start_script_runs_at_boot_with_the_secrets(self):
+        """sandbox/start.sh's boot part, run against a folder standing for /data (no machine)."""
+        import subprocess
+        data = os.path.join(self.tmp, "data")
+        os.makedirs(os.path.join(data, ".agmgd"))
+        with open(os.path.join(data, ".agmgd", "secrets"), "w") as f:
+            f.write("export SECRET_X='it works'\n")
+        with open(os.path.join(data, "start.sh"), "w") as f:
+            f.write('#!/bin/sh\necho "service up with $SECRET_X"\n')
+        os.chmod(os.path.join(data, "start.sh"), 0o755)
+        here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        boot = open(os.path.join(here, "sandbox", "start.sh")).read()
+        part = boot[boot.index("if [ -x /data/start.sh ]"):boot.index("exec sleep infinity")].replace("/data", data)
+        subprocess.run(["sh", "-c", part + "wait"], check=True, timeout=20)
+        log = open(os.path.join(data, "start.log")).read()
+        self.assertIn("== boot", log)
+        self.assertIn("service up with it works", log)
+        os.remove(os.path.join(data, "start.sh"))                             # none: nothing runs, nothing fails
+        subprocess.run(["sh", "-c", part], check=True, timeout=20)
+
+    def test_an_image_built_before_start_scripts_says_so(self):
+        self.s.sandboxes.prepare()
+        self.assertFalse(self.s.sandboxes.image_info()["outdated"])
+        self.s.sandboxes.set_config("image_version", "1")
+        self.assertTrue(self.s.sandboxes.image_info()["outdated"])
+
     def test_the_owner_routes_answer_over_http(self):
         """The API routes themselves (a generic /sandboxes/<id>/<action> route once swallowed the orphan ones)."""
         tok = load_token(self.tmp)

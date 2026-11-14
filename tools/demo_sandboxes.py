@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from engine.sandboxes import SCHEMA  # noqa: E402
 db.executescript(SCHEMA)
 for k, v in {"org": "agent-manager", "app": "agmgd-demo0001", "image": "registry.fly.io/agmgd-demo0001:v1",
-             "image_built": str(now - 3 * 86400), "region": "yyz", "budget_usd": "5", "stop_idle_minutes": "30"}.items():
+             "image_built": str(now - 3 * 86400), "image_version": "2", "region": "yyz", "budget_usd": "5", "stop_idle_minutes": "30"}.items():
     db.execute("INSERT OR REPLACE INTO sandbox_config VALUES (?, ?)", (k, v))
 rows = [("a1c4e9f2", s_run, "e7843a1f0c2d98", now - 86400 * 2), ("b07d3e55", s_paused, "9185b2e4d01376", now - 86400 * 6)]
 for sbid, sid, mid, created in rows:

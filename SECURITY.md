@@ -23,6 +23,10 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   agents to chosen repositories, add it to an account made for them. A key is checked by one SSH connection to the
   repository's host with that key (`git ls-remote`), when you open the Repos page, on « Check all » or on
   « Check »; never while the page is closed.
+- **Secrets on cloud machines**: a secret of Keys › Secrets given to a session on a cloud sandbox or an Online machine
+  is sent through that machine's SSH tunnel when its terminal connects (on standard input, never on a command line)
+  into one file only root reads there; on an Online machine a copy on its volume lets its start script use it after a
+  restart. Every session on that machine can read it. Taking it back empties the file at the next connection.
 - **GitHub's CLI**: Agent Manager runs your own `gh`, with your login, to read its state (`gh auth status`, which
   masks the token), add a repository's deploy key and create a repository (private unless you choose public). It
   never reads gh's token, never passes one to gh (a `GH_TOKEN` in its environment is removed), and never changes an

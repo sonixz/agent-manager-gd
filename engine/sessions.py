@@ -738,7 +738,10 @@ class Sessions:
         if host == "sandbox":
             if parent and not sandbox:   # an agent never makes a machine (a cost): it may add a session to one
                 raise ValueError("an agent may add a session to an existing sandbox (sandbox), never make a new machine")
-            return self.create_sandbox_session(name, tool, grp, repo, brain, on=sandbox, parent=parent)
+            d = self.create_sandbox_session(name, tool, grp, repo, brain, on=sandbox, parent=parent)
+            if secrets:   # Loop 43: they reach the machine when its terminal connects
+                self.set_secrets(d["id"], secrets)
+            return self.get(d["id"])
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
@@ -814,13 +817,23 @@ class Sessions:
         rec = self.store.get(sid)
         if not rec:
             raise KeyError(sid)
-        if rec.get("cwd") == "/work":
-            raise ValueError("a session in a cloud sandbox gets no secret from this computer's vault")
+        # Loop 43 (owner, 2026-11-14: « go pour… 3 »): a session on a cloud machine may be given secrets too. They
+        # reach the machine when its terminal connects, in one file only root reads there (see sandbox_attach.py).
         clean = self._clean_secrets(names)
         before = self.secrets_of(sid)
         self.store.update(sid, secrets=json.dumps(clean))
         self._log(sid, {"secrets": [before, clean]})
-        return {"id": sid, "secrets": clean, "from": "its next start"}
+        return {"id": sid, "secrets": clean, "from": "its next connection" if rec.get("cwd") == "/work" else "its next start"}
+
+    def machine_secrets(self, sbid: str) -> list[str]:
+        """Loop 43: every secret given to a session on this cloud machine. In a machine every session is root and
+        can read them all: they are given to the machine, and the app says so."""
+        out = []
+        for sid in self.sandboxes.sessions_on(sbid):
+            for n in self.secrets_of(sid):
+                if n not in out:
+                    out.append(n)
+        return out
 
     def with_secrets(self, sid: str, cmd: list[str]) -> list[str]:
         """The command, behind the launcher that fetches this session's secrets with a single-use ticket; the
@@ -1228,12 +1241,14 @@ class Sessions:
         return self.get(rec["id"])
 
     def create_online_session(self, name: str, tool: str, grp: str, port: int, volume_gb: int = 1, size: str = "",
-                              repo: str = "", brain: bool = True) -> dict:
+                              repo: str = "", brain: bool = True, secrets: list | None = None) -> dict:
         """Loop 41: an Online machine (its own Fly app, a volume, 443 toward `port` once exposed) and its first
         session, the one that works on the service. Private until the owner exposes it."""
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         rec = self.store.add(name[:60], tool, "/work", grp or "Online", repo_id=repo)
+        if secrets:   # Loop 43: written before its terminal first connects, so the machine has them from the start
+            self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets)))
         try:
             sb = self.sandboxes.create_online(rec["id"], name, int(port), size, int(volume_gb), repo)
         except Exception:

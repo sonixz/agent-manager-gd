@@ -33,6 +33,8 @@ ms = lambda t: int(t * 1000)  # noqa: E731
 demo["machines"] += [{"id": r[3], "name": "sandbox-" + r[0], "state": "started", "events": [{"type": "launch", "timestamp": ms(r[8] + 120)}]} for r in rows]
 demo["apps"] += [{"Name": r[2], "Status": "deployed"} for r in rows]
 demo.setdefault("health", {})["c51e0a77"] = {"machine": "started", "terminal": True, "tunnel": "up", "latency_ms": 41, "brain": True,
-                                             "mcp": True, "branch": "am/c51e0a77", "dirty": 0, "unpushed": 1}
+                                             "mcp": True, "branch": "am/c51e0a77", "dirty": 0, "unpushed": 1,
+                                             "start_script": True,
+                                             "service_log": "== boot 2026-11-14T15:02:11Z\npostgres: ready on 127.0.0.1:5432\nshop: listening on 0.0.0.0:8080"}
 json.dump(demo, open(path, "w"))
 print(path)
