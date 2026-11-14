@@ -26,7 +26,9 @@ if [[ "$TARGET" == template_release ]]; then
 fi
 (cd native/vtterm && "$SCONS" -j"$(nproc)" target="$TARGET" OUT="$OUT" >/dev/null)
 (cd native/vtterm && "$SCONS" -j"$(nproc)" platform=windows use_mingw=yes mingw_prefix="$MINGW" target="$TARGET" OUT="$OUT" >/dev/null)
-cp "$HOME/src/ghostty/zig-out/lib/libghostty-vt.so.1.1.0" "$OUT/libghostty-vt.so.1"
-cp "$HOME/src/ghostty/zig-out-win/bin/ghostty-vt.dll" "$OUT/"
+# copied only when it changed: a running app on Windows holds ghostty-vt.dll locked, and the same file needs no copy
+same_or_cp() { cmp -s "$1" "$2" || cp "$1" "$2"; }
+same_or_cp "$HOME/src/ghostty/zig-out/lib/libghostty-vt.so.1.1.0" "$OUT/libghostty-vt.so.1"
+same_or_cp "$HOME/src/ghostty/zig-out-win/bin/ghostty-vt.dll" "$OUT/ghostty-vt.dll"
 rm -f "$OUT"/*.lib
 ls -1 "$OUT"
