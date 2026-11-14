@@ -474,8 +474,10 @@
             is at. Each skill has a card: what it is for, its licence (a mint dot for Apache 2.0 or MIT, amber
             otherwise), the scripts it holds (they run when an agent uses it) and the experts that use it; click it to
             read it. <b>Check for updates</b> shows what changed upstream, skill by skill (new, changed, removed, and in
-            colour the scripts added); <b>Update to …</b> moves the pin, on your OK only. Your own skills go in the
-            experts' folder, under <code>skills/</code>.</li>
+            colour the scripts added); <b>Update to …</b> moves the pin, on your OK only. <b>Import a folder…</b> copies
+            skills from a folder of your computer into your own skills (the folder of one skill, or a folder of skills;
+            one of the same name is kept). <b>Add a git source…</b> adds any public git repository of skills (https),
+            pinned and updated like Anthropic's.</li>
           <li><b>Experts</b>: <b>Add the three starters</b> makes Frontend, Documents and MCP builder from Anthropic's
             skills; <b>+ New expert</b> and <b>Edit</b> set its name, glyph, tool, model, its role (short: it is read at
             every turn), its skills and the secrets it needs. Its emblem draws its skills as beads (warmer when they hold
@@ -486,7 +488,7 @@
             and the role in its instructions. Codex reads skills from its folder: it gets its own worktree, the skills
             are linked into its <code>.agents/skills</code> and kept out of git (<code>.git/info/exclude</code>), and the
             role goes in its developer instructions.</li>
-          <li><b>Where they live</b>: in Agent Manager's data folder at first; <b>Keep them in a repository…</b> uses a
+          <li><b>Where they live</b>: no repository is needed: they work in Agent Manager's data folder; <b>Keep them in a repository…</b> uses a
             connected repository instead (for instance a private <code>agent-experts</code>), so experts, your skills and
             <code>sources.lock</code> (the sources and their pinned commits) are versioned and follow you. Downloaded
             sources stay in Agent Manager's cache.</li>

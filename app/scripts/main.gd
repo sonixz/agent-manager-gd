@@ -4208,6 +4208,7 @@ var exp_launch := ""             # the expert whose launch panel is open
 var exp_edit := ""               # the expert being edited ("+" for a new one)
 var exp_updates := {}            # a source -> what changed upstream (after « Check for updates »)
 var exp_reader: AcceptDialog
+var exp_add_source := false
 
 
 ## Experts (owner, 2026-11-14: « des agents spécialistes… on viendrait loader un agent, puis l'assigner à une
@@ -4591,6 +4592,50 @@ func _expert_editor(r: Dictionary, by: Dictionary) -> Control:
 ## The library: each source with its pinned commit and its updates, then a card per skill.
 func _render_skills(r: Dictionary) -> void:
 	var sources: Array = r.get("sources", [])
+	# Importing (owner, 2026-11-14: « on peut importer des skills? on sélectionne un répertoire? ou un repo? »)
+	var imp := HBoxContainer.new()
+	imp.add_theme_constant_override("separation", 8)
+	exp_box.add_child(imp)
+	imp.add_child(_small("Import a folder…", func() -> void:
+		_pick_folder_then("", func(dir: String) -> void:
+			var d := await engine.call_api("POST", "/experts/import", {"path": dir}, true, 120.0)
+			if d.has("error"):
+				_toast(str(d["error"]))
+				return
+			var said := "Imported: " + (", ".join(d.get("imported", [])) if not (d.get("imported", []) as Array).is_empty() else "nothing")
+			if not (d.get("kept", []) as Array).is_empty():
+				said += " · kept as they were (same name): " + ", ".join(d["kept"])
+			_toast(said)
+			await _load_experts()), "A skill's folder (it holds a SKILL.md), or a folder of skills: copied into your own skills. Nothing is downloaded."))
+	imp.add_child(_small("Add a git source…", func() -> void:
+		exp_add_source = not exp_add_source
+		_render_experts(), "A public git repository of skills (https), pinned to a commit and updated on your OK, like Anthropic's"))
+	if exp_add_source:
+		var f := HBoxContainer.new()
+		f.add_theme_constant_override("separation", 8)
+		exp_box.add_child(f)
+		var url := LineEdit.new()
+		url.placeholder_text = "https://github.com/owner/skills.git"
+		url.size_flags_horizontal = SIZE_EXPAND_FILL
+		f.add_child(url)
+		var sub := LineEdit.new()
+		sub.placeholder_text = "folder of its skills (e.g. skills; empty: the top)"
+		sub.custom_minimum_size.x = 280
+		f.add_child(sub)
+		f.add_child(_small("Add…", func() -> void:
+			var u := url.text.strip_edges()
+			var sid := u.trim_suffix(".git").get_file().to_lower()
+			var owner := u.trim_suffix(".git").get_base_dir().get_file().to_lower()
+			var id := (owner + "-" + sid).replace("_", "-").replace(".", "-").left(60) if owner != "" else sid
+			_confirm("Download %s into Agent Manager's cache?\n\nIt is pinned to the commit it is at now, shown as the source « %s ». Its skills can hold scripts that agents run: read them first." % [u, id], func() -> void:
+				_toast("Downloading %s…" % u)
+				var d := await engine.call_api("POST", "/experts/sources", {"id": id, "url": u, "path": sub.text.strip_edges(), "title": owner + "/" + sid, "page": u.trim_suffix(".git"), "confirmed": true}, true, 600.0)
+				if d.has("error"):
+					_toast(str(d["error"]))
+					return
+				exp_add_source = false
+				_toast("Source « %s » added" % id)
+				await _load_experts())))
 	if not r.get("has_anthropic", false):
 		var a: Dictionary = r.get("anthropic", {})
 		var panel := PanelContainer.new()

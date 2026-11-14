@@ -132,6 +132,27 @@ class ExpertsTest(unittest.TestCase):
         self.assertNotIn("web", {e["name"] for e in self.x.experts()})
         self.assertEqual({s["id"]: s["used_by"] for s in self.x.skills()}["anthropic/pdf"], ["documents"])
 
+    def test_skills_are_imported_from_a_folder_one_or_many_never_overwritten_unless_asked(self):
+        one = os.path.join(self.tmp, "mine", "Release Notes")
+        write(os.path.join(one, "SKILL.md"), skill_md("release-notes", "Write release notes"))
+        write(os.path.join(one, ".git", "HEAD"), "ref: x\n")                       # never copied
+        st = self.x.import_folder(one)
+        self.assertEqual(st["imported"], ["release-notes"])                         # named by its SKILL.md
+        self.assertFalse(os.path.exists(os.path.join(self.x.root(), "skills", "release-notes", ".git")))
+        many = os.path.join(self.tmp, "pack")
+        write(os.path.join(many, "a", "SKILL.md"), skill_md("alpha", "A"))
+        write(os.path.join(many, "b", "SKILL.md"), skill_md("release-notes", "Changed"))
+        write(os.path.join(many, "notes.txt"), "not a skill\n")
+        st = self.x.import_folder(many)
+        self.assertEqual((st["imported"], st["kept"]), (["alpha"], ["release-notes"]))
+        self.assertIn("Write release notes", self.x.skill("own/release-notes")["description"])
+        self.assertEqual(self.x.import_folder(many, replace=True)["imported"], ["alpha", "release-notes"])
+        self.assertEqual(self.x.skill("own/release-notes")["description"], "Changed")
+        with self.assertRaises(ValueError):
+            self.x.import_folder(os.path.join(self.tmp, "upstream", "README.md"))
+        with self.assertRaises(ValueError):
+            self.x.import_folder(self.tmp + "/nothing-here")
+
     def test_claude_gets_a_plugin_of_the_session_and_codex_links_out_of_git(self):
         self.x.add_source(self.src, confirmed=True)
         self.x.save("web", "Web", "You build the web.", ["anthropic/frontend-design", "anthropic/pdf"])

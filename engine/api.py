@@ -114,6 +114,11 @@ def make_handler(sessions: Sessions, token: str):
                         return self._reply(200, sessions.experts.update(sid, str(b.get("commit", "")), bool(b.get("confirmed", False))))
                     if act == "remove" and method == "POST":
                         return self._reply(200, sessions.experts.remove_source(sid, bool(self._body().get("confirmed", False))))
+                if parts == ["experts", "import"] and method == "POST":   # skills from a folder of this computer
+                    from .sessions import host_path
+                    b = self._body()
+                    return self._reply(200, sessions.experts.import_folder(os.path.expanduser(host_path(str(b.get("path", "")).strip())),
+                                                                           bool(b.get("replace", False))))
                 if parts == ["experts", "skill"] and method == "GET":
                     return self._reply(200, sessions.experts.skill(parse_qs(url.query).get("id", [""])[0]))
                 if len(parts) == 3 and parts[0] == "experts" and parts[2] == "delete" and method == "POST":

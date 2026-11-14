@@ -294,6 +294,30 @@ class Experts:
         shutil.rmtree(os.path.join(self.cache, sid), ignore_errors=True)
         return self.state()
 
+    def import_folder(self, path: str, replace: bool = False) -> dict:
+        """Skills from a folder of this computer, copied into the owner's own skills: the folder of one skill (it
+        holds a SKILL.md) or a folder of skills (each subfolder holding one). Nothing is downloaded; a skill of the
+        same name is kept unless `replace`."""
+        if not os.path.isdir(path):
+            raise ValueError(f"no such folder: {path}")
+        found = [path] if os.path.isfile(os.path.join(path, "SKILL.md")) else \
+            [os.path.join(path, d) for d in sorted(os.listdir(path)) if os.path.isfile(os.path.join(path, d, "SKILL.md"))]
+        if not found:
+            raise ValueError("no skill there: a skill is a folder holding a SKILL.md (or a folder of such folders)")
+        own = os.path.join(self.root(), "skills")
+        made, kept = [], []
+        for src in found:
+            fm = front_matter(_read(os.path.join(src, "SKILL.md")))
+            name = re.sub(r"[^a-z0-9-]+", "-", str(fm.get("name") or os.path.basename(src)).lower()).strip("-")[:63] or "skill"
+            dest = os.path.join(own, name)
+            if os.path.exists(dest) and not replace:
+                kept.append(name)
+                continue
+            shutil.rmtree(dest, ignore_errors=True)
+            shutil.copytree(src, dest, symlinks=False, ignore=shutil.ignore_patterns(".git", "__pycache__", "node_modules"))
+            made.append(name)
+        return {**self.state(), "imported": made, "kept": kept}
+
     # ---------------------------------------------------------------- the library
     def skills(self) -> list[dict]:
         out = []
