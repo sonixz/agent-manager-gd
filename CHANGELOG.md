@@ -5,6 +5,13 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Small fixes (after Loop 47)
+- Fix: **Remove and forget**, **Archive**, **Stop** and **Restart** no longer do nothing silently when Agent Manager
+  refuses: the reason is said. A session that holds a cloud machine opens that machine's line (Online or Sandboxes),
+  to destroy the machine first.
+- The **⬡ Online** form has a **size** (the same sizes as the sandboxes, with their price), the smallest chosen first.
+  Before, it took the sandboxes' default size without showing it.
+
 ### Online, one service per line (Loop 47)
 - The ⬡ Online page scales: tiles for the whole (public, private, running, today), then one line per service with
   its gate, address, port, size, sessions, start script and cost; a click unfolds its door and its card. The form to

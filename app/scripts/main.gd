@@ -2717,7 +2717,9 @@ func _fork(id: String) -> void:
 
 
 func _archive(id: String) -> void:
-	await engine.call_api("POST", "/sessions/%s/archive" % id)
+	var r := await engine.call_api("POST", "/sessions/%s/archive" % id)
+	if _refused(r, id):
+		return
 	if terms.has(id):
 		terms[id].queue_free()
 		terms.erase(id)
@@ -4995,11 +4997,32 @@ func _online_new() -> Control:
 		var old := _wrap("Your image was built before start scripts: Rebuild it in ☁ Sandboxes (step 1) so a service starts again by itself after a restart.")
 		old.add_theme_color_override("font_color", AmTheme.col("WARN"))
 		v.add_child(old)
-	var est: Dictionary = sbx_last.get("estimate", {})
-	var cost := _muted("about %s a month while it runs (%s) + $%.2f per GB of volume a month · the addresses are free" % [
-		CostChart.money(float(est.get("per_month_on", 6.70))), str(est.get("size", "shared-cpu-1x-1024")), 0.15])
+	# its size (owner, 2026-11-14: « ça l'a déployé directement de ma chaîne performance à 2 gigs… faudra avoir les
+	# SKU »): the same sizes as the sandboxes, the smallest chosen first, its price beside it
+	var row3 := HBoxContainer.new()
+	row3.add_theme_constant_override("separation", 8)
+	v.add_child(row3)
+	row3.add_child(_muted("size"))
+	var size := OptionButton.new()
+	size.name = "OnlineSize"
+	var sizes: Array = sbx_last.get("sizes", {}).get("sizes", [])
+	if sizes.is_empty():
+		sizes = [{"id": "shared-cpu-1x-256", "kind": "shared", "cpus": 1, "memory_mb": 256, "month": 2.19}]
+	for z in sizes:
+		size.add_item("%s · %d CPU · %s · $%.2f / month" % [str(z.get("kind", "")), int(z.get("cpus", 1)),
+			("%d MB" % int(z["memory_mb"])) if int(z.get("memory_mb", 0)) < 1024 else ("%.0f GB" % (int(z["memory_mb"]) / 1024.0)), float(z.get("month", 0))])
+		size.set_item_metadata(size.item_count - 1, str(z["id"]))
+	size.select(0)
+	size.tooltip_text = "Billed by the second while it runs; paused, only its disk. The same sizes as ☁ Sandboxes."
+	row3.add_child(size)
+	var cost := _muted("")
 	cost.add_theme_font_size_override("font_size", 12)
-	v.add_child(cost)
+	row3.add_child(cost)
+	var say_cost := func(i: int) -> void:
+		var z: Dictionary = sizes[i] if i < sizes.size() else {}
+		cost.text = "≈ %s a month while it runs + $%.2f per GB of volume · the addresses are free" % [CostChart.money(float(z.get("month", 0))), 0.15]
+	size.item_selected.connect(say_cost)
+	say_cost.call(0)
 	var go := _small("Make it (private)", func() -> void:
 		var n := name_edit.text.strip_edges().to_lower()
 		if n == "":
@@ -5012,6 +5035,7 @@ func _online_new() -> Control:
 				chosen.append((c as CheckBox).text)
 		var d := await engine.call_api("POST", "/online", {"name": n, "port": int(port.value), "volume_gb": int(vol.value),
 			"tool": str(tool.get_selected_metadata()), "repo": str(repo.get_selected_metadata()), "secrets": chosen,
+			"size": str(size.get_selected_metadata()),
 			"expert": str(ex.get_selected_metadata())}, true, 900.0)
 		if d.has("error"):
 			_toast(str(d["error"]))
@@ -6658,7 +6682,9 @@ func _create_now() -> void:
 func _restart() -> void:
 	if selected == "":
 		return
-	await engine.call_api("POST", "/sessions/%s/restart" % selected)
+	var r := await engine.call_api("POST", "/sessions/%s/restart" % selected)
+	if _refused(r, selected):
+		return
 	if terms.has(selected):
 		terms[selected].queue_free()
 		terms.erase(selected)
@@ -6668,7 +6694,9 @@ func _restart() -> void:
 
 func _stop() -> void:
 	if selected != "":
-		await engine.call_api("POST", "/sessions/%s/stop" % selected)
+		var r := await engine.call_api("POST", "/sessions/%s/stop" % selected)
+		if _refused(r, selected):
+			return
 		await refresh()
 
 
@@ -6681,9 +6709,32 @@ func _remove() -> void:
 		await _remove_now(sid))
 
 
+## The engine said no (owner, 2026-11-14: « je fais remove and forget, puis il n'y a rien qui bouge »): before, the
+## answer was dropped and nothing moved. Now the reason is said; a session that holds a cloud machine leads to that
+## machine's line, where it can be destroyed first.
+func _refused(r: Dictionary, sid: String) -> bool:
+	if not r.has("error"):
+		return false
+	var why := str(r["error"])
+	var sb = _session(sid).get("sandbox")
+	if sb is Dictionary and "cloud sandbox" in why:
+		var online := str(sb.get("kind", "")) == "online"
+		_toast("« %s » runs its cloud machine: destroy the machine first (its line is open), then remove the session." % str(_session(sid).get("name", sid)))
+		if online:
+			online_open[str(sb.get("id", ""))] = true
+		else:
+			sbx_open[str(sb.get("id", ""))] = true
+		set_view("online" if online else "sandboxes")
+	else:
+		_toast(why)
+	return true
+
+
 func _remove_now(sid: String) -> void:
 	selected = sid
-	await engine.call_api("DELETE", "/sessions/%s" % selected)
+	var r := await engine.call_api("DELETE", "/sessions/%s" % selected)
+	if _refused(r, sid):
+		return
 	if terms.has(selected):
 		terms[selected].queue_free()
 		terms.erase(selected)
