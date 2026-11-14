@@ -26,6 +26,9 @@ Newest first.
   lasts on `/data`, test on the owner's localhost first, never expose it itself.
 - Changed: Keys › Secrets can now go to cloud sandboxes and Online machines (root-only file there; every session on
   the machine can read them).
+- Fix (found by a live test on Fly.io): the first session of a new cloud machine now has the machine's secrets in its
+  environment, and a first session whose terminal was gone in the machine comes back with its tool and its secrets
+  instead of a bare shell.
 
 ### GitHub's CLI under Repos (Loop 42)
 - New: a **GitHub CLI** band at the top of ⎇ Repos: your `gh`, its version, the account, the token's scopes, and
