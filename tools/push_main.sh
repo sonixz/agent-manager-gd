@@ -160,6 +160,14 @@ if out="$(bash tools/site.sh --check 2>&1)"; then ok "How-to screenshots, links,
 else bad "the website checks fail"; tail -20 <<<"$out" | sed 's/^/           /'; fi
 
 step "7. Nothing private goes out, and the words are right"
+# A program the tests or the tools run must be executable in the repository: on the Windows disk a chmod is not
+# recorded by git, and GitHub's tests failed on it twice (tools/release.sh 2026-11-13, standins/gh 2026-11-14).
+noexec="$(git ls-files -s -- 'tools/*.sh' 'tests/python/standins/*' | awk '$1 != "100755" {print $4}')"
+if [[ -n "$noexec" ]]; then
+  bad "not executable in the repository (git update-index --chmod=+x <file>): $(echo $noexec)"
+else
+  ok "every script of tools/ and every stand-in of the tests is executable in the repository"
+fi
 relay < <(python3 - "$RANGE" <<'EOF'
 import getpass, os, re, subprocess, sys
 
