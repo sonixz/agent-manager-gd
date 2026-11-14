@@ -58,7 +58,8 @@ GIT_MERGE_RULES = ["Bash(git merge *)", "Bash(git rebase *)"]
 OWNER_ONLY_GIT = GIT_PUSH_RULES + GIT_MERGE_RULES
 ORCH_NOTE = (
     "You are the orchestrator of Agent Manager GD: you plan, delegate, follow up and check; you rarely code yourself. "
-    "Your agent-manager MCP tools: list_repos, list_sessions, start_session (repo, worktree, level, model, document), "
+    "Your agent-manager MCP tools: list_repos, list_experts, list_sessions, start_session (repo, worktree, level, model, "
+    "document, expert), "
     "send_to_session, wait_for_session, read_screen, ask_owner, finish_session. How you work: "
     "1. Orient: the Second Brain (project cards, open questions, recent decisions) if you have it, then list_repos and "
     "list_sessions. "
@@ -72,6 +73,8 @@ ORCH_NOTE = (
     "5. When a task is done, check it (tests, the diff), then call finish_session: the owner reviews and merges. You and "
     "your sessions never push nor merge (it is refused). "
     "6. Report briefly to the owner, and record the plan, your routing choices and a journal in the Second Brain. "
+    "Experts: list_experts shows agents that know a trade (their skills, the secrets they need); give a task that "
+    "matches one to start_session with expert: its name. "
     "Routing: call routing_rules first and follow the owner's rules to choose each task's tool and model; say why when "
     "you depart from them. After the owner's OK, write the plan with set_plan (each task: title, repo, tool, model, "
     "why) and keep it current with update_task (running with its session id, review, done). Check usage before "
@@ -634,7 +637,7 @@ class Sessions:
             orch = ORCH_NOTE.format(max_children=MAX_RUNNING_CHILDREN) if rec.get("role") == "orchestrator" else ""
             expert_note = ""
             if rec.get("expert"):   # Loop 44: its skills as a plugin of this session, its context in the note
-                parts = self.experts.claude_parts(rec["expert"], rec["id"])
+                parts = self.experts.claude_parts(rec["expert"], rec["id"], brain=bool((self.store.get(rec["id"]) or rec).get("brain_client")))
                 base += parts["args"]
                 expert_note = parts["note"]
             note = "\n\n".join(n for n in (orch, expert_note, self.repo_note(rec), self.brain_note(rec)) if n)
@@ -656,7 +659,7 @@ class Sessions:
             if rec.get("model"):
                 notify += ["-m", rec["model"]]
             if rec.get("expert"):   # Loop 44: its skills in .agents/skills of its folder, its context as instructions
-                notify += self.experts.codex_parts(rec["expert"], rec["cwd"])["args"]
+                notify += self.experts.codex_parts(rec["expert"], rec["cwd"], brain=bool((self.store.get(rec["id"]) or rec).get("brain_client")))["args"]
             if mode == "resume":  # without a known id Codex shows its own picker
                 return ["codex", "resume"] + notify + ([conversation] if conversation else [])
             if mode == "fork":
@@ -744,17 +747,6 @@ class Sessions:
                repo: str = "", host: str = "local", remote: bool | None = None, document: bool = False,
                level: str = "", model: str = "", role: str = "", access: str = "", extra_dirs: list | None = None,
                os_sandbox: bool = False, secrets: list | None = None, sandbox: str = "", expert: str = "") -> dict:
-        if host == "sandbox":
-            if parent and not sandbox:   # an agent never makes a machine (a cost): it may add a session to one
-                raise ValueError("an agent may add a session to an existing sandbox (sandbox), never make a new machine")
-            d = self.create_sandbox_session(name, tool, grp, repo, brain, on=sandbox, parent=parent)
-            if secrets:   # Loop 43: they reach the machine when its terminal connects
-                self.set_secrets(d["id"], secrets)
-            return self.get(d["id"])
-        if tool not in TOOLS:
-            raise ValueError(f"unknown tool: {tool}")
-        if not NAME_OK.match(name or ""):
-            raise ValueError("a name of 1 to 60 characters")
         if expert:   # Loop 44: launched as an expert: its secrets go with it (those the vault holds)
             e = self.experts.expert(expert)
             if tool not in ("claude", "codex"):
@@ -762,7 +754,22 @@ class Sessions:
             missing = [n for n in e["secrets"] if not self.vault.exists(n)]
             if missing:
                 raise ValueError("add these secrets in Keys › Secrets first: " + ", ".join(missing))
+            if parent:   # Loop 45: an agent never gets a secret by launching an expert: only those it holds already
+                beyond = [n for n in e["secrets"] if n not in self.secrets_of(parent)]
+                if beyond:
+                    raise ValueError("this expert needs secrets your session was not given: " + ", ".join(beyond)
+                                     + " (the owner launches it, or gives them to you first)")
             secrets = list(dict.fromkeys(list(secrets or []) + e["secrets"]))
+        if host == "sandbox":
+            if parent and not sandbox:   # an agent never makes a machine (a cost): it may add a session to one
+                raise ValueError("an agent may add a session to an existing sandbox (sandbox), never make a new machine")
+            d = self.create_sandbox_session(name, tool, grp, repo, brain, on=sandbox, parent=parent,
+                                            secrets=secrets, expert=expert)
+            return self.get(d["id"])
+        if tool not in TOOLS:
+            raise ValueError(f"unknown tool: {tool}")
+        if not NAME_OK.match(name or ""):
+            raise ValueError("a name of 1 to 60 characters")
         if repo:  # a connected repository: its local folder (cloned with its key when needed)
             cwd = self.repos.ensure_clone(repo)
         cwd = os.path.expanduser(host_path((cwd or "~").strip()))
@@ -1237,14 +1244,17 @@ class Sessions:
             import threading
             threading.Thread(target=close, daemon=True).start()
 
-    def create_sandbox_session(self, name: str, tool: str, grp: str, repo: str, brain: bool, on: str = "", parent: str = "") -> dict:
+    def create_sandbox_session(self, name: str, tool: str, grp: str, repo: str, brain: bool, on: str = "", parent: str = "",
+                               secrets: list | None = None, expert: str = "") -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
             raise ValueError("a name of 1 to 60 characters")
         if on:  # Loop 40: one more session on a sandbox that is there already: no new machine
-            return self._add_to_sandbox(on, name.strip(), tool, grp, parent)
+            return self._add_to_sandbox(on, name.strip(), tool, grp, parent, secrets=secrets, expert=expert)
         rec = self.store.add(name.strip(), tool, "/work", grp, repo_id=repo)
+        # what the machine gets at its first connection: written before the terminal starts (Loops 43, 45)
+        self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert)
         try:
             sb = self.sandboxes.create(rec["id"], repo_id=repo)
         except Exception:
@@ -1260,12 +1270,19 @@ class Sessions:
         return self.get(rec["id"])
 
     def create_online_session(self, name: str, tool: str, grp: str, port: int, volume_gb: int = 1, size: str = "",
-                              repo: str = "", brain: bool = True, secrets: list | None = None) -> dict:
+                              repo: str = "", brain: bool = True, secrets: list | None = None, expert: str = "") -> dict:
         """Loop 41: an Online machine (its own Fly app, a volume, 443 toward `port` once exposed) and its first
         session, the one that works on the service. Private until the owner exposes it."""
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
+        if expert:   # Loop 45: an Online machine's first session may work as an expert (its secrets go with it)
+            e = self.experts.expert(expert)
+            missing = [n for n in e["secrets"] if not self.vault.exists(n)]
+            if missing:
+                raise ValueError("add these secrets in Keys › Secrets first: " + ", ".join(missing))
+            secrets = list(dict.fromkeys(list(secrets or []) + e["secrets"]))
         rec = self.store.add(name[:60], tool, "/work", grp or "Online", repo_id=repo)
+        self.store.update(rec["id"], expert=expert)
         if secrets:   # Loop 43: written before its terminal first connects, so the machine has them from the start
             self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets)))
         try:
@@ -1322,7 +1339,8 @@ class Sessions:
             return {"created": made, "repo": self.repos.get(r["id"]), "deploy_key": {"found": False, "error": str(e)}}
         return {"created": made, **out}
 
-    def _add_to_sandbox(self, sbid: str, name: str, tool: str, grp: str, parent: str = "") -> dict:
+    def _add_to_sandbox(self, sbid: str, name: str, tool: str, grp: str, parent: str = "", secrets: list | None = None,
+                        expert: str = "") -> dict:
         """Its own tmux session in the machine, its own git worktree when the sandbox holds a repository and the
         tool is an agent (two agents never edit one checkout), the sandbox's Second Brain (one per machine)."""
         sb = self.sandboxes.get(sbid)
@@ -1332,6 +1350,7 @@ class Sessions:
         if parent and not self.store.get(parent):
             raise ValueError(f"unknown parent session: {parent}")
         rec = self.store.add(name, tool, "/work", grp or first.get("grp", ""), parent=parent, repo_id=sb["repo_id"])
+        self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert)
         try:
             self.sandboxes.add_session(sbid, rec["id"], worktree=tool in ("claude", "codex"))
         except Exception:

@@ -39,7 +39,9 @@ def _iso(t: float) -> str:
 
 # what the sessions proposed (by key name), newest first: [title, status, minutes ago]
 PROPOSED = {"Checkout flow": [["Decision · gift cards never go above their balance", "applied", 4],
-                              ["Session journal · acme-store", "pending", 1]],
+                              ["Session journal · acme-store", "pending", 1],
+                              ["Expert · Frontend · check a checkout at phone width before calling it done", "applied", 30],
+                              ["Expert · Frontend · keep focus rings: keyboard users pay with them", "applied", 95]],
             "Sparks": [["Session journal · pixel-forge", "applied", 9]],
             "Docs refresh": [["Owner wish · README in plain words", "applied", 22]]}
 

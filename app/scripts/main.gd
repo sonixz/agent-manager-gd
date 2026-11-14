@@ -4374,6 +4374,14 @@ func _expert_card(e: Dictionary, by: Dictionary) -> Control:
 		chips.add_child(_chip(str(k).get_slice("/", 1), true if known else false))
 	for sname in e.get("secrets", []):
 		chips.add_child(_chip("⚷ " + str(sname), true if str(sname) in exp_secrets else "warn"))
+	var mem: Dictionary = exp_last.get("memory", {}).get(name, {})   # Loop 45: what it learned, in the Second Brain
+	if exp_last.has("memory"):
+		var ml := _muted(("◉ %d lesson%s in the Second Brain" % [int(mem.get("lessons", 0)), "s" if int(mem.get("lessons", 0)) != 1 else ""]) +
+			((" · latest: " + str(mem["latest"])) if str(mem.get("latest", "")) != "" else " · it writes them as it works"))
+		ml.add_theme_font_size_override("font_size", 11)
+		ml.add_theme_color_override("font_color", AmTheme.col("MINT") if int(mem.get("lessons", 0)) > 0 else AmTheme.col("FAINT"))
+		ml.tooltip_text = "Launched with the Second Brain, it reads « Expert · %s » first and proposes each lesson that will serve this trade again" % str(e.get("title", name))
+		v.add_child(ml)
 	var acts := HBoxContainer.new()
 	acts.add_theme_constant_override("separation", 6)
 	v.add_child(acts)
@@ -4416,6 +4424,10 @@ func _expert_launch(e: Dictionary) -> Control:
 	folder.visible = exp_repos.is_empty()
 	r1.add_child(folder)
 	where.item_selected.connect(func(i: int) -> void: folder.visible = str(where.get_item_metadata(i)) == "folder")
+	var cloud := CheckBox.new()
+	cloud.text = "in a new cloud sandbox"
+	cloud.tooltip_text = "A new Fly.io machine for it (☁ Sandboxes), with the chosen repository cloned there; its skills and role are sent to the machine"
+	r1.add_child(cloud)
 	var wt := CheckBox.new()
 	wt.text = "its own worktree"
 	wt.tooltip_text = "Its own branch in a folder beside the repository. Codex as an expert always gets one (it reads skills from its folder)."
@@ -4460,8 +4472,12 @@ func _expert_launch(e: Dictionary) -> Control:
 			body["cwd"] = "~"
 		else:
 			body["cwd"] = folder.text.strip_edges()
+		if cloud.button_pressed:   # Loop 45: on a new cloud machine
+			body["host"] = "sandbox"
+			if not target.begins_with("repo:"):
+				body.erase("repo")
 		_toast("Launching « %s »…" % body["name"])
-		var d := await engine.call_api("POST", "/sessions", body, true, 60.0)
+		var d := await engine.call_api("POST", "/sessions", body, true, 900.0 if cloud.button_pressed else 60.0)
 		if d.has("error"):
 			_toast(str(d["error"]))
 			return
@@ -4881,6 +4897,13 @@ func _online_new() -> Control:
 	repo.set_item_metadata(0, "")
 	repo.tooltip_text = "A connected repository (⎇ Repos): cloned on its volume (/data/work) with its own deploy key"
 	row2.add_child(repo)
+	row2.add_child(_muted("expert"))
+	var ex := OptionButton.new()
+	ex.name = "OnlineExpert"
+	ex.add_item("none")
+	ex.set_item_metadata(0, "")
+	ex.tooltip_text = "Its first session works as this expert (✦ Experts): its skills and role on the machine, its secrets given"
+	row2.add_child(ex)
 	row2.add_child(_muted("secrets"))
 	var picks := HBoxContainer.new()
 	picks.name = "OnlineSecrets"
@@ -4891,6 +4914,10 @@ func _online_new() -> Control:
 		for x in rr.get("repos", []):
 			repo.add_item("⎇ " + str(x["name"]) + ("" if str(x.get("status", "")) == "connected" else "  (key not working yet)"))
 			repo.set_item_metadata(repo.item_count - 1, str(x["id"]))
+		var er := await engine.call_api("GET", "/experts")
+		for x in er.get("experts", []):
+			ex.add_item(str(x.get("glyph", "◆")) + " " + str(x.get("title", x["name"])))
+			ex.set_item_metadata(ex.item_count - 1, str(x["name"]))
 		var sr := await engine.call_api("GET", "/secrets")
 		for x in sr.get("secrets", []):
 			var cb := CheckBox.new()
@@ -4920,7 +4947,8 @@ func _online_new() -> Control:
 			if c is CheckBox and (c as CheckBox).button_pressed:
 				chosen.append((c as CheckBox).text)
 		var d := await engine.call_api("POST", "/online", {"name": n, "port": int(port.value), "volume_gb": int(vol.value),
-			"tool": str(tool.get_selected_metadata()), "repo": str(repo.get_selected_metadata()), "secrets": chosen}, true, 900.0)
+			"tool": str(tool.get_selected_metadata()), "repo": str(repo.get_selected_metadata()), "secrets": chosen,
+			"expert": str(ex.get_selected_metadata())}, true, 900.0)
 		if d.has("error"):
 			_toast(str(d["error"]))
 			return

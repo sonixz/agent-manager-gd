@@ -419,7 +419,8 @@
           <tr><td><code>list_sessions</code></td><td>every session and its state</td><td>any session</td></tr>
           <tr><td><code>session_status</code></td><td>working, waits, asks, done</td><td>any session</td></tr>
           <tr><td><code>read_screen</code></td><td>what a terminal shows now</td><td>any session</td></tr>
-          <tr><td><code>start_session</code></td><td>a child session: Claude Code, Codex or a shell; with <code>sandbox</code>, on that cloud sandbox's machine (never a new machine)</td><td>new, shown « ↳ parent »</td></tr>
+          <tr><td><code>list_experts</code></td><td>the experts: what they know, the tool, the secrets they need</td><td>the owner's experts</td></tr>
+          <tr><td><code>start_session</code></td><td>a child session: Claude Code, Codex or a shell; with <code>sandbox</code>, on that cloud sandbox's machine (never a new machine); with <code>expert</code>, as that expert (its secrets only if the parent holds them)</td><td>new, shown « ↳ parent »</td></tr>
           <tr><td><code>send_to_session</code></td><td>write to a session</td><td>its own children only</td></tr>
           <tr><td><code>wait_for_session</code></td><td>until a child is done or waits</td><td>its own children only</td></tr>
         </table>
@@ -488,6 +489,18 @@
             and the role in its instructions. Codex reads skills from its folder: it gets its own worktree, the skills
             are linked into its <code>.agents/skills</code> and kept out of git (<code>.git/info/exclude</code>), and the
             role goes in its developer instructions.</li>
+          <li><b>Its memory</b>: launched with the Second Brain, an expert first searches it for « Expert · its title » to
+            read what it learned on other projects, and proposes each lesson that will serve its trade again (a trap of
+            an API, a way that works), titled « Expert · its title · the lesson ». Its card counts its lessons and shows
+            the latest. It is how an expert gets better from one project to the next.</li>
+          <li><b>In the cloud</b>: <b>in a new cloud sandbox</b> launches it on a new Fly.io machine; an Online machine's
+            form has an <b>expert</b> for its first session. Its skills are sent to the machine (Claude Code's
+            <code>~/.claude/skills</code>, Codex's <code>~/.agents/skills</code>) and its role into the machine's
+            <code>CLAUDE.md</code> and <code>AGENTS.md</code>; on a machine every session sees every expert there.</li>
+          <li><b>For agents</b>: <code>list_experts</code> on Agent Manager's MCP server shows the experts, and
+            <code>start_session</code> takes <code>expert</code>: the orchestrator gives a task that matches one to it. An
+            agent never gets a secret by launching an expert: the child gets only the expert's secrets its parent holds
+            already; otherwise it is refused, and the owner launches it.</li>
           <li><b>Where they live</b>: no repository is needed: they work in Agent Manager's data folder; <b>Keep them in a repository…</b> uses a
             connected repository instead (for instance a private <code>agent-experts</code>), so experts, your skills and
             <code>sources.lock</code> (the sources and their pinned commits) are versioned and follow you. Downloaded

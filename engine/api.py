@@ -87,7 +87,10 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, sessions.repos.refresh(bool(b.get("keys", False))))
                 # Loop 44: experts and their skills
                 if parts == ["experts"] and method == "GET":
-                    return self._reply(200, sessions.experts.state())
+                    st = sessions.experts.state()
+                    if sessions.brain:   # Loop 45: each expert's lessons, as the Second Brain received them
+                        st["memory"] = sessions.experts.memory(sessions.brain.proposals())
+                    return self._reply(200, st)
                 if parts == ["experts"] and method == "POST":
                     b = self._body()
                     return self._reply(200, sessions.experts.save(str(b.get("name", "")), str(b.get("title", "")), str(b.get("context", "")),
@@ -266,7 +269,7 @@ def make_handler(sessions: Sessions, token: str):
                                                                            str(b.get("group", "")), int(b.get("port", 8080)),
                                                                            int(b.get("volume_gb", 1)), str(b.get("size", "")),
                                                                            str(b.get("repo", "")), bool(b.get("brain", True)),
-                                                                           b.get("secrets") or []))
+                                                                           b.get("secrets") or [], str(b.get("expert", ""))))
                 if parts == ["sandboxes", "size"] and method == "POST":   # the size the next sandboxes get
                     return self._reply(200, sessions.sandboxes.choose_size(str(self._body().get("size", ""))))
                 if parts == ["sandboxes", "budget"] and method == "POST":

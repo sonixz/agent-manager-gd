@@ -5,6 +5,14 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Experts remember, and work everywhere (Loop 45)
+- An expert's **memory** is in the Second Brain: launched with it, an expert reads what it learned on other projects
+  (« Expert · its title ») and proposes each lesson that will serve its trade again. Its card counts its lessons.
+- Experts **in the cloud**: launch one in a new cloud sandbox, or choose one for an Online machine's first session;
+  its skills and role are sent to the machine.
+- **For agents**: `list_experts` and `start_session` with `expert` on Agent Manager's MCP server; the orchestrator is
+  told to use them. An agent never gets a secret by launching an expert.
+
 ### Experts (Loop 44)
 - New: **✦ Experts** in the top bar. An expert knows a trade (frontend, documents, an API) and works on any project:
   a short role, skills of the open Agent Skills format, the secrets it needs, a tool by default.

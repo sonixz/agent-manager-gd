@@ -442,7 +442,17 @@ class Experts:
         by = {s["id"]: s for s in self.skills()}
         return [(by[k]["folder"], by[k]["path"]) for k in e["skills"] if k in by]
 
-    def claude_parts(self, name: str, sid: str) -> dict:
+    def memory(self, proposals: list[dict]) -> dict:
+        """Loop 45: what each expert learned, as the Second Brain received it: the proposals titled « Expert · <its
+        title> · … » (only their count and latest title are shown, nothing else of their content)."""
+        out = {}
+        for e in self.experts():
+            head = f"Expert · {e['title']} ·".lower()
+            mine = [p for p in proposals if str(p.get("title", "")).lower().startswith(head)]
+            out[e["name"]] = {"lessons": len(mine), "latest": str(mine[0].get("title", ""))[len(head):].strip() if mine else ""}
+        return out
+
+    def claude_parts(self, name: str, sid: str, brain: bool = False) -> dict:
         """Claude Code: a plugin folder of this session only (its skills linked there), loaded with --plugin-dir;
         the context goes with Agent Manager's own note in --append-system-prompt. Nothing in the repository."""
         e = self.expert(name)
@@ -454,9 +464,9 @@ class Experts:
             json.dump({"name": f"expert-{name}", "description": f"Agent Manager GD expert « {e['title']} »", "version": "1.0.0"}, f)
         for short, path in self._skill_dirs(e):
             os.symlink(path, os.path.join(folder, "skills", short))
-        return {"args": ["--plugin-dir", folder], "note": self.note(e), "folder": folder}
+        return {"args": ["--plugin-dir", folder], "note": self.note(e, brain), "folder": folder}
 
-    def codex_parts(self, name: str, cwd: str) -> dict:
+    def codex_parts(self, name: str, cwd: str, brain: bool = False) -> dict:
         """Codex: its skills linked into .agents/skills of its own folder (Codex reads them there), that folder kept
         out of git locally (.git/info/exclude, never committed); the context as developer instructions."""
         e = self.expert(name)
@@ -476,11 +486,23 @@ class Experts:
             if ".agents/skills/" not in have.splitlines():
                 with open(ex_path, "a", encoding="utf-8") as f:
                     f.write(("" if have.endswith("\n") or not have else "\n") + "# Agent Manager GD experts' skills (never committed)\n.agents/skills/\n")
-        return {"args": ["-c", "developer_instructions=" + json.dumps(self.note(e))], "note": self.note(e), "folder": dest}
+        return {"args": ["-c", "developer_instructions=" + json.dumps(self.note(e, brain))], "note": self.note(e, brain), "folder": dest}
+
+    def skill_dirs(self, name: str) -> list[tuple[str, str]]:
+        """(folder name, path) of each skill of an expert, for a cloud machine."""
+        return self._skill_dirs(self.expert(name))
 
     @staticmethod
-    def note(e: dict) -> str:
+    def note(e: dict, brain: bool = False) -> str:
         names = ", ".join(k.split("/", 1)[-1] for k in e["skills"])
-        return (f"Agent Manager: you work as the expert « {e['title']} ». {e['context'].strip()}\n"
-                f"Your skills for this ({names}) are loaded: use them when the task matches."
-                + (f" The secrets you need are in your environment: {', '.join(e['secrets'])} (never print them)." if e["secrets"] else ""))
+        out = (f"Agent Manager: you work as the expert « {e['title']} ». {e['context'].strip()}\n"
+               f"Your skills for this ({names}) are loaded: use them when the task matches."
+               + (f" The secrets you need are in your environment: {', '.join(e['secrets'])} (never print them)." if e["secrets"] else ""))
+        if brain:   # Loop 45: an expert's memory, from project to project, in the Second Brain
+            out += (f"\nYour memory as this expert is in the Second Brain: before you start, search it for « Expert · {e['title']} » "
+                    "and read what you learned on other projects. When you learn something that will serve this trade again "
+                    "(a trap of an API, a way that works, a rule), not something of this project only, propose it at once "
+                    f"with propose_item, titled « Expert · {e['title']} · <the lesson in a few words> », suggested place "
+                    f"« Experts › {e['title']} », saying where you learned it and whether it is established or a hypothesis. "
+                    "Never a secret, a key or source code in it.")
+        return out

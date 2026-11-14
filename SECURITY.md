@@ -30,7 +30,8 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
 - **Experts' skills**: a source of skills (for instance Anthropic's public repository) is downloaded only when you
   click to add it, over https, pinned to a commit; an update is shown skill by skill (scripts added in colour) and
   applied only on your OK. A skill can hold scripts the agent runs: each card says how many. An expert's secrets go
-  only to the sessions launched as it. Skills reach Claude Code as a plugin of that session; for Codex they are
+  only to the sessions launched as it, and an agent launching an expert (MCP) gets only the expert's secrets it holds
+  already: never more. Skills reach Claude Code as a plugin of that session; for Codex they are
   linked into its own worktree and kept out of git.
 - **GitHub's CLI**: Agent Manager runs your own `gh`, with your login, to read its state (`gh auth status`, which
   masks the token), add a repository's deploy key and create a repository (private unless you choose public). It

@@ -33,7 +33,10 @@ TOOLS = [
                      "document": {"type": "boolean", "description": "Claude Code: documents itself in the Second Brain"},
                      "access": {"type": "string", "enum": ["open", "contained", "readonly"], "description": "file access: open, contained (its file tools stay in its folder) or readonly; never less restricted than yours"},
                      "remote": {"type": "boolean", "description": "Claude Code: Remote Control, so the owner can follow it from claude.ai/code or the Claude app; yours by default"},
+                     "expert": {"type": "string", "description": "an expert's name (list_experts): the session works as that expert, with its skills; its secrets only if your session holds them"},
                      "sandbox": {"type": "string", "description": "a cloud sandbox's id (list_sessions shows each session's): the session runs on that machine, beside its other sessions, in its own git worktree; never a new machine"}}, "required": ["name", "tool"]}},
+    {"name": "list_experts", "description": "The experts the owner made (Loop 45): name, title, what they know (their skills), the tool by default, the secrets they need. start_session with expert: <name> starts one.",
+     "inputSchema": {"type": "object", "properties": {}}},
     {"name": "send_to_session", "description": "Types a message into one of YOUR child sessions and presses Enter.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]}},
     {"name": "wait_for_session", "description": "Waits until a session stops working (done, waiting for an answer or an OK, ended), then returns its state and screen.",
@@ -120,10 +123,17 @@ def run_tool(eng, name, a):
             body["access"] = str(a["access"])
         if "remote" in a:  # otherwise the engine gives the child its parent's Remote Control
             body["remote"] = bool(a["remote"])
+        if a.get("expert"):   # Loop 45
+            body["expert"] = str(a["expert"])
         if a.get("sandbox"):  # Loop 40: on a sandbox that is there already
             body.update(host="sandbox", sandbox=str(a["sandbox"]))
         r = eng.call("POST", "/sessions", body)
         return r if "error" in r else eng.brief(r)
+    if name == "list_experts":
+        r = eng.call("GET", "/experts")
+        return r if "error" in r else {"experts": [{"name": e["name"], "title": e.get("title", ""), "tool": e.get("tool", ""),
+                                                    "skills": e.get("skills", []), "secrets": e.get("secrets", []),
+                                                    "role": str(e.get("context", ""))[:300]} for e in r.get("experts", [])]}
     if name == "send_to_session":
         target = eng.call("GET", f"/sessions/{sid}")
         if "error" in target:

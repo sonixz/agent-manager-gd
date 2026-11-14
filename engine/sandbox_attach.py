@@ -220,8 +220,9 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
             say("first start: setting up the sandbox…")
             setup(sbs, sb, rec, keys, base, store)
             sb = sbs.get(sbid)  # the setup chose its working folder
-        if sb.get("kind") == "online":
-            guide = online_guide(int(sb.get("port") or 0), sb["app"])
+        guide = online_guide(int(sb.get("port") or 0), sb["app"]) if sb.get("kind") == "online" else ""
+        guide += give_experts(sbs, sb, store, base)
+        if guide:
             subprocess.run(base + ["root@127.0.0.1", "mkdir -p /root/.claude /root/.codex && cat > /root/.claude/CLAUDE.md && "
                                    "cp /root/.claude/CLAUDE.md /root/.codex/AGENTS.md"], input=guide, text=True, capture_output=True, timeout=60)
         # the first session's tmux, found again; started again with its tool and its secrets when it was gone (before,
@@ -261,6 +262,42 @@ def main() -> int:
     home = os.environ["AGMGD_HOME"]
     engine_port = int(os.environ.get("AGMGD_PORT", "8790"))
     return keep_connected(lambda may_start: connect(sbid, home, engine_port, may_start, sid))
+
+
+def give_experts(sbs, sb, store, base) -> str:
+    """Loop 45: the experts of this machine's sessions. Their skills go to the machine's user folders (Claude Code reads
+    ~/.claude/skills, Codex ~/.agents/skills), sent as one tar on ssh's standard input; their roles come back as text
+    for the machine's CLAUDE.md and AGENTS.md. On a machine every session is root: each sees every expert's skills."""
+    import io
+    import tarfile
+    from engine.experts import Experts
+    experts = Experts(sbs.home)
+    names = []
+    for sid in sbs.sessions_on(sb["id"]):
+        n = (store.get(sid) or {}).get("expert", "")
+        if n and n not in names:
+            names.append(n)
+    if not names:
+        return ""
+    buf, text, seen = io.BytesIO(), [], set()
+    with tarfile.open(fileobj=buf, mode="w:gz", dereference=True) as tar:
+        for n in names:
+            try:
+                e = experts.expert(n)
+            except KeyError:
+                continue
+            for short, path in experts.skill_dirs(n):
+                if short not in seen:
+                    seen.add(short)
+                    tar.add(path, arcname=short, filter=lambda t: None if "/.git" in t.name or t.name.endswith(".git") else t)
+            text.append("\n## Expert « %s »\n\n%s\n" % (e["title"], experts.note(e, brain=False)))
+    import base64
+    payload = base64.b64encode(buf.getvalue()).decode()
+    subprocess.run(base + ["root@127.0.0.1", "mkdir -p /root/.claude/skills /root/.agents/skills && umask 077 && base64 -d > /root/.agmgd-experts.tgz && "
+                           "tar xzf /root/.agmgd-experts.tgz -C /root/.claude/skills && tar xzf /root/.agmgd-experts.tgz -C /root/.agents/skills; "
+                           "rm -f /root/.agmgd-experts.tgz"],
+                   input=payload, text=True, capture_output=True, timeout=180)
+    return "\n# Experts on this machine (Agent Manager GD)\n" + "".join(text)
 
 
 def give_secrets(sbs, sb, store, keys, base) -> None:

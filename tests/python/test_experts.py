@@ -225,3 +225,115 @@ class LaunchTest(unittest.TestCase):
         self.assertTrue(any(a.startswith("developer_instructions=") for a in cmd))
         with self.assertRaises(ValueError):
             self.s.create("Shell", "shell", self.work, expert="discord", brain=False)
+
+
+class MemoryAndOrchestraTest(unittest.TestCase):
+    """Loop 45: an expert's memory in the Second Brain, experts for agents (MCP), experts on cloud machines."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="agmgd-ex45-")
+        os.environ["AGMGD_KEYS_PLAIN"] = "1"
+        self.x = Experts(self.tmp)
+        own = os.path.join(self.x.root(), "skills")
+        write(os.path.join(own, "discord-api", "SKILL.md"), skill_md("discord-api", "Discord's API"))
+        write(os.path.join(own, "discord-api", "scripts", "ping.py"), "print(1)\n")
+        write(os.path.join(own, "discord-api", ".git", "HEAD"), "x\n")
+        self.x.save("discord", "Discord", "You run Discord bots.", ["own/discord-api"], ["DISCORD_BOT_TOKEN"])
+
+    def tearDown(self):
+        os.environ.pop("AGMGD_KEYS_PLAIN", None)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_with_the_brain_an_expert_reads_and_writes_its_memory_and_the_page_counts_its_lessons(self):
+        e = self.x.expert("discord")
+        self.assertNotIn("Second Brain", self.x.note(e, brain=False))
+        note = self.x.note(e, brain=True)
+        self.assertIn("search it for « Expert · Discord »", note)
+        self.assertIn("titled « Expert · Discord · ", note)
+        self.assertIn("Never a secret", note)
+        mem = self.x.memory([{"title": "Expert · Discord · rate limits come per route"}, {"title": "Expert · Discord · test server first"},
+                             {"title": "Expert · Frontend · something"}, {"title": "Session journal · x"}])
+        self.assertEqual(mem["discord"], {"lessons": 2, "latest": "rate limits come per route"})
+
+    def test_agents_list_experts_and_pass_one_to_start_session(self):
+        from engine import mcp_agents as m
+        calls = []
+
+        class Eng:
+            me = "parent1"
+
+            def call(self, method, path, body=None):
+                calls.append((method, path, body))
+                if path == "/experts":
+                    return {"experts": [{"name": "discord", "title": "Discord", "tool": "claude", "skills": ["own/discord-api"],
+                                         "secrets": ["DISCORD_BOT_TOKEN"], "context": "You run Discord bots."}]}
+                if path.startswith("/sessions/parent1"):
+                    return {"cwd": "/w", "grp": ""}
+                return {"id": "c1", "name": "x"}
+
+            def role(self):
+                return ""
+
+            @staticmethod
+            def brief(s):
+                return s
+        out = m.run_tool(Eng(), "list_experts", {})
+        self.assertEqual(out["experts"][0]["name"], "discord")
+        self.assertEqual(out["experts"][0]["secrets"], ["DISCORD_BOT_TOKEN"])
+        m.run_tool(Eng(), "start_session", {"name": "Bot", "tool": "claude", "expert": "discord"})
+        self.assertEqual([c[2] for c in calls if c[0] == "POST"][-1]["expert"], "discord")
+        self.assertIn("list_experts", [t["name"] for t in m.TOOLS])
+
+    @unittest.skipUnless(shutil.which("tmux"), "tmux is needed")
+    def test_an_agent_never_gets_a_secret_by_launching_an_expert(self):
+        tmux = Tmux("agmgd-ex45-test", tmpdir=self.tmp)
+        try:
+            s = Sessions(Store(os.path.join(self.tmp, "s.sqlite3")), tmux, self.tmp, None)
+            s.vault.set("DISCORD_BOT_TOKEN", "t0ken", "")
+            work = os.path.join(self.tmp, "w")
+            os.makedirs(work)
+            parent = s.create("Lead", "shell", work, brain=False)
+            with self.assertRaises(ValueError) as e:
+                s.create("Bot", "claude", work, parent=parent["id"], expert="discord", brain=False)
+            self.assertIn("DISCORD_BOT_TOKEN", str(e.exception))
+            s.set_secrets(parent["id"], ["DISCORD_BOT_TOKEN"])            # the owner gave it to the parent
+            child = s.create("Bot", "claude", work, parent=parent["id"], expert="discord", brain=False)
+            self.assertEqual(s.store.get(child["id"])["expert"], "discord")
+            d = s.create("Owner's bot", "claude", work, expert="discord", brain=False)   # the owner: no parent, no limit
+            self.assertEqual(json.loads(s.store.get(d["id"])["secrets"]), ["DISCORD_BOT_TOKEN"])
+        finally:
+            tmux.kill_server()
+
+    def test_a_cloud_machine_gets_its_experts_skills_and_roles(self):
+        from engine import sandbox_attach as sa
+        import base64
+        import io
+        import tarfile
+
+        class Sbs:
+            home = self.tmp
+
+            @staticmethod
+            def sessions_on(sbid):
+                return ["s1", "s2"]
+
+        class St:
+            @staticmethod
+            def get(sid):
+                return {"s1": {"expert": "discord"}, "s2": {"expert": ""}}[sid]
+        sent = []
+        real = sa.subprocess.run
+        sa.subprocess.run = lambda cmd, **kw: (sent.append((cmd[-1], kw.get("input", ""))), real(["true"]))[1]
+        try:
+            text = sa.give_experts(Sbs(), {"id": "m1"}, St(), ["ssh"])
+        finally:
+            sa.subprocess.run = real
+        cmd, payload = sent[-1]
+        self.assertIn("/root/.claude/skills", cmd)
+        self.assertIn("/root/.agents/skills", cmd)
+        names = tarfile.open(fileobj=io.BytesIO(base64.b64decode(payload)), mode="r:gz").getnames()
+        self.assertIn("discord-api/SKILL.md", names)
+        self.assertIn("discord-api/scripts/ping.py", names)
+        self.assertFalse(any(".git" in n for n in names))             # never the skill's git folder
+        self.assertIn("Expert « Discord »", text)
+        self.assertEqual(sa.give_experts(Sbs(), {"id": "m1"}, type("E", (), {"get": staticmethod(lambda sid: {})})(), ["ssh"]), "")
