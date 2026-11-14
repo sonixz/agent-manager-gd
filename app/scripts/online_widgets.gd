@@ -94,3 +94,28 @@ class Door extends Control:
 		# the address
 		var said := ("PUBLIC · https://%s.fly.dev" % app) if exposed else "PRIVATE · no public address"
 		_text(Vector2(12, 140), said, 12, live if exposed else faint, bold)
+
+
+## Loop 47 (owner, 2026-11-14: « que ce soit scalable… réduire les tuiles, un service par ligne »): the door, small, at
+## the head of a service's line: a lit gate with a dot coming in when it is public, a barred gate when it is private,
+## grey when the machine is paused.
+class Gate extends Control:
+	var exposed := false
+	var running := true
+
+	func _init(is_exposed: bool, is_running: bool) -> void:
+		exposed = is_exposed
+		running = is_running
+		custom_minimum_size = Vector2(40, 26)
+		tooltip_text = ("Public: its port 443 is open to the internet" if exposed else "Private: no public address") + ("" if running else " · paused")
+
+	func _draw() -> void:
+		var c := AmTheme.col("WARN") if exposed and running else (AmTheme.col("MINT") if running else AmTheme.col("FAINT"))
+		var gate := Rect2(Vector2(16, 4), Vector2(18, 18))
+		draw_rect(gate, Color(c, 0.18), true)
+		draw_rect(gate, c, false, 1.4)
+		if exposed:
+			draw_line(Vector2(2, 13), Vector2(15, 13), Color(c, 0.8), 1.4, true)
+			draw_circle(Vector2(9, 13), 2.2, c)
+		else:
+			draw_line(gate.position + Vector2(3, 3), gate.end - Vector2(3, 3), Color(c, 0.9), 1.6, true)

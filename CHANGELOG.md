@@ -5,6 +5,11 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Online, one service per line (Loop 47)
+- The ⬡ Online page scales: tiles for the whole (public, private, running, today), then one line per service with
+  its gate, address, port, size, sessions, start script and cost; a click unfolds its door and its card. The form to
+  make one folds away behind **+ New Online machine**.
+
 ### Agents ask for cloud machines, you decide (Loop 46)
 - New on Agent Manager's MCP server: `list_machines`, `create_machine`, `machine_status`, `stop_machine`,
   `start_machine`, `destroy_machine`, `expose_machine`, `unexpose_machine`. An agent (loop0, for instance) can get a

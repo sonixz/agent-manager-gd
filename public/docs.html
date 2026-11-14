@@ -448,6 +448,11 @@
           it. It is not a sandbox: a sandbox is private and throw-away, an Online machine lasts and may have one public
           door. It needs the same Fly.io token (⚷ Keys, step 2) and the image built once in ☁ Sandboxes.</p>
         <ul>
+          <li><b>One line per service</b>: four tiles first (public, private, running, today's cost), then each machine on
+            one line: its gate (barred when private, lit with a visitor coming in when public, grey when paused), its name,
+            PUBLIC or PRIVATE and its address, its state, port and size, its sessions, its start script, its cost today.
+            A click on its name or ▸ unfolds everything below (the door drawn, the sandbox card); <b>Unfold all</b> /
+            <b>Fold all</b>. The form to make one opens with <b>+ New Online machine</b>.</li>
           <li><b>A new Online machine</b>: a name (it goes in its address), the port its service listens on inside, a
             volume in GB, and the tool of its first session. <b>Make it (private)</b> creates its own Fly.io app, a
             volume mounted on <code>/data</code> (where its work and your data live, kept across restarts; about $0.15 per

@@ -1,6 +1,6 @@
 """Captures only (Loop 41): two Online machines in a throw-away data folder already filled by demo_sandboxes.py: « shop »,
 exposed, and « blog », private, each with its own app, volume and session. Nothing reaches Fly.io.
-  python3 tools/demo_online.py <data folder> <session id of shop> <session id of blog>"""
+  python3 tools/demo_online.py <data folder> <session id of shop> <session id of blog> [<api> <status>]"""
 import json
 import os
 import sqlite3
@@ -19,6 +19,10 @@ for col, decl in ONLINE_COLUMNS:
         db.execute(f"ALTER TABLE sandboxes ADD COLUMN {col} {decl}")
 rows = [("c51e0a77", s_shop, "agmgd-on-shop-c51e0a77", "4d27e118a0b9c3", "shop", 8080, 3, 1, now - 86400 * 4),
         ("d903b2f1", s_blog, "agmgd-on-blog-d903b2f1", "6a1f93c2d47e05", "blog", 3000, 1, 0, now - 86400)]
+extra = sys.argv[4:]   # more services, to show the page with many (Loop 47): an API (public) and a status page (paused)
+if len(extra) >= 2:
+    rows += [("e44a01c9", extra[0], "agmgd-on-api-e44a01c9", "7c03e91a2b44d1", "api", 8000, 2, 1, now - 86400 * 9),
+             ("f17b6d02", extra[1], "agmgd-on-status-f17b6d02", "8e5a17c3f90b26", "status", 8080, 1, 0, now - 86400 * 3)]
 for sbid, sid, app, mid, name, port, vol, exposed, created in rows:
     db.execute("INSERT OR REPLACE INTO sandboxes (id, session_id, app, machine, region, size, secret, workdir, created, kind, name, "
                "port, volume_gb, exposed) VALUES (?, ?, ?, ?, 'yyz', 'shared-cpu-1x-1024', 'demo', '/data/work', ?, 'online', ?, ?, ?, ?)",
@@ -30,7 +34,8 @@ db.commit()
 path = os.path.join(home, "demo-fly.json")
 demo = json.load(open(path)) if os.path.exists(path) else {"machines": [], "apps": []}
 ms = lambda t: int(t * 1000)  # noqa: E731
-demo["machines"] += [{"id": r[3], "name": "sandbox-" + r[0], "state": "started", "events": [{"type": "launch", "timestamp": ms(r[8] + 120)}]} for r in rows]
+demo["machines"] += [{"id": r[3], "name": "sandbox-" + r[0], "state": "stopped" if r[4] == "status" else "started",
+                      "events": [{"type": "launch", "timestamp": ms(r[8] + 120)}]} for r in rows]
 demo["apps"] += [{"Name": r[2], "Status": "deployed"} for r in rows]
 demo.setdefault("health", {})["c51e0a77"] = {"machine": "started", "terminal": True, "tunnel": "up", "latency_ms": 41, "brain": True,
                                              "mcp": True, "branch": "am/c51e0a77", "dirty": 0, "unpushed": 1,

@@ -4813,6 +4813,8 @@ func _read_skill(skill_id: String) -> void:
 var online_box: VBoxContainer
 var online_sig := ""
 var online_form := {}
+var online_open := {}          # Loop 47: a machine -> its line is unfolded
+var online_form_open := false  # the « new machine » form, folded once there are machines
 
 
 ## Machines for services on the internet (owner, 2026-11-14: « ce serait pour lancer des services en ligne… un
@@ -4835,7 +4837,7 @@ func _render_online(r: Dictionary) -> void:
 		return
 	var mine: Array = (r.get("sandboxes", []) as Array).filter(func(x: Dictionary) -> bool: return str(x.get("kind", "")) == "online")
 	var sig := JSON.stringify([mine.map(func(x: Dictionary) -> Array: return [x["id"], x["state"], x["destroyed"], x.get("online", {}), x.get("sessions", []), x.get("health", {}).get("tunnel", "") if x.get("health") is Dictionary else ""]),
-		r.get("token", false), r.get("ready", false), r.has("error")])
+		r.get("token", false), r.get("ready", false), r.has("error"), online_open, online_form_open])
 	if sig == online_sig and online_box.get_child_count() > 0:
 		return
 	online_sig = sig
@@ -4868,13 +4870,46 @@ func _render_online(r: Dictionary) -> void:
 		var need2 := _wrap("Build the image once in ☁ Sandboxes (step 1): Online machines start from it.")
 		need2.add_theme_color_override("font_color", AmTheme.col("WARN"))
 		online_box.add_child(need2)
-	online_box.add_child(_online_new())
 	var live := mine.filter(func(x: Dictionary) -> bool: return int(x["destroyed"]) == 0)
-	online_box.add_child(_section_label("Your Online machines (%d)" % live.size()))
+	# Loop 47: one line per service, unfolded on a click; the tiles say the whole at a glance
+	var public := live.filter(func(x: Dictionary) -> bool: return bool((x.get("online") if x.get("online") is Dictionary else {}).get("exposed", false)))
+	var running := live.filter(func(x: Dictionary) -> bool: return str(x["state"]) == "started")
+	var today := 0.0
+	for x in live:
+		today += float(x.get("cost_today", 0.0))
+	if not live.is_empty():
+		var tiles = RepoWidgets.Tiles.new([
+			{"id": "public", "label": "Public", "value": str(public.size()), "level": "warn" if not public.is_empty() else "ok",
+				"note": ", ".join(public.map(func(x: Dictionary) -> String: return str(x["online"].get("name", "")))) if not public.is_empty() else "none faces the internet"},
+			{"id": "private", "label": "Private", "value": str(live.size() - public.size()), "level": "ok", "note": "no public address"},
+			{"id": "running", "label": "Running", "value": "%d / %d" % [running.size(), live.size()], "level": "ok", "note": "the others are paused (only their disk is billed)"},
+			{"id": "cost", "label": "Today", "value": CostChart.money(today), "level": "ok", "note": "measured: running time × published price"}])
+		tiles.name = "OnlineTiles"
+		online_box.add_child(tiles)
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 10)
+	online_box.add_child(bar)
+	bar.add_child(_section_label("Your Online machines (%d)" % live.size()))
+	var sp := Control.new()
+	sp.size_flags_horizontal = SIZE_EXPAND_FILL
+	bar.add_child(sp)
+	if not live.is_empty():
+		var all_open := live.all(func(x: Dictionary) -> bool: return online_open.get(str(x["id"]), false))
+		bar.add_child(_small("Fold all" if all_open else "Unfold all", func() -> void:
+			for x in live:
+				online_open[str(x["id"])] = not all_open
+			_render_online(sbx_last)))
+	var mk := _small("− Close the form" if online_form_open or live.is_empty() else "+ New Online machine", func() -> void:
+		online_form_open = not online_form_open
+		_render_online(sbx_last))
+	mk.name = "OnlineNew"
+	bar.add_child(mk)
+	if online_form_open or live.is_empty():
+		online_box.add_child(_online_new())
 	if live.is_empty():
 		online_box.add_child(_muted("None yet. Make one above: it starts private."))
 	for sb in live:
-		online_box.add_child(_online_card(sb, r))
+		online_box.add_child(_online_line(sb, r))
 	var gone := mine.filter(func(x: Dictionary) -> bool: return int(x["destroyed"]) == 1)
 	if not gone.is_empty():
 		online_box.add_child(_muted("Destroyed, kept in ☁ Sandboxes' inventory with what they cost: " + ", ".join(gone.map(func(x: Dictionary) -> String: return str(x.get("name", x["id"]))))))
@@ -4987,6 +5022,75 @@ func _online_new() -> Control:
 	go.name = "OnlineMake"
 	v.add_child(go)
 	return panel
+
+
+## Loop 47: one service on one line: its gate, its name, public or private and its address, port and size, its
+## sessions, its start script, its cost today; a click unfolds the whole card (the door drawn, the sandbox card).
+func _online_line(sb: Dictionary, r: Dictionary) -> Control:
+	var sbid := str(sb["id"])
+	var on: Dictionary = sb.get("online") if sb.get("online") is Dictionary else {}
+	var exposed := bool(on.get("exposed", false))
+	var st := str(sb["state"])
+	var open := bool(online_open.get(sbid, false))
+	var box := VBoxContainer.new()
+	box.name = "OnlineLine_" + sbid
+	box.add_theme_constant_override("separation", 4)
+	var panel := PanelContainer.new()
+	var edge := AmTheme.col("WARN") if exposed else Color(AmTheme.col("FAINT"), 0.5)
+	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 8, Color(edge, 0.8 if open else 0.5), 1, 8))
+	box.add_child(panel)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
+	row.add_child(OnlineWidgets.Gate.new(exposed, st == "started"))
+	var toggle := func() -> void:
+		online_open[sbid] = not open
+		_render_online(sbx_last)
+	var name := Button.new()
+	name.text = str(on.get("name", sbid))
+	name.flat = true
+	name.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name.custom_minimum_size.x = 150
+	name.add_theme_font_override("font", AmTheme.ui_font(650))
+	name.add_theme_font_size_override("font_size", 14)
+	name.pressed.connect(toggle)
+	row.add_child(name)
+	var badge := Label.new()
+	badge.text = "PUBLIC" if exposed else "PRIVATE"
+	badge.custom_minimum_size.x = 64
+	badge.add_theme_color_override("font_color", AmTheme.col("WARN") if exposed else AmTheme.col("FAINT"))
+	badge.add_theme_font_size_override("font_size", 11)
+	badge.add_theme_font_override("font", AmTheme.ui_font(650))
+	row.add_child(badge)
+	var addr := Control.new()
+	addr.custom_minimum_size.x = 0
+	if exposed:
+		var url := str(on.get("url", ""))
+		var link := _small(url.replace("https://", "") + " ↗", func() -> void: OS.shell_open(url), "Opens it in your browser")
+		link.clip_text = true
+		link.custom_minimum_size.x = 260
+		row.add_child(link)
+	else:
+		var none := _muted("no public address")
+		none.custom_minimum_size.x = 260
+		row.add_child(none)
+	var meta := _muted("%s · :%d · %s" % [{"started": "running", "stopped": "paused"}.get(st, st), int(on.get("port", 0)), str(sb.get("size", "")).replace("shared-cpu-", "")])
+	meta.custom_minimum_size.x = 190
+	row.add_child(meta)
+	var sess: Array = sb.get("sessions", [])
+	row.add_child(_muted("%d session%s" % [sess.size(), "" if sess.size() == 1 else "s"]))
+	var hl: Dictionary = sb.get("health") if sb.get("health") is Dictionary else {}
+	var ss = hl.get("start_script")
+	row.add_child(_chip("start script" if ss != false else "no start script", ss if ss != null else null))
+	var fill := Control.new()
+	fill.size_flags_horizontal = SIZE_EXPAND_FILL
+	row.add_child(fill)
+	row.add_child(_muted(CostChart.money(float(sb.get("cost_today", 0.0))) + " today"))
+	var arrow := _small("▾" if open else "▸", toggle, "Everything about this machine: its door, its sessions, its tunnel and ports, its actions")
+	row.add_child(arrow)
+	if open:
+		box.add_child(_online_card(sb, r))
+	return box
 
 
 ## One Online machine: the door drawn, whether it is public, its address, Expose / Close, then what a sandbox's card
