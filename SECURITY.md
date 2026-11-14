@@ -33,7 +33,7 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   2222) stays on Fly.io's private network, and what listens on `127.0.0.1` in it is never reachable. *Close to the
   internet* gives the addresses back at any time. The service there sees the machine's files: it is yours to make
   sure it shows only what it should. The budget's automatic pauses never stop an Online machine; destroying it
-  destroys its app, its volume and its addresses. A sandbox can never be exposed, and no tool of Agent Manager's MCP
+  destroys its app, its volume and its addresses. A cloud sandbox (ours, on Fly.io) can never be exposed, and no tool of Agent Manager's MCP
   server makes or exposes an Online machine.
 - **A sandbox's ports on this computer**: a port of a sandbox is brought here only when asked, through one lasting
   SSH connection per sandbox. It listens on `127.0.0.1` and nowhere else; what passes is counted, never read; it can
