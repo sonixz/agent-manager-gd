@@ -1434,6 +1434,35 @@ for i in range(600):
 			await shot("github")
 			var d: Dictionary = await main.engine.call_api("POST", "/repos/%s/deploy-key" % r["id"], {"write": true}, true, 60.0)
 			report.append("github: Add it with gh: found %s, write %s" % [d.get("deploy_key", {}).get("found"), d.get("deploy_key", {}).get("write")])
+		"experts":  # Loop 44: experts and their skills (a demo library: nothing is downloaded)
+			OS.execute("python3", [ProjectSettings.globalize_path("res://").path_join("../tools/demo_experts.py"), OS.get_environment("AGMGD_HOME")], [])
+			await main.engine.call_api("POST", "/secrets", {"name": "DISCORD_BOT_TOKEN", "value": "demo-not-a-key"})
+			await main.engine.call_api("POST", "/repos", {"url": "git@github.com:dev/shop.git", "local_path": ""})
+			await main.engine.call_api("POST", "/experts/starters", {})
+			await main.engine.call_api("POST", "/experts", {"name": "discord", "title": "Discord", "glyph": "◎", "tool": "claude",
+				"context": "You run our Discord bots: slash commands, roles, moderation. Test on the test server first, never on the community one.",
+				"skills": ["own/discord-moderation", "anthropic/mcp-builder"], "secrets": ["DISCORD_BOT_TOKEN"]})
+			main.set_view("experts")
+			await wait(3.0)
+			await main._load_experts()
+			main.exp_launch = "discord"
+			main._render_experts()
+			await wait(1.2)
+			var cards: Array = main.exp_box.find_children("Expert_*", "", true, false)
+			report.append("experts: %d experts drawn, launch panel: %s, launch enabled: %s" % [cards.size(), main.exp_box.find_child("ExpertLaunch", true, false) != null,
+				not (main.exp_box.find_child("ExpertGo", true, false) as Button).disabled])
+			await shot("experts")
+			main.exp_tab = "skills"
+			main.exp_launch = ""
+			main._render_experts()
+			await wait(1.2)
+			var faces: Array = main.exp_box.find_children("Skill_*", "", true, false)
+			report.append("experts: skills tab: %d skill cards, source band: %s" % [faces.size(), main.exp_box.find_child("Source_anthropic", true, false) != null])
+			await shot("experts-skills")
+			main._read_skill("anthropic/pdf")
+			await wait(1.0)
+			report.append("experts: a skill read: %s" % (main.exp_reader != null and main.exp_reader.visible))
+			main.exp_reader.hide()
 		"smooth":  # is the app still fluid: frame times on each page, what a few clicks leave behind (nodes, reload loops), with a running sandbox connected and a dashboard in it
 			var pa: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "shell", "cwd": "~", "group": "Orbit API", "brain": false})
 			var pb: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})

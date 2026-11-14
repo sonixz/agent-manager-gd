@@ -5,6 +5,15 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Experts (Loop 44)
+- New: **✦ Experts** in the top bar. An expert knows a trade (frontend, documents, an API) and works on any project:
+  a short role, skills of the open Agent Skills format, the secrets it needs, a tool by default.
+- **Skills**: Anthropic's public skills added in one click, pinned to a commit; a card per skill with its licence and
+  its scripts; updates shown skill by skill and applied on your OK. Your own skills beside them.
+- **Experts**: three starters made of Anthropic's skills (Frontend, Documents, MCP builder), or your own; **▶ Launch**
+  in a repository or a folder, with Claude Code or Codex: the same expert, each tool getting it its own way.
+- Experts can live in a repository of yours (for instance a private `agent-experts`), versioned with `sources.lock`.
+
 ### Online machines, ready for a real service (Loop 43)
 - New: the Online form takes a **repository** (cloned on the volume with its own key) and **secrets** from
   Keys › Secrets.

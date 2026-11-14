@@ -71,6 +71,7 @@
         <a href="#remote-control">Remote Control</a>
         <a href="#sandboxes">Cloud sandboxes and costs</a>
         <a href="#online">Online machines</a>
+        <a href="#experts">Experts</a>
         <p class="group">Reference</p>
         <a href="#keys">Keys and secrets</a>
         <a href="#api">Local engine and settings</a>
@@ -459,6 +460,36 @@
             one machine, see above), Stop and Start, its <i>Tunnel and ports</i> to bring a port to your localhost, and
             Destroy, which destroys its whole app, volume and addresses included. The budget's automatic pauses never
             stop an Online machine. Its runs and costs are in the Sandboxes inventory.</li>
+        </ul>
+
+        <h2 id="experts">Experts</h2>
+        <p><b>✦ Experts</b>, in the top bar, holds agents that know a trade rather than a product: frontend, documents, an
+          API like Discord's. An expert is a short role, a set of <b>skills</b>, the names of the secrets it needs, and a
+          tool by default. A skill is a folder of the open <a href="https://agentskills.io">Agent Skills</a> format
+          (a <code>SKILL.md</code> with its name, what it is for and its instructions, maybe scripts): Claude Code and
+          Codex both read it, and load it only when the task needs it.</p>
+        <ul>
+          <li><b>Skills</b>: <b>Add Anthropic's skills…</b> downloads
+            <a href="https://github.com/anthropics/skills">github.com/anthropics/skills</a> once, pinned to the commit it
+            is at. Each skill has a card: what it is for, its licence (a mint dot for Apache 2.0 or MIT, amber
+            otherwise), the scripts it holds (they run when an agent uses it) and the experts that use it; click it to
+            read it. <b>Check for updates</b> shows what changed upstream, skill by skill (new, changed, removed, and in
+            colour the scripts added); <b>Update to …</b> moves the pin, on your OK only. Your own skills go in the
+            experts' folder, under <code>skills/</code>.</li>
+          <li><b>Experts</b>: <b>Add the three starters</b> makes Frontend, Documents and MCP builder from Anthropic's
+            skills; <b>+ New expert</b> and <b>Edit</b> set its name, glyph, tool, model, its role (short: it is read at
+            every turn), its skills and the secrets it needs. Its emblem draws its skills as beads (warmer when they hold
+            scripts) and its secrets as small keys.</li>
+          <li><b>▶ Launch</b>: a connected repository or a folder, its own worktree or not, Claude Code or Codex, a
+            level, a name. Its secrets must be in Keys › Secrets; they go to that session only. Claude Code gets the
+            skills as a plugin of that session only (<code>--plugin-dir</code>: nothing is written in the repository)
+            and the role in its instructions. Codex reads skills from its folder: it gets its own worktree, the skills
+            are linked into its <code>.agents/skills</code> and kept out of git (<code>.git/info/exclude</code>), and the
+            role goes in its developer instructions.</li>
+          <li><b>Where they live</b>: in Agent Manager's data folder at first; <b>Keep them in a repository…</b> uses a
+            connected repository instead (for instance a private <code>agent-experts</code>), so experts, your skills and
+            <code>sources.lock</code> (the sources and their pinned commits) are versioned and follow you. Downloaded
+            sources stay in Agent Manager's cache.</li>
         </ul>
 
         <h2 id="orchestrator">The orchestrator</h2>

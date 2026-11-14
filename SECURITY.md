@@ -27,6 +27,11 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   is sent through that machine's SSH tunnel when its terminal connects (on standard input, never on a command line)
   into one file only root reads there; on an Online machine a copy on its volume lets its start script use it after a
   restart. Every session on that machine can read it. Taking it back empties the file at the next connection.
+- **Experts' skills**: a source of skills (for instance Anthropic's public repository) is downloaded only when you
+  click to add it, over https, pinned to a commit; an update is shown skill by skill (scripts added in colour) and
+  applied only on your OK. A skill can hold scripts the agent runs: each card says how many. An expert's secrets go
+  only to the sessions launched as it. Skills reach Claude Code as a plugin of that session; for Codex they are
+  linked into its own worktree and kept out of git.
 - **GitHub's CLI**: Agent Manager runs your own `gh`, with your login, to read its state (`gh auth status`, which
   masks the token), add a repository's deploy key and create a repository (private unless you choose public). It
   never reads gh's token, never passes one to gh (a `GH_TOKEN` in its environment is removed), and never changes an

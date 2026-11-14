@@ -12,6 +12,7 @@ const RepoWidgets := preload("res://scripts/repo_widgets.gd")
 const SandboxView := preload("res://scripts/sandbox_view.gd")
 const SandboxWidgets := preload("res://scripts/sandbox_widgets.gd")
 const OnlineWidgets := preload("res://scripts/online_widgets.gd")
+const ExpertWidgets := preload("res://scripts/expert_widgets.gd")
 const SecretView := preload("res://scripts/secret_view.gd")
 const SecretWidgets := preload("res://scripts/secret_widgets.gd")
 const KeyWidgets := preload("res://scripts/key_widgets.gd")
@@ -330,6 +331,7 @@ const MANAGERS := [
 	["keys", "⚷ Keys", "⚷", "Your keys, step by step: the voice (OpenAI), cloud sandboxes (Fly.io), your projects' secrets (dotenvx)"],
 	["sandboxes", "☁ Sandboxes", "☁", "Cloud sandboxes: the manager and their connections"],
 	["online", "⬡ Online", "⬡", "Machines for services on the internet: one public door (443), the rest private"],
+	["experts", "✦ Experts", "✦", "Experts: skills (the open Agent Skills standard) and the experts made of them, launched in Claude Code or Codex"],
 	["repos", "⎇ Repos", "⎇", "Connected repositories and their deploy keys"],
 ]
 
@@ -1774,7 +1776,7 @@ func _render_list() -> void:
 		if r[0] == "session" and cards.get(r[1]) == r[3]:
 			cards.erase(r[1])
 	rows = next
-	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "setup", "shortcuts", "connect", "permissions"]
+	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "experts", "setup", "shortcuts", "connect", "permissions"]
 
 
 func _row(w: Array) -> Control:
@@ -2030,7 +2032,7 @@ func select(id: String) -> void:
 	if not grid_ids.has(id):
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
-	if view in ["board", "history", "repos", "keys", "usage", "sandboxes", "online", "permissions"]:
+	if view in ["board", "history", "repos", "keys", "usage", "sandboxes", "online", "experts", "permissions"]:
 		view = "focus"  # picking a session opens it (Review follows the selected session)
 	if view == "review":
 		review_file = 0
@@ -2259,7 +2261,7 @@ func set_view(v: String) -> void:
 	if v == "setup":
 		_setup_read()
 	content.modulate.a = 0.6  # the new view is there at once, a little soft, then sharp: it was 0.18 s from nothing, read as a delay
-	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "online", "setup", "shortcuts", "connect", "permissions"]
+	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "online", "experts", "setup", "shortcuts", "connect", "permissions"]
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.08)
 	_render_header()
@@ -2309,7 +2311,7 @@ func _park_all() -> void:
 func _layout_view() -> void:
 	_park_all()
 	_mount_orchestrator.call_deferred()
-	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "setup", "shortcuts", "connect", "permissions"]:
+	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "experts", "setup", "shortcuts", "connect", "permissions"]:
 		return
 	match view:
 		"focus":
@@ -2354,6 +2356,11 @@ func _layout_view() -> void:
 			content.add_child(_page(_shortcut_rows()))
 		"connect":
 			content.add_child(_page(_connect_rows()))
+		"experts":
+			content.add_child(_experts_view())
+			if not exp_last.is_empty():
+				_render_experts.call_deferred()
+			_load_experts()
 		"online":
 			content.add_child(_online_view())
 			if not sbx_last.is_empty():
@@ -4191,6 +4198,527 @@ func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 	return card
 
 
+# ------------------------------------------------------------------ Experts (Loop 44)
+var exp_box: VBoxContainer
+var exp_last := {}
+var exp_repos: Array = []
+var exp_secrets: Array = []
+var exp_tab := "experts"          # experts | skills
+var exp_launch := ""             # the expert whose launch panel is open
+var exp_edit := ""               # the expert being edited ("+" for a new one)
+var exp_updates := {}            # a source -> what changed upstream (after « Check for updates »)
+var exp_reader: AcceptDialog
+
+
+## Experts (owner, 2026-11-14: « des agents spécialistes… on viendrait loader un agent, puis l'assigner à une
+## session… agnostique du service »). Two faces: the experts, each launched in a repository with Claude Code or
+## Codex; and the skills they are made of, from pinned sources (Anthropic's first) and the owner's own.
+func _experts_view() -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	exp_box = VBoxContainer.new()
+	exp_box.size_flags_horizontal = SIZE_EXPAND_FILL
+	exp_box.add_theme_constant_override("separation", 12)
+	scroll.add_child(exp_box)
+	if exp_last.is_empty():
+		exp_box.add_child(SandboxWidgets.Loading.new("Reading the experts and their skills…", 300.0))
+	return scroll
+
+
+func _load_experts() -> void:
+	var r := await engine.call_api("GET", "/experts", null, true, 60.0)
+	if r.has("error"):
+		_toast(str(r["error"]))
+		return
+	exp_last = r
+	var rr := await engine.call_api("GET", "/repos")
+	exp_repos = rr.get("repos", [])
+	var sr := await engine.call_api("GET", "/secrets")
+	exp_secrets = (sr.get("secrets", []) as Array).map(func(x: Dictionary) -> String: return str(x.get("name", "")))
+	_render_experts()
+
+
+func _render_experts() -> void:
+	if exp_box == null or not is_instance_valid(exp_box):
+		return
+	var scroller := exp_box.get_parent() as ScrollContainer
+	var kept := scroller.scroll_vertical if scroller else 0
+	if scroller:
+		scroller.set_deferred("scroll_vertical", kept)
+	for c in exp_box.get_children():
+		exp_box.remove_child(c)
+		c.queue_free()
+	var r := exp_last
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 12)
+	exp_box.add_child(top)
+	var title := Label.new()
+	title.text = "Experts"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	top.add_child(title)
+	var experts: Array = r.get("experts", [])
+	var skills: Array = r.get("skills", [])
+	for t in [["experts", "Experts (%d)" % experts.size()], ["skills", "Skills (%d)" % skills.size()]]:
+		var b := _small(str(t[1]), func() -> void:
+			exp_tab = str(t[0])
+			_render_experts())
+		b.toggle_mode = true
+		b.button_pressed = exp_tab == str(t[0])
+		top.add_child(b)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = SIZE_EXPAND_FILL
+	top.add_child(spacer)
+	top.add_child(_small("↻", _load_experts, "Read the experts' folder again"))
+	# where they live
+	var where := HBoxContainer.new()
+	where.add_theme_constant_override("separation", 10)
+	exp_box.add_child(where)
+	var repo_name := ""
+	for x in exp_repos:
+		if str(x["id"]) == str(r.get("repo_id", "")):
+			repo_name = str(x["name"])
+	where.add_child(_muted(("Kept in the repository ⎇ %s · " % repo_name if repo_name != "" else ("Kept in Agent Manager's data folder · " if r.get("in_data_folder", true) else "Kept in a folder of yours · ")) + str(r.get("root", ""))))
+	if exp_repos.size() > 0:
+		var pick := OptionButton.new()
+		pick.add_item("Keep them in a repository…")
+		pick.set_item_metadata(0, "")
+		for x in exp_repos:
+			pick.add_item("⎇ " + str(x["name"]))
+			pick.set_item_metadata(pick.item_count - 1, str(x["id"]))
+		pick.tooltip_text = "A connected repository (for instance agent-experts, private): experts and sources.lock are versioned there and follow you. What is in the current folder is not moved."
+		pick.item_selected.connect(func(i: int) -> void:
+			var rid := str(pick.get_item_metadata(i))
+			if rid == "":
+				return
+			var d := await engine.call_api("POST", "/experts/root", {"repo": rid}, true, 120.0)
+			_toast(str(d.get("error", "The experts are now kept in that repository")))
+			await _load_experts())
+		where.add_child(pick)
+	if exp_tab == "skills":
+		_render_skills(r)
+	else:
+		_render_expert_cards(r)
+
+
+func _render_expert_cards(r: Dictionary) -> void:
+	var experts: Array = r.get("experts", [])
+	var skills: Array = r.get("skills", [])
+	var by := {}
+	for k in skills:
+		by[str(k["id"])] = k
+	if experts.is_empty():
+		var hello := _wrap("An expert is a short role, a set of skills, and the secrets it needs. Launched in a repository, it works as that expert, in Claude Code or in Codex." +
+			(" Start with three made of Anthropic's skills, or make your own." if r.get("has_anthropic", false) else " First add Anthropic's skills (Skills), then start from three experts made of them."))
+		exp_box.add_child(hello)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	exp_box.add_child(row)
+	row.add_child(_small("+ New expert", func() -> void:
+		exp_edit = "+"
+		_render_experts()))
+	if r.get("has_anthropic", false):
+		row.add_child(_small("Add the three starters", func() -> void:
+			var d := await engine.call_api("POST", "/experts/starters", {})
+			_toast("Made: " + (", ".join(d.get("made", [])) if not (d.get("made", []) as Array).is_empty() else "none (they are there already)"))
+			await _load_experts(), "Frontend, Documents and MCP builder, made of Anthropic's skills. Never overwrites an expert."))
+	else:
+		row.add_child(_small("Add Anthropic's skills…", func() -> void:
+			exp_tab = "skills"
+			_render_experts()))
+	if exp_edit != "":
+		exp_box.add_child(_expert_editor(r, by))
+	var grid := GridContainer.new()
+	grid.columns = maxi(1, int((maxf(exp_box.size.x, content.size.x - 30.0)) / 440.0))
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	exp_box.add_child(grid)
+	for e in experts:
+		grid.add_child(_expert_card(e, by))
+	if exp_launch != "":
+		for e in experts:
+			if str(e["name"]) == exp_launch:
+				exp_box.add_child(_expert_launch(e))
+
+
+func _expert_card(e: Dictionary, by: Dictionary) -> Control:
+	var name := str(e["name"])
+	var card := PanelContainer.new()
+	card.name = "Expert_" + name
+	card.size_flags_horizontal = SIZE_EXPAND_FILL
+	card.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 12, Color(AmTheme.col("MINT"), 0.55 if exp_launch == name else 0.25), 1, 14))
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 14)
+	card.add_child(h)
+	var beads: Array = (e.get("skills", []) as Array).map(func(k) -> Dictionary: return {"name": str(k), "scripts": int(by.get(str(k), {}).get("script_count", 0))})
+	h.add_child(ExpertWidgets.Emblem.new(str(e.get("glyph", "◆")), beads, (e.get("secrets", []) as Array).size(), AmTheme.col("MINT")))
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 4)
+	h.add_child(v)
+	var t := Label.new()
+	t.text = str(e.get("title", name))
+	t.add_theme_font_override("font", AmTheme.ui_font(650))
+	t.add_theme_font_size_override("font_size", 16)
+	v.add_child(t)
+	var ctx := _muted(str(e.get("context", "")).strip_edges().left(140) + ("…" if str(e.get("context", "")).length() > 140 else ""))
+	ctx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ctx.add_theme_font_size_override("font_size", 12)
+	v.add_child(ctx)
+	var chips := HFlowContainer.new()
+	chips.add_theme_constant_override("h_separation", 6)
+	v.add_child(chips)
+	for k in e.get("skills", []):
+		var known := by.has(str(k))
+		chips.add_child(_chip(str(k).get_slice("/", 1), true if known else false))
+	for sname in e.get("secrets", []):
+		chips.add_child(_chip("⚷ " + str(sname), true if str(sname) in exp_secrets else "warn"))
+	var acts := HBoxContainer.new()
+	acts.add_theme_constant_override("separation", 6)
+	v.add_child(acts)
+	var go := _small("▶ Launch", func() -> void:
+		exp_launch = "" if exp_launch == name else name
+		_render_experts(), "Choose where and with which tool, then it starts as this expert")
+	go.name = "Launch_" + name
+	acts.add_child(go)
+	acts.add_child(_small("Edit", func() -> void:
+		exp_edit = name
+		_render_experts()))
+	acts.add_child(_muted({"claude": "Claude Code", "codex": "Codex"}.get(str(e.get("tool", "claude")), "") + " by default"))
+	return card
+
+
+## Where and how an expert starts: a connected repository or a folder, its own worktree, the tool, the level.
+func _expert_launch(e: Dictionary) -> Control:
+	var name := str(e["name"])
+	var panel := PanelContainer.new()
+	panel.name = "ExpertLaunch"
+	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 12, AmTheme.col("MINT"), 1, 14))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	panel.add_child(v)
+	v.add_child(_section_label("▶ Launch « %s »" % str(e.get("title", name))))
+	var r1 := HBoxContainer.new()
+	r1.add_theme_constant_override("separation", 8)
+	v.add_child(r1)
+	r1.add_child(_muted("where"))
+	var where := OptionButton.new()
+	for x in exp_repos:
+		where.add_item("⎇ " + str(x["name"]))
+		where.set_item_metadata(where.item_count - 1, "repo:" + str(x["id"]))
+	where.add_item("a folder…")
+	where.set_item_metadata(where.item_count - 1, "folder")
+	r1.add_child(where)
+	var folder := LineEdit.new()
+	folder.placeholder_text = "~/code/my-project"
+	folder.custom_minimum_size.x = 260
+	folder.visible = exp_repos.is_empty()
+	r1.add_child(folder)
+	where.item_selected.connect(func(i: int) -> void: folder.visible = str(where.get_item_metadata(i)) == "folder")
+	var wt := CheckBox.new()
+	wt.text = "its own worktree"
+	wt.tooltip_text = "Its own branch in a folder beside the repository. Codex as an expert always gets one (it reads skills from its folder)."
+	r1.add_child(wt)
+	var r2 := HBoxContainer.new()
+	r2.add_theme_constant_override("separation", 8)
+	v.add_child(r2)
+	r2.add_child(_muted("tool"))
+	var tool := OptionButton.new()
+	tool.add_item("Claude Code")
+	tool.set_item_metadata(0, "claude")
+	tool.add_item("Codex")
+	tool.set_item_metadata(1, "codex")
+	tool.select(1 if str(e.get("tool", "claude")) == "codex" else 0)
+	r2.add_child(tool)
+	r2.add_child(_muted("level"))
+	var level := OptionButton.new()
+	for k in ["ask", "edits", "auto", "full"]:
+		level.add_item(str(LEVELS[k][0]))
+		level.set_item_metadata(level.item_count - 1, k)
+	level.select(2)
+	r2.add_child(level)
+	var nm := LineEdit.new()
+	nm.text = str(e.get("title", name))
+	nm.custom_minimum_size.x = 200
+	nm.tooltip_text = "The session's name"
+	r2.add_child(_muted("name"))
+	r2.add_child(nm)
+	var missing: Array = (e.get("secrets", []) as Array).filter(func(x) -> bool: return not (str(x) in exp_secrets))
+	if not missing.is_empty():
+		var w := _wrap("It needs secrets not in Keys › Secrets yet: %s. Add them there first." % ", ".join(missing))
+		w.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		v.add_child(w)
+	elif not (e.get("secrets", []) as Array).is_empty():
+		v.add_child(_muted("Its secrets go to this session only: " + ", ".join(e["secrets"])))
+	var go := _small("Launch", func() -> void:
+		var target := str(where.get_selected_metadata())
+		var body := {"name": nm.text.strip_edges(), "tool": str(tool.get_selected_metadata()), "expert": name,
+			"level": str(level.get_selected_metadata()), "worktree": wt.button_pressed, "brain": true}
+		if target.begins_with("repo:"):
+			body["repo"] = target.substr(5)
+			body["cwd"] = "~"
+		else:
+			body["cwd"] = folder.text.strip_edges()
+		_toast("Launching « %s »…" % body["name"])
+		var d := await engine.call_api("POST", "/sessions", body, true, 60.0)
+		if d.has("error"):
+			_toast(str(d["error"]))
+			return
+		exp_launch = ""
+		await refresh()
+		select(str(d.get("id", ""))), "Starts the session as this expert: its skills, its context, its secrets")
+	go.name = "ExpertGo"
+	go.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	go.disabled = not missing.is_empty()
+	v.add_child(go)
+	return panel
+
+
+## Making or changing an expert: its name, its title and glyph, its tool, its context, its skills, its secrets.
+func _expert_editor(r: Dictionary, by: Dictionary) -> Control:
+	var editing: Dictionary = {}
+	for e in r.get("experts", []):
+		if str(e["name"]) == exp_edit:
+			editing = e
+	var panel := PanelContainer.new()
+	panel.name = "ExpertEditor"
+	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 12, Color(AmTheme.col("MINT"), 0.6), 1, 14))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	panel.add_child(v)
+	v.add_child(_section_label("A new expert" if editing.is_empty() else "Expert « %s »" % str(editing.get("title", ""))))
+	var r1 := HBoxContainer.new()
+	r1.add_theme_constant_override("separation", 8)
+	v.add_child(r1)
+	var name := LineEdit.new()
+	name.placeholder_text = "discord"
+	name.text = str(editing.get("name", ""))
+	name.editable = editing.is_empty()
+	name.custom_minimum_size.x = 150
+	name.tooltip_text = "Lowercase letters, digits, dashes: its folder"
+	r1.add_child(name)
+	var title := LineEdit.new()
+	title.placeholder_text = "Discord"
+	title.text = str(editing.get("title", ""))
+	title.custom_minimum_size.x = 180
+	r1.add_child(title)
+	var glyph := LineEdit.new()
+	glyph.text = str(editing.get("glyph", "◆"))
+	glyph.max_length = 2
+	glyph.custom_minimum_size.x = 44
+	glyph.tooltip_text = "Its glyph, one character"
+	r1.add_child(glyph)
+	var tool := OptionButton.new()
+	tool.add_item("Claude Code")
+	tool.set_item_metadata(0, "claude")
+	tool.add_item("Codex")
+	tool.set_item_metadata(1, "codex")
+	tool.select(1 if str(editing.get("tool", "claude")) == "codex" else 0)
+	r1.add_child(tool)
+	var model := LineEdit.new()
+	model.placeholder_text = "model (optional)"
+	model.text = str(editing.get("model", ""))
+	model.custom_minimum_size.x = 140
+	r1.add_child(model)
+	var ctx := TextEdit.new()
+	ctx.placeholder_text = "Its role and its rules, short: they are read at every turn. « You run our Discord bots. Test on the test server first… »"
+	ctx.text = str(editing.get("context", ""))
+	ctx.custom_minimum_size.y = 90
+	ctx.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	v.add_child(ctx)
+	v.add_child(_muted("Its skills (loaded only when the task needs them):"))
+	var picks := HFlowContainer.new()
+	picks.add_theme_constant_override("h_separation", 10)
+	v.add_child(picks)
+	var chosen: Array = editing.get("skills", [])
+	for k in r.get("skills", []):
+		var cb := CheckBox.new()
+		cb.text = str(k["id"])
+		cb.button_pressed = str(k["id"]) in chosen
+		cb.tooltip_text = str(k.get("description", "")).left(300) + ("\n%d script(s)" % int(k["script_count"]) if int(k.get("script_count", 0)) > 0 else "")
+		picks.add_child(cb)
+	if (r.get("skills", []) as Array).is_empty():
+		picks.add_child(_muted("No skill in the library yet: add Anthropic's skills, or put your own in skills/."))
+	v.add_child(_muted("The secrets it needs (from Keys › Secrets):"))
+	var sp := HFlowContainer.new()
+	sp.add_theme_constant_override("h_separation", 10)
+	v.add_child(sp)
+	var want: Array = editing.get("secrets", [])
+	for n in exp_secrets:
+		var cb := CheckBox.new()
+		cb.text = n
+		cb.button_pressed = n in want
+		sp.add_child(cb)
+	var extra := LineEdit.new()
+	extra.placeholder_text = "or names not in the vault yet: DISCORD_BOT_TOKEN, …"
+	extra.text = ", ".join(want.filter(func(x) -> bool: return not (str(x) in exp_secrets)))
+	v.add_child(extra)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	row.add_child(_small("Save", func() -> void:
+		var sk := []
+		for c in picks.get_children():
+			if c is CheckBox and (c as CheckBox).button_pressed:
+				sk.append((c as CheckBox).text)
+		var sec := []
+		for c in sp.get_children():
+			if c is CheckBox and (c as CheckBox).button_pressed:
+				sec.append((c as CheckBox).text)
+		for x in extra.text.split(",", false):
+			if x.strip_edges() != "":
+				sec.append(x.strip_edges().to_upper())
+		var d := await engine.call_api("POST", "/experts", {"name": name.text.strip_edges(), "title": title.text.strip_edges(), "glyph": glyph.text.strip_edges(),
+			"tool": str(tool.get_selected_metadata()), "model": model.text.strip_edges(), "context": ctx.text, "skills": sk, "secrets": sec})
+		if d.has("error"):
+			_toast(str(d["error"]))
+			return
+		exp_edit = ""
+		_toast("Expert « %s » saved" % str(d.get("title", "")))
+		await _load_experts()))
+	row.add_child(_small("Cancel", func() -> void:
+		exp_edit = ""
+		_render_experts()))
+	if not editing.is_empty():
+		row.add_child(_small("Delete…", func() -> void:
+			_confirm("Delete the expert « %s »? Its skills stay in the library; sessions launched as it keep running." % str(editing.get("title", "")), func() -> void:
+				await engine.call_api("POST", "/experts/%s/delete" % exp_edit, {"confirmed": true})
+				exp_edit = ""
+				await _load_experts())))
+	return panel
+
+
+## The library: each source with its pinned commit and its updates, then a card per skill.
+func _render_skills(r: Dictionary) -> void:
+	var sources: Array = r.get("sources", [])
+	if not r.get("has_anthropic", false):
+		var a: Dictionary = r.get("anthropic", {})
+		var panel := PanelContainer.new()
+		panel.name = "AddAnthropic"
+		panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 12, Color(AmTheme.col("MINT"), 0.5), 1, 14))
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 6)
+		panel.add_child(v)
+		v.add_child(_section_label("Anthropic's skills"))
+		v.add_child(_wrap("A public repository of skills in the open Agent Skills format (%s): frontend design, web app testing, documents (Word, PDF, PowerPoint, Excel), MCP builders and more. Claude Code and Codex both read them. Most are under the Apache 2.0 licence; each card says." % str(a.get("page", ""))))
+		v.add_child(_small("Add Anthropic's skills…", func() -> void:
+			_confirm("Download %s into Agent Manager's cache?\n\nIt is pinned to the commit it is at now: nothing changes afterwards unless you update it, and you see what changed first (skills can hold scripts that agents run)." % str(a.get("url", "")), func() -> void:
+				_toast("Downloading Anthropic's skills…")
+				var d := await engine.call_api("POST", "/experts/sources", {"preset": "anthropic", "confirmed": true}, true, 600.0)
+				_toast(str(d.get("error", "Anthropic's skills are in the library")))
+				await _load_experts()), "Downloads the repository once, pinned to a commit"))
+		exp_box.add_child(panel)
+	for s in sources:
+		exp_box.add_child(_source_band(s))
+	var skills: Array = r.get("skills", [])
+	if skills.is_empty():
+		return
+	var grid := GridContainer.new()
+	grid.name = "SkillGrid"
+	grid.columns = maxi(1, int((maxf(exp_box.size.x, content.size.x - 30.0)) / 330.0))
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	exp_box.add_child(grid)
+	for k in skills:
+		var face = ExpertWidgets.SkillFace.new(k)
+		face.name = "Skill_" + str(k["id"]).replace("/", "_")
+		face.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				_read_skill(str(k["id"])))
+		grid.add_child(face)
+	exp_box.add_child(_muted("Your own skills go in %s/skills/<name>/SKILL.md (the same format). Click a card to read it." % str(r.get("root", ""))))
+
+
+func _source_band(s: Dictionary) -> Control:
+	var sid := str(s["id"])
+	var panel := PanelContainer.new()
+	panel.name = "Source_" + sid
+	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, Color(AmTheme.col("FAINT"), 0.5), 1, 12))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	panel.add_child(v)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 12)
+	v.add_child(h)
+	var t := Label.new()
+	t.text = str(s.get("title", sid))
+	t.add_theme_font_override("font", AmTheme.ui_font(650))
+	h.add_child(t)
+	h.add_child(_chip("pinned " + str(s.get("commit", "")).left(7), true))
+	h.add_child(_muted("added " + str(s.get("added", "")) + ((" · updated " + str(s["updated"])) if s.has("updated") else "")))
+	var sp := Control.new()
+	sp.size_flags_horizontal = SIZE_EXPAND_FILL
+	h.add_child(sp)
+	if str(s.get("page", "")) != "":
+		var page := str(s["page"])
+		h.add_child(_small("Open its page ↗", func() -> void: OS.shell_open(page)))
+	h.add_child(_small("Check for updates", func() -> void:
+		_toast("Asking %s what changed…" % str(s.get("title", sid)))
+		var d := await engine.call_api("GET", "/experts/sources/%s/updates" % sid, null, true, 300.0)
+		if d.has("error"):
+			_toast(str(d["error"]))
+			return
+		exp_updates[sid] = d
+		_render_experts(), "Downloads what is new into the cache and shows it, skill by skill. Nothing in use changes."))
+	var up: Dictionary = exp_updates.get(sid, {})
+	if not up.is_empty():
+		var changes: Array = up.get("changes", [])
+		if changes.is_empty():
+			v.add_child(_muted("Up to date: nothing changed in its skills since %s." % str(up.get("pinned", "")).left(7)))
+		else:
+			v.add_child(_muted("Since %s, upstream (%s):" % [str(up.get("pinned", "")).left(7), str(up.get("latest", "")).left(7)]))
+			var scripts_new := false
+			for c in changes:
+				var line := HBoxContainer.new()
+				line.add_theme_constant_override("separation", 10)
+				var kind := str(c.get("kind", ""))
+				line.add_child(_chip(kind, true if kind == "new skill" else ("warn" if kind == "changed" else false)))
+				var nm := Label.new()
+				nm.text = str(c.get("skill", ""))
+				nm.custom_minimum_size.x = 180
+				line.add_child(nm)
+				line.add_child(_muted("%d added · %d changed · %d removed file(s)" % [(c["added"] as Array).size(), (c["changed"] as Array).size(), (c["removed"] as Array).size()]))
+				if not (c.get("scripts", []) as Array).is_empty():
+					scripts_new = true
+					var w := Label.new()
+					w.text = "scripts: " + ", ".join(c["scripts"])
+					w.add_theme_color_override("font_color", AmTheme.col("WARM"))
+					w.add_theme_font_size_override("font_size", 12)
+					line.add_child(w)
+				v.add_child(line)
+			var latest := str(up.get("latest", ""))
+			v.add_child(_small("Update to %s…" % latest.left(7), func() -> void:
+				_confirm("Move %s to %s?%s\n\nSessions started afterwards get the new skills; running ones keep what they loaded." % [str(s.get("title", sid)), latest.left(7),
+					"\n\nSome skills bring new or changed scripts: agents will run them." if scripts_new else ""], func() -> void:
+					var d := await engine.call_api("POST", "/experts/sources/%s/update" % sid, {"commit": latest, "confirmed": true}, true, 120.0)
+					_toast(str(d.get("error", "Updated")))
+					exp_updates.erase(sid)
+					await _load_experts())))
+	return panel
+
+
+func _read_skill(skill_id: String) -> void:
+	var d := await engine.call_api("GET", "/experts/skill?id=" + skill_id.uri_encode())
+	if d.has("error"):
+		_toast(str(d["error"]))
+		return
+	if exp_reader == null or not is_instance_valid(exp_reader):
+		exp_reader = AcceptDialog.new()
+		exp_reader.ok_button_text = "Close"
+		var te := TextEdit.new()
+		te.name = "Text"
+		te.editable = false
+		te.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+		te.custom_minimum_size = Vector2(860, 560)
+		te.add_theme_font_override("font", font)
+		te.add_theme_font_size_override("font_size", 12)
+		exp_reader.add_child(te)
+		add_child(exp_reader)
+	exp_reader.title = "%s · %s · %s" % [str(d.get("id", "")), str(d.get("license", "")), ("%d script(s): " % int(d.get("script_count", 0)) + ", ".join(d.get("scripts", []))) if int(d.get("script_count", 0)) > 0 else "instructions only"]
+	(exp_reader.get_node("Text") as TextEdit).text = str(d.get("text", ""))
+	exp_reader.popup_centered()
+
+
 # ------------------------------------------------------------------ Online machines (Loop 41)
 var online_box: VBoxContainer
 var online_sig := ""
@@ -5856,6 +6384,7 @@ func open_palette() -> void:
 	items.append({"label": "Agent permissions", "hint": "every agent: level, file access, Claude Code's sandbox, git rights", "run": set_view.bind("permissions")})
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
 	items.append({"label": "Sandboxes", "hint": "cloud sandboxes: manager, connections, costs", "run": set_view.bind("sandboxes")})
+	items.append({"label": "Experts", "hint": "skills and the experts made of them: launch one in a repository", "run": set_view.bind("experts")})
 	items.append({"label": "Online", "hint": "machines for services on the internet: 443 public, the rest private", "run": set_view.bind("online")})
 	items.append({"label": "Dictate (hold %s)" % key_text("dictate"), "hint": "what you say is put together in the box; Enter there sends it all", "run": func() -> void: _toast("Hold %s and speak. Release, read it in the box, then Enter sends it all" % key_text("dictate"))})
 	items.append({"label": "Voice command (hold %s)" % key_text("command"), "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold %s and say a command" % key_text("command"))})
