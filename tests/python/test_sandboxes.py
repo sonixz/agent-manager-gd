@@ -512,7 +512,7 @@ class SandboxesTest(unittest.TestCase):
         self.assertEqual(vol[vol.index("--size") + 1], "3")
         run = next(c for c in self.fly.calls if c[:2] == ("machine", "run") and sb["app"] in c)
         ports = [run[i + 1] for i, a in enumerate(run) if a == "--port"]
-        self.assertEqual(ports, ["443:8080/tcp:tls:http", "80:8080/tcp:http"])          # one door, toward its port
+        self.assertEqual(ports, ["443:8080/tcp:tls:http"])                               # one door, toward its port; no plain HTTP
         self.assertIn("data:/data", run)
         self.assertFalse(any(c[:2] == ("ips", "allocate-v4") or c[:2] == ("ips", "allocate-v6") for c in self.fly.calls))  # private
         self.assertEqual(d["sandbox"]["kind"], "online")

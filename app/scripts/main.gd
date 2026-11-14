@@ -4315,7 +4315,7 @@ func _online_new() -> Control:
 			return
 		_toast("« %s » is made, private. Expose it when its service is ready." % n)
 		await refresh()
-		await _load_sandboxes(), "Its own Fly app, a volume on /data, the services 443 and 80 declared toward its port: no public address until you expose it.")
+		await _load_sandboxes(), "Its own Fly app, a volume on /data, the service 443 (HTTPS) declared toward its port: no public address until you expose it.")
 	go.name = "OnlineMake"
 	v.add_child(go)
 	return panel

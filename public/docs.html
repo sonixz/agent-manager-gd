@@ -434,7 +434,8 @@
           <li><b>A new Online machine</b>: a name (it goes in its address), the port its service listens on inside, a
             volume in GB, and the tool of its first session. <b>Make it (private)</b> creates its own Fly.io app, a
             volume mounted on <code>/data</code> (where its work and your data live, kept across restarts; about $0.15 per
-            GB a month), and the machine, with the services 443 (HTTPS) and 80 declared toward that port. It has no
+            GB a month), and the machine, with the service 443 (HTTPS) declared toward that port. No plain HTTP: an
+            address typed with <code>http://</code> does not answer. It has no
             public address yet: nothing reaches it from the internet.</li>
           <li><b>Expose to the internet…</b> asks first, then gives its app two public addresses (an IPv6 and a shared
             IPv4, both free): <code>https://&lt;its app&gt;.fly.dev</code> then reaches its port, with Fly.io's

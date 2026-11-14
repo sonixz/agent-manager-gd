@@ -77,8 +77,9 @@ CREATE TABLE IF NOT EXISTS sandbox_sessions (session_id TEXT PRIMARY KEY, sandbo
 # service sur le port 443. Le reste ce serait en backend, sur la même VM »; the name « Online » is the owner's). An
 # Online machine is a sandbox record of kind « online »: the same terminal, sessions, tunnel and inventory, but its own
 # Fly app (so its own address, <app>.fly.dev), a volume for what must last (/data), and one public door when exposed:
-# 443 (HTTPS, Fly's certificate) and 80 (sent on to HTTPS) toward one port inside. Everything else listens on
+# 443 (HTTPS, Fly's certificate) toward one port inside. Everything else listens on
 # 127.0.0.1 in the machine and is never public; SSH stays on Fly's private network. Exposed only when the owner asks.
+# Verified live on 2026-11-14: HTTPS answers with Fly's *.fly.dev certificate; other ports reach nothing.
 ONLINE_COLUMNS = [("kind", "TEXT NOT NULL DEFAULT 'sandbox'"), ("name", "TEXT NOT NULL DEFAULT ''"),
                   ("port", "INTEGER NOT NULL DEFAULT 0"), ("volume_gb", "INTEGER NOT NULL DEFAULT 0"),
                   ("exposed", "INTEGER NOT NULL DEFAULT 0")]
@@ -363,7 +364,7 @@ class Sandboxes:
     # ---------------------------------------------------------------- Loop 41: Online machines
     def create_online(self, session_id: str, name: str, port: int, size: str = "", volume_gb: int = 1, repo_id: str = "") -> dict:
         """A machine for a service online, private until exposed: its own app, a volume mounted on /data, and the
-        services 443 (HTTPS) and 80 declared toward `port` inside. Without a public address nothing reaches them."""
+        service 443 (HTTPS) declared toward `port` inside. Without a public address nothing reaches them."""
         if not re.match(r"^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$|^[a-z0-9]$", name or ""):
             raise ValueError("a name of 1 to 30 lowercase letters, digits or dashes (it goes in the address)")
         if not 1 <= int(port) <= 65535 or int(port) in (2222, 22):
@@ -390,8 +391,9 @@ class Sandboxes:
             if rc != 0:
                 raise ValueError("could not create its volume: " + out[-200:])
             p = str(int(port))
-            machine = self._launch(sbid, app, size, ["--volume", "data:/data", "--port", f"443:{p}/tcp:tls:http",
-                                                     "--port", f"80:{p}/tcp:http"])
+            # 443 only (owner: « un service sur le port 443 »). A port 80 served the page in plain HTTP, not sent on
+            # to HTTPS (seen in the live test of 2026-11-14): it is not declared.
+            machine = self._launch(sbid, app, size, ["--volume", "data:/data", "--port", f"443:{p}/tcp:tls:http"])
         except Exception:
             self.fly.run("apps", "destroy", app, "--yes", timeout=300)   # nothing half made is left billed
             raise

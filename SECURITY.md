@@ -25,7 +25,7 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   « Check »; never while the page is closed.
 - **Online machines (the only public door)**: a machine of ⬡ Online is made private, in its own Fly.io app. It gets a
   public address only when you click *Expose to the internet* and confirm; then `https://<its app>.fly.dev` reaches
-  one port inside it (443, HTTPS with Fly.io's certificate, and 80 sent on to it), and nothing else: its SSH (port
+  one port inside it (443, HTTPS with Fly.io's certificate; no plain HTTP), and nothing else: its SSH (port
   2222) stays on Fly.io's private network, and what listens on `127.0.0.1` in it is never reachable. *Close to the
   internet* gives the addresses back at any time. The service there sees the machine's files: it is yours to make
   sure it shows only what it should. The budget's automatic pauses never stop an Online machine; destroying it
