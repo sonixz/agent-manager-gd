@@ -169,6 +169,8 @@ class Sessions:
         from .repos import Repos
         from .keys import Keys
         self.repos = Repos(store.path, self.home)
+        from .experts import Experts
+        self.experts = Experts(self.home)   # Loop 44: skills and the experts made of them
         from .gh import GitHub
         self.github = GitHub()   # Loop 42: the owner's own gh, under Repos; its token is never read
         self.keys_store = Keys(self.home)
@@ -630,7 +632,12 @@ class Sessions:
             # how git already authenticates here (the agent never goes looking for a key in ~/.ssh), and, when asked,
             # how to document the session in the Second Brain: one --append-system-prompt for both
             orch = ORCH_NOTE.format(max_children=MAX_RUNNING_CHILDREN) if rec.get("role") == "orchestrator" else ""
-            note = "\n\n".join(n for n in (orch, self.repo_note(rec), self.brain_note(rec)) if n)
+            expert_note = ""
+            if rec.get("expert"):   # Loop 44: its skills as a plugin of this session, its context in the note
+                parts = self.experts.claude_parts(rec["expert"], rec["id"])
+                base += parts["args"]
+                expert_note = parts["note"]
+            note = "\n\n".join(n for n in (orch, expert_note, self.repo_note(rec), self.brain_note(rec)) if n)
             if note:
                 base += ["--append-system-prompt", note]
             if mode == "resume" and conversation:
@@ -648,6 +655,8 @@ class Sessions:
             notify = ["-c", "notify=" + json.dumps(hook + ["codex"])] + flags + self._codex_mcp(rec)
             if rec.get("model"):
                 notify += ["-m", rec["model"]]
+            if rec.get("expert"):   # Loop 44: its skills in .agents/skills of its folder, its context as instructions
+                notify += self.experts.codex_parts(rec["expert"], rec["cwd"])["args"]
             if mode == "resume":  # without a known id Codex shows its own picker
                 return ["codex", "resume"] + notify + ([conversation] if conversation else [])
             if mode == "fork":
@@ -734,7 +743,7 @@ class Sessions:
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
                repo: str = "", host: str = "local", remote: bool | None = None, document: bool = False,
                level: str = "", model: str = "", role: str = "", access: str = "", extra_dirs: list | None = None,
-               os_sandbox: bool = False, secrets: list | None = None, sandbox: str = "") -> dict:
+               os_sandbox: bool = False, secrets: list | None = None, sandbox: str = "", expert: str = "") -> dict:
         if host == "sandbox":
             if parent and not sandbox:   # an agent never makes a machine (a cost): it may add a session to one
                 raise ValueError("an agent may add a session to an existing sandbox (sandbox), never make a new machine")
@@ -746,6 +755,14 @@ class Sessions:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
             raise ValueError("a name of 1 to 60 characters")
+        if expert:   # Loop 44: launched as an expert: its secrets go with it (those the vault holds)
+            e = self.experts.expert(expert)
+            if tool not in ("claude", "codex"):
+                raise ValueError("an expert runs in Claude Code or Codex")
+            missing = [n for n in e["secrets"] if not self.vault.exists(n)]
+            if missing:
+                raise ValueError("add these secrets in Keys › Secrets first: " + ", ".join(missing))
+            secrets = list(dict.fromkeys(list(secrets or []) + e["secrets"]))
         if repo:  # a connected repository: its local folder (cloned with its key when needed)
             cwd = self.repos.ensure_clone(repo)
         cwd = os.path.expanduser(host_path((cwd or "~").strip()))
@@ -754,6 +771,8 @@ class Sessions:
         if not repo:  # a folder that belongs to a connected repository: the session gets that repository's key too
             repo = self.repos.owner_of(cwd)
         wt, base = ("", "")
+        if expert and tool == "codex" and not worktree and self._git_top(cwd):
+            worktree = True   # Codex reads skills from its folder: its own worktree, so no other session sees them
         if worktree:
             wt, base = self._add_worktree(cwd, name)
             cwd = wt
@@ -770,7 +789,7 @@ class Sessions:
         self.store.update(rec["id"], level=level, model=model, role=role, access=self.access_for(access or self._group_access(grp), parent),
                           extra_dirs=json.dumps(self._clean_dirs(extra_dirs or [])),
                           os_sandbox=int(self.os_sandbox_for(os_sandbox, parent)),
-                          secrets=json.dumps(self._clean_secrets(secrets or [])))
+                          secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert)
         rec = self.store.get(rec["id"])
         if remote is None:  # not said: a child follows its parent (the orchestrator's children too), else no
             remote = bool(parent and (self.store.get(parent) or {}).get("remote_control"))
@@ -1480,6 +1499,13 @@ class Sessions:
         if check and out.returncode != 0:
             raise ValueError("git " + args[0] + ": " + (out.stderr.strip() or out.stdout.strip())[:300])
         return out.stdout.strip()
+
+    def _git_top(self, cwd: str) -> str:
+        """The top folder of the git repository holding `cwd`, or '' outside one."""
+        try:
+            return self._git(cwd, "rev-parse", "--show-toplevel", check=False) or ""
+        except Exception:
+            return ""
 
     def _add_worktree(self, cwd: str, name: str) -> tuple[str, str]:
         root = self._git(cwd, "rev-parse", "--show-toplevel")

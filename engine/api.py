@@ -85,6 +85,39 @@ def make_handler(sessions: Sessions, token: str):
                     if b.get("force"):   # « Check all »: whatever their age
                         return self._reply(200, sessions.repos.refresh(True, key_age=-1.0, folder_age=-1.0))
                     return self._reply(200, sessions.repos.refresh(bool(b.get("keys", False))))
+                # Loop 44: experts and their skills
+                if parts == ["experts"] and method == "GET":
+                    return self._reply(200, sessions.experts.state())
+                if parts == ["experts"] and method == "POST":
+                    b = self._body()
+                    return self._reply(200, sessions.experts.save(str(b.get("name", "")), str(b.get("title", "")), str(b.get("context", "")),
+                                                                  [str(x) for x in b.get("skills") or []], [str(x) for x in b.get("secrets") or []],
+                                                                  str(b.get("tool", "claude")), str(b.get("model", "")), str(b.get("glyph", "◆"))))
+                if parts == ["experts", "starters"] and method == "POST":
+                    return self._reply(200, sessions.experts.add_starters())
+                if parts == ["experts", "root"] and method == "POST":
+                    b = self._body()
+                    rid = str(b.get("repo", ""))
+                    path = sessions.repos.ensure_clone(rid) if rid else str(b.get("path", ""))
+                    return self._reply(200, sessions.experts.set_root(path, rid))
+                if parts == ["experts", "sources"] and method == "POST":   # a download: on the owner's click only
+                    b = self._body()
+                    from .experts import ANTHROPIC
+                    src = ANTHROPIC if b.get("preset") == "anthropic" else b
+                    return self._reply(200, sessions.experts.add_source(src, bool(b.get("confirmed", False))))
+                if len(parts) == 4 and parts[:2] == ["experts", "sources"] and method in ("GET", "POST"):
+                    sid, act = parts[2], parts[3]
+                    if act == "updates" and method == "GET":
+                        return self._reply(200, sessions.experts.check_updates(sid))
+                    if act == "update" and method == "POST":
+                        b = self._body()
+                        return self._reply(200, sessions.experts.update(sid, str(b.get("commit", "")), bool(b.get("confirmed", False))))
+                    if act == "remove" and method == "POST":
+                        return self._reply(200, sessions.experts.remove_source(sid, bool(self._body().get("confirmed", False))))
+                if parts == ["experts", "skill"] and method == "GET":
+                    return self._reply(200, sessions.experts.skill(parse_qs(url.query).get("id", [""])[0]))
+                if len(parts) == 3 and parts[0] == "experts" and parts[2] == "delete" and method == "POST":
+                    return self._reply(200, sessions.experts.delete(parts[1], bool(self._body().get("confirmed", False))))
                 # Loop 42: GitHub's own CLI, the owner's login; its token never passes here
                 if parts == ["github"] and method == "GET":
                     return self._reply(200, sessions.github.status(fresh=parse_qs(url.query).get("fresh", [""])[0] == "1"))
@@ -373,7 +406,7 @@ def make_handler(sessions: Sessions, token: str):
                                                             str(b.get("level", "")), str(b.get("model", "")), "",
                                                             str(b.get("access", "")), b.get("extra_dirs") or [],
                                                             bool(b.get("os_sandbox", False)), b.get("secrets") or [],
-                                                            str(b.get("sandbox", ""))))
+                                                            str(b.get("sandbox", "")), str(b.get("expert", ""))))
                 if len(parts) >= 2 and parts[0] == "sessions":
                     sid = parts[1]
                     action = parts[2] if len(parts) > 2 else ""
