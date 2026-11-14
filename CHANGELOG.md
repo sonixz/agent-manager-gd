@@ -5,6 +5,21 @@ Newest first.
 
 ## Unreleased: alpha
 
+### One Cloud page, a public URL per machine (Loop 48)
+- **☁ Cloud** replaces the two pages ☁ Sandboxes and ⬡ Online: every cloud machine (ours, on Fly.io) on one page,
+  its line showing its gate and **PUBLIC → :port** when a port of it is public. A tile counts the public URLs.
+- **Bind to a public URL**, beside **Bring it to my localhost** on each port of a machine (and **Bind a port to the
+  public URL…** on its card): on your confirmation, `https://<its app>.fly.dev` reaches that port over HTTPS, live,
+  without restarting the machine. Another port moves it; **Unbind** gives the addresses back. One per machine.
+- Every machine made now has its own Fly.io app and a door (port 8443) in our image: rebuild the image (☁ Cloud,
+  step 1) for it. The service it reaches may listen on `127.0.0.1`. Sandboxes made before stay private; Online
+  machines made before keep their door toward their own port.
+- **+ A machine with a name, a volume, a repository…** (☁ Cloud, step 2) takes the Online form: the name and the
+  volume are optional now (no volume: a sandbox in its own app).
+- Agents: `expose_machine` takes the `port` to bind; `create_machine` no longer needs a name.
+- Said now, found in the live test: a paused machine that starts again has its image's disk again (only a volume,
+  `/data`, is kept). The Docs and the Stop button say so; Fly.io's setting to keep the whole disk is not used yet.
+
 ### Small fixes (after Loop 47)
 - Fix: **Remove and forget**, **Archive**, **Stop** and **Restart** no longer do nothing silently when Agent Manager
   refuses: the reason is said. A session that holds a cloud machine opens that machine's line (Online or Sandboxes),

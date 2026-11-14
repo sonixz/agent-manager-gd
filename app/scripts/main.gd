@@ -4255,7 +4255,7 @@ func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 	elif st == "started":
 		row.add_child(_small("Stop (pause)", func() -> void:
 			await engine.call_api("POST", "/sandboxes/%s/stop" % sbid, {}, true, 120.0)
-			await _load_sandboxes()))
+			await _load_sandboxes(), "Only its disk is billed while paused. Seen on Fly.io (2026-11-14): when it starts again its disk is the image's again; only a volume (/data) is kept. Commit and push first." if int(sb.get("volume_gb", 0)) == 0 else "Only its disk and volume are billed while paused. /data is kept; the rest of its disk starts again from the image."))
 	row.add_child(_small("Not finished" if int(sb["finished"]) == 1 else "Mark finished", func() -> void:
 		await engine.call_api("POST", "/sandboxes/%s/finish" % sbid, {"finished": int(sb["finished"]) == 0})
 		await _load_sandboxes()))

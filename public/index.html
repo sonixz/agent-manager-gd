@@ -500,10 +500,11 @@
     <section id="cloud" class="section feat-sec">
       <div class="container">
         <div class="section-head center reveal">
-          <p class="feat-num">09 · Cloud sandboxes</p>
+          <p class="feat-num">09 · Cloud</p>
           <h2>A throw-away machine, a price before, a tunnel after</h2>
           <p>Give a risky task its own Fly.io machine, with your own Fly token. Pick a size and see Fly.io's published
-            price before you deploy; then watch its health and bring its ports home through one SSH connection.</p>
+            price before you deploy; then watch its health and bring its ports home through one SSH connection. When a
+            service there is ready, bind one of its ports to the machine's public URL; unbind it in one click.</p>
         </div>
 
         <div class="tunnel reveal" role="img" aria-label="How a sandbox reaches this computer, through one SSH connection: a port of the sandbox brought to your localhost, a SOCKS proxy into the sandbox, and, only if you allow it, one port of this computer the sandbox may reach.">
@@ -542,7 +543,11 @@
             <figcaption class="shot-caption"><b>After.</b> Its health live, and a wire per port with what runs each way.</figcaption>
           </figure>
         </div>
-        <p class="small muted center reveal">Filmed with stand-ins for Fly.io and SSH: nothing was deployed, nothing was billed. The prices are Fly.io's published ones, as the app shows them.</p>
+        <figure class="shot reveal">
+          <img src="assets/showcase/cloud-door.webp" width="1920" height="1200" loading="lazy" alt="The Cloud page: one line per machine, two of them marked PUBLIC with the port bound; the shop machine unfolded shows its door drawn: the internet, the gate 443 in HTTPS, the door 8443, the service on port 3000, what stays private, and Unbind the public URL.">
+          <figcaption class="shot-caption"><b>Public, on your word.</b> One port of a machine bound to its public URL, over HTTPS; nothing else of it is reachable.</figcaption>
+        </figure>
+        <p class="small muted center reveal">Filmed with stand-ins for Fly.io and SSH: nothing was deployed, nothing was billed. The prices are Fly.io's published ones, as the app shows them. The public URL was tried once on Fly.io itself, on a throw-away machine.</p>
       </div>
     </section>
 
@@ -707,6 +712,7 @@
           </div>
           <div class="loop-list collapsed">
             <article class="loop ph-site" data-phase="site" data-loop="Site"><p class="loop-tag">Website · Nov 2026</p><h3>A 30-second film, and this page</h3><p>The real app filmed on a private virtual display, cut and narrated; this home page rebuilt around it, one section per feature with new screenshots, and this line of loops that scales.</p></article>
+            <article class="loop ph-cloud" data-phase="cloud" data-loop="48"><p class="loop-tag"><span class="when">Loop 48</span> · Cloud</p><h3>One Cloud page, a public URL per machine</h3><p>Sandboxes and Online machines are one page, ☁ Cloud. Every new machine has its own Fly.io app and a door: « Bind to a public URL » beside « Bring it to my localhost » makes one of its ports public over HTTPS, live, without a restart; Unbind closes it.</p></article>
             <article class="loop ph-cloud" data-phase="cloud" data-loop="47"><p class="loop-tag"><span class="when">Loop 47</span> · Cloud</p><h3>Online, one service per line</h3><p>The Online page holds many services: four tiles for the whole, then one line each with its gate, address, port, size and cost. A click unfolds its door and everything about it.</p></article>
             <article class="loop ph-cloud" data-phase="cloud" data-loop="46"><p class="loop-tag"><span class="when">Loop 46</span> · Cloud</p><h3>Agents ask for machines</h3><p>An agent can ask for a cloud sandbox or an Online machine, drive its sessions, and ask to expose it. What costs money or faces the internet waits in « They wait for you » until you approve it.</p></article>
             <article class="loop ph-core" data-phase="core" data-loop="45"><p class="loop-tag"><span class="when">Loop 45</span> · Core</p><h3>Experts remember</h3><p>Each expert keeps its lessons in your Second Brain and reads them on the next project. Experts go to cloud machines too, and the orchestrator can hand a task to one, never giving it a key its own session does not hold.</p></article>

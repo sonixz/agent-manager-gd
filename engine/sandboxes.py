@@ -7,7 +7,8 @@ running engine/sandbox_attach.py: `flyctl proxy` + `ssh -t … tmux new -A -s am
 reverse tunnel for the Second Brain (sandbox 127.0.0.1:8765 → the engine's /sandbox-brain/<secret>).
 
 **Never destroyed automatically.** Destroy is the owner's act, confirmed, after Agent Manager showed the work not
-pushed. Stop (pause) keeps the machine's files. Machines and apps of the organisation that Agent Manager does not know
+pushed. Stop (pause) bills only the disk, but a machine started again has its image's disk again (seen live on
+2026-11-14): only a volume (/data) is kept. Machines and apps of the organisation that Agent Manager does not know
 are listed as orphans and never touched."""
 from __future__ import annotations
 

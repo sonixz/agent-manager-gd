@@ -45,14 +45,17 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   agent's Permissions, your choice, for when you drive it from afar) skips the approval for that agent and the
   sessions under it, never the other limits. Like every agent tool, this is enforced by
   the engine behind the MCP server; a program that reads the engine's token on this computer is not stopped by it.
-- **Online machines (the only public door)**: a machine of ⬡ Online is made private, in its own Fly.io app. It gets a
-  public address only when you click *Expose to the internet* and confirm; then `https://<its app>.fly.dev` reaches
-  one port inside it (443, HTTPS with Fly.io's certificate; no plain HTTP), and nothing else: its SSH (port
-  2222) stays on Fly.io's private network, and what listens on `127.0.0.1` in it is never reachable. *Close to the
-  internet* gives the addresses back at any time. The service there sees the machine's files: it is yours to make
-  sure it shows only what it should. The budget's automatic pauses never stop an Online machine; destroying it
-  destroys its app, its volume and its addresses. A cloud sandbox (ours, on Fly.io) can never be exposed, and no tool of Agent Manager's MCP
-  server makes or exposes an Online machine.
+- **A public URL per cloud machine (the only public door)**: every machine of ☁ Cloud (ours, on Fly.io) made since
+  Loop 48 is made private, in its own Fly.io app, with Fly.io's HTTPS declared toward one door inside it (port 8443)
+  and no public address. It gets public addresses only when you bind one of its ports (*Bind to a public URL*) and
+  confirm; then `https://<its app>.fly.dev` reaches that one port (HTTPS with Fly.io's certificate; no plain HTTP),
+  through the door, and nothing else: its SSH (port 2222) stays on Fly.io's private network, and every other port is
+  never reachable. *Unbind* gives the addresses back and closes the door at any time. The service there sees the
+  machine's files: it is yours to make sure it shows only what it should. The budget's automatic pauses never stop a
+  machine with a volume; destroying a machine destroys its app, its volume and its addresses. A cloud sandbox made
+  before Loop 48 (in the shared app) can never be exposed; an Online machine made before keeps its door toward its
+  own port only. An agent can only *ask* for a machine or a public URL through Agent Manager's MCP server: you approve
+  it in « They wait for you », unless you turned on « Cloud machines without asking » for that agent.
 - **A sandbox's ports on this computer**: a port of a sandbox is brought here only when asked, through one lasting
   SSH connection per sandbox. It listens on `127.0.0.1` and nowhere else; what passes is counted, never read; it can
   be paused or closed. A sandbox never gets a public address. The sandbox's host key is remembered at that connection's
@@ -64,7 +67,7 @@ Please do not open a public issue. Use GitHub's private vulnerability reporting 
   engine, even when it follows an allowed one on the same connection. The cloud sandbox's host key is checked by its
   terminal too, against the one remembered at the first connection. Anything else
   needs a rule you make for one port of this computer and one cloud sandbox; it is listed, counted, and stays until you close it. You ask for it in
-  ☁ Sandboxes, « Tunnel and ports ». Not tried against a real sandbox yet.
+  ☁ Cloud, « Tunnel and ports ». Not tried against a real sandbox yet.
 - **Agents' logins**: agent CLIs run with their own login; Agent Manager never reads, copies or relays those tokens.
 - **Second Brain keys**: one per session, at the « propose » level (read, search, propose; the Brain's archivist files
   proposals with your rules); removing a session revokes its key.

@@ -69,8 +69,8 @@
         <a href="#orchestrator">The orchestrator</a>
         <a href="#repos">Repositories and their keys</a>
         <a href="#remote-control">Remote Control</a>
-        <a href="#sandboxes">Cloud sandboxes and costs</a>
-        <a href="#online">Online machines</a>
+        <a href="#sandboxes">Cloud machines and costs</a>
+        <a href="#online">A public URL per machine</a>
         <a href="#experts">Experts</a>
         <p class="group">Reference</p>
         <a href="#keys">Keys and secrets</a>
@@ -223,7 +223,7 @@
         <p>The top bar has two families of buttons. <b>View ▾</b> names the way the sessions are shown (it reads
           <b>Focus ▾</b>, <b>Grid ▾</b>…) and opens a panel: the five ways (Focus, Grid, Board, History, Review), each
           with its shortcut, then the seven themes. Beside it stand the managers, one button each: <b>WSL</b> (on Linux:
-          <b>Computer</b>), <b>☁ Sandboxes</b>, <b>⎇ Repos</b>. A click opens a manager's page; a second click on the
+          <b>Computer</b>), <b>⚷ Keys</b>, <b>☁ Cloud</b>, <b>✦ Experts</b>, <b>⎇ Repos</b>. A click opens a manager's page; a second click on the
           same button comes back to the sessions as they were shown. In a narrow window the managers show their sign
           alone, and their names stay in the tooltips.</p>
         <p>The <b>WSL</b> button is alive: <b>●</b> when everything stands, <b>!</b> when something deserves a look (a
@@ -419,10 +419,10 @@
           <tr><td><code>list_sessions</code></td><td>every session and its state</td><td>any session</td></tr>
           <tr><td><code>session_status</code></td><td>working, waits, asks, done</td><td>any session</td></tr>
           <tr><td><code>read_screen</code></td><td>what a terminal shows now</td><td>any session</td></tr>
-          <tr><td><code>list_machines</code></td><td>every cloud machine: state, sessions, exposed or not, « yours »</td><td>all machines</td></tr>
-          <tr><td><code>create_machine</code></td><td>asks you for a private sandbox or an Online machine (repository, size, port, expert, secrets it holds); waits for your answer; its first session is the agent's child</td><td>on your approval</td></tr>
-          <tr><td><code>destroy_machine</code>, <code>expose_machine</code></td><td>ask you to destroy one, or to expose an Online machine; wait for your answer</td><td>its own machines, on your approval</td></tr>
-          <tr><td><code>stop_machine</code>, <code>start_machine</code>, <code>unexpose_machine</code>, <code>machine_status</code></td><td>pause, start again (within the budget), close to the internet, read one machine or a request</td><td>its own machines, at once</td></tr>
+          <tr><td><code>list_machines</code></td><td>every cloud machine: state, sessions, whether a port is bound to its public URL (and which), « yours »</td><td>all machines</td></tr>
+          <tr><td><code>create_machine</code></td><td>asks you for a cloud machine, without a volume (a sandbox) or with one (for a service): repository, size, name, expert, secrets it holds; waits for your answer; its first session is the agent's child</td><td>on your approval</td></tr>
+          <tr><td><code>destroy_machine</code>, <code>expose_machine</code></td><td>ask you to destroy one, or to bind one of its ports (<code>port</code>) to its public URL; wait for your answer</td><td>its own machines, on your approval</td></tr>
+          <tr><td><code>stop_machine</code>, <code>start_machine</code>, <code>unexpose_machine</code>, <code>machine_status</code></td><td>pause, start again (within the budget), unbind its public URL, read one machine or a request</td><td>its own machines, at once</td></tr>
           <tr><td><code>list_experts</code></td><td>the experts: what they know, the tool, the secrets they need</td><td>the owner's experts</td></tr>
           <tr><td><code>start_session</code></td><td>a child session: Claude Code, Codex or a shell; with <code>sandbox</code>, on that cloud sandbox's machine (never a new machine); with <code>expert</code>, as that expert (its secrets only if the parent holds them)</td><td>new, shown « ↳ parent »</td></tr>
           <tr><td><code>send_to_session</code></td><td>write to a session</td><td>its own children only</td></tr>
@@ -443,44 +443,48 @@
           <b>◐ › Connect other tools</b> gives the command to plug the same server into Claude Code, Codex or any MCP
           client outside the app; such a tool can list, read and start sessions, never type into one or approve.</p>
 
-        <h2 id="online">Online machines</h2>
-        <p><b>⬡ Online</b>, in the top bar, is for services on the internet: a website, an API, with its database beside
-          it. It is not a sandbox: a sandbox is private and throw-away, an Online machine lasts and may have one public
-          door. It needs the same Fly.io token (⚷ Keys, step 2) and the image built once in ☁ Sandboxes.</p>
+        <h2 id="online">A public URL per machine</h2>
+        <p>Every cloud machine (ours, on Fly.io) made since Loop 48 can serve the internet, when you decide. It is made
+          private: its own Fly.io app, and Fly.io's HTTPS (port 443, Fly's certificate) declared toward one door inside
+          the machine, port 8443, with no public address: nothing reaches it. In the machine, the door passes each
+          connection on to the one port you bound, and to nothing when none is bound.</p>
         <ul>
-          <li><b>One line per service</b>: four tiles first (public, private, running, today's cost), then each machine on
-            one line: its gate (barred when private, lit with a visitor coming in when public, grey when paused), its name,
-            PUBLIC or PRIVATE and its address, its state, port and size, its sessions, its start script, its cost today.
-            A click on its name or ▸ unfolds everything below (the door drawn, its machine card, as in ☁ Sandboxes); <b>Unfold all</b> /
-            <b>Fold all</b>. The form to make one opens with <b>+ New Online machine</b>.</li>
-          <li><b>A new Online machine</b>: a name (it goes in its address), the port its service listens on inside, a
-            volume in GB, its size (the same as the sandboxes', with its price; the smallest first), and the tool of its first session. <b>Make it (private)</b> creates its own Fly.io app, a
-            volume mounted on <code>/data</code> (where its work and your data live, kept across restarts; about $0.15 per
-            GB a month), and the machine, with the service 443 (HTTPS) declared toward that port. No plain HTTP: an
-            address typed with <code>http://</code> does not answer. It has no
-            public address yet: nothing reaches it from the internet.</li>
-          <li><b>Expose to the internet…</b> asks first, then gives its app two public addresses (an IPv6 and a shared
-            IPv4, both free): <code>https://&lt;its app&gt;.fly.dev</code> then reaches its port, with Fly.io's
-            certificate. Only that port: its SSH and everything that listens on <code>127.0.0.1</code> (a database, a
-            cache, workers) stay private. The card shows <b>PUBLIC</b> and the address. <b>Close to the internet</b>
-            gives the addresses back; the machine, its service and its data stay.</li>
-          <li><b>The door, drawn</b>: the internet, the gate 443 (lit and with visitors flowing when public, barred when
-            private), your service's port, what stays private, and Agent Manager's own way in from below.</li>
-          <li><b>Its repository and its secrets</b>: the form takes a connected repository (cloned on the volume, in
-            <code>/data/work</code>, with its own deploy key) and the secrets of Keys › Secrets the machine gets.</li>
-          <li><b>The service comes back by itself</b>: the agent writes <code>/data/start.sh</code>, which the machine
-            runs at every start with its secrets (output in <code>/data/start.log</code>), and Fly.io starts the machine
-            again if it stops. The card says whether the start script is there and shows the log's last lines. An
-            agent on an Online machine is told how (in its <code>~/.claude/CLAUDE.md</code> or
-            <code>~/.codex/AGENTS.md</code>): the public service on <code>0.0.0.0</code> and its port, the rest on
-            <code>127.0.0.1</code>, what lasts on <code>/data</code>, and never to expose it itself. An image built
-            before this says so: Rebuild it in ☁ Sandboxes.</li>
-          <li><b>Test on your localhost first</b>: <i>Tunnel and ports › Bring it to my localhost</i> opens the service's
-            port on your own computer, nothing public; when it works, <b>Expose to the internet…</b>.</li>
-          <li><b>Managed like a sandbox</b>: under the door comes the sandbox card: its state, its sessions (several on
-            one machine, see above), Stop and Start, its <i>Tunnel and ports</i> to bring a port to your localhost, and
-            Destroy, which destroys its whole app, volume and addresses included. The budget's automatic pauses never
-            stop an Online machine. Its runs and costs are in the Sandboxes inventory.</li>
+          <li><b>Bind to a public URL</b>: in a machine's <i>Tunnel and ports</i>, each port that listens has it beside
+            <b>Bring it to my localhost</b>; its card also has <b>Bind a port to the public URL…</b>, which asks for the
+            number. You confirm first. The door is set toward that port, then the app gets two public addresses (an IPv6
+            and a shared IPv4, both free): <code>https://&lt;its app&gt;.fly.dev</code> reaches that port, live, without
+            restarting the machine. The service may listen on <code>127.0.0.1</code>.</li>
+          <li><b>One public URL per machine</b>: binding another port moves the door; the address stays, the port bound
+            before is no longer reached. Its SSH, the door itself and everything else stay private.</li>
+          <li><b>Unbind</b> (on the port's line, or <b>Unbind the public URL</b> on the card) gives the addresses back
+            and closes the door: nothing of the machine is reachable from the internet. The machine, its service and its
+            data stay.</li>
+          <li><b>The door, drawn</b>: the internet, the gate 443 (lit with visitors flowing when a port is bound, barred
+            when private), the door 8443, your service and its port, what stays private, and Agent Manager's own way in
+            from below. A machine's line shows its gate and <b>PUBLIC → :port</b>; the tiles count the public URLs.</li>
+          <li><b>Machines for a service</b>: <b>+ A machine with a name, a volume, a repository…</b> (☁ Cloud, step 2)
+            takes a name (in its address, optional), a volume in GB (0: none), its size (the smallest first, with its
+            price), a connected repository (cloned with its own deploy key), an expert, the secrets of Keys › Secrets
+            the machine gets, and the tool of its first session. With a volume, <code>/data</code> lasts (about $0.15 per
+            GB a month; its work in <code>/data/work</code>), the agent writes <code>/data/start.sh</code>, which runs at
+            every start with its secrets (output in <code>/data/start.log</code>), and Fly.io starts the machine again if
+            it stops; the card says whether the start script is there and shows the log's last lines. Without a volume it
+            is a sandbox, in its own app. An agent on a machine is told the way (in its <code>~/.claude/CLAUDE.md</code>
+            or <code>~/.codex/AGENTS.md</code>): its public URL reaches nothing until you bind a port, the rest on
+            <code>127.0.0.1</code>, never to bind or expose anything itself.</li>
+          <li><b>Test on your localhost first</b>: <i>Tunnel and ports › Bring it to my localhost</i> opens the port on
+            your own computer, nothing public; when it works, <b>Bind to a public URL</b>.</li>
+          <li><b>Machines made before</b>: a cloud sandbox (ours, on Fly.io) made before Loop 48 lives in the shared app
+            and stays private for good. An Online machine made before keeps its door 443 → its own port: its public URL
+            goes to that port only. The image must be rebuilt (☁ Cloud, step 1: <b>Rebuild</b>) for the door: a machine
+            made from an older image says « door missing » and cannot be bound.</li>
+          <li><b>Tried on Fly.io</b> (2026-11-14, a throw-away machine): before the bind the name did not even resolve;
+            port 3000 bound, <code>https://…fly.dev</code> answered with Fly.io's certificate from a server listening on
+            <code>127.0.0.1:3000</code>; moved to 4000, the other server answered, the machine not restarted (same
+            uptime, the same door, the same two addresses); unbound, nothing answered. A name your computer asked for
+            before the bind can stay unknown to it for a few minutes (the « no such name » answer is kept).</li>
+          <li>No plain HTTP: an address typed with <code>http://</code> does not answer. The budget's automatic pauses
+            never stop a machine with a volume. Destroy destroys its whole app, volume and addresses included.</li>
         </ul>
 
         <h2 id="experts">Experts</h2>
@@ -630,8 +634,11 @@
           <i>⇄ claude.ai</i>. It needs a Claude account with Remote Control; untick it for sessions that should stay on
           this computer only.</p>
 
-        <h2 id="sandboxes">Cloud sandboxes and costs</h2>
-        <p>A cloud sandbox is a throw-away <b>Fly.io machine</b> made for a session, with your Fly token (Keys).</p>
+        <h2 id="sandboxes">Cloud machines and costs</h2>
+        <p><b>☁ Cloud</b>, in the top bar, holds every cloud machine (ours, on Fly.io), the sandboxes and the machines
+          for a service on one page (Loop 48: they were two pages, Sandboxes and Online). A cloud sandbox is a
+          throw-away <b>Fly.io machine</b> made for a session, with your Fly token (Keys). Each machine made now has its
+          own Fly.io app and can be given <a href="#online">a public URL</a>, one port of it, on your word.</p>
         <p><b>Several sessions on one machine.</b> A sandbox's card lists <b>Sessions on this machine</b>, each with its
           state and <b>Open</b>. <b>+ Claude Code</b>, <b>+ Codex</b> or <b>+ Shell</b> opens one more on the same
           machine: no new machine, no cost but its share of the processor, up to 8 sessions. Each has its own terminal
@@ -642,7 +649,7 @@
           machine. An added session can be archived or removed (its terminal in the machine closes; its worktree and
           files stay); the session that made the sandbox stays until the sandbox is destroyed, and destroying it
           closes every session on the machine. The pause after idle time counts the activity of all of them.</p>
-        <p>The <b>☁ Sandboxes</b> tab is a dashboard: four tiles across, then two columns. On the left, what you use
+        <p>The <b>☁ Cloud</b> tab is a dashboard: five tiles across (running, public URLs, paused, destroyed, at Fly.io), then two columns. On the left, what you use
           to make one: <b>Deploy</b> with the sizes, the <b>Costs</b>, and the <b>Image</b> (one line once it is built;
           <b>Contents ▸</b> shows what it holds). On the right, the cloud sandboxes, one per line like the
           repositories; click a name or its arrow to unfold everything about it: its state, its actions, its tunnel
@@ -706,6 +713,11 @@
           branch, files not committed and commits not pushed, and its cost. <b>Budget</b>: a monthly amount (a warning
           past 80 %, no new sandbox at 100 %) and two caps you can turn on that only <i>pause</i>: a sandbox idle for N
           minutes, or all of them once the budget is reached. <b>Stop everything</b> pauses every running sandbox.</p>
+        <div class="note warn">Seen on Fly.io on 2026-11-14: a paused machine that starts again has the disk of its
+          image again. What was on it, outside a volume, is gone: the clone, files not committed, programs started. Only
+          a machine's volume (<code>/data</code>) is kept. Commit and push before you pause one, or before an idle pause
+          could come. Fly.io can keep the whole disk too (its <code>--rootfs-persist</code> setting, tried once on a test
+          machine: a file stayed across a stop and a start); Agent Manager does not use it yet.</div>
         <div class="note warn">Agent Manager never destroys a sandbox on its own. <b>Destroy</b> is yours, confirmed,
           after it showed the work not pushed. Machines it does not know are listed, never touched unless you destroy
           them.</div>
@@ -761,9 +773,9 @@
         <h2 id="security">Security and privacy</h2>
         <ul>
           <li><b>Local-first</b>: nothing leaves your computer unless you ask (a transcription, a sandbox, a push).</li>
-          <li><b>One public door, on your word</b>: only an <a href="#online">Online machine</a> can face the internet,
-            once you expose it, and then only its port 443 toward its service. The engine, the MCP server and the
-            sandboxes never get a public address.</li>
+          <li><b>One public door, on your word</b>: a cloud machine (ours, on Fly.io) faces the internet only once you bind
+            one of its ports to its public URL, and then only that port, through Fly's HTTPS. Unbinding gives its
+            addresses back at once. The engine and the MCP server never get a public address.</li>
           <li><b>Your agents, your login</b>: agents run as you installed them; their subscription tokens are never read.</li>
           <li><b>No administrator rights</b>: installs for your user only.</li>
           <li><b>No silent downloads</b>: third-party binaries only with your OK, pinned and checked against a published

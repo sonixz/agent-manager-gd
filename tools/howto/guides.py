@@ -264,11 +264,11 @@ guide(
     "Give an agent a throw-away machine on Fly.io, see what it costs as it runs, and keep a budget that only pauses.",
     ["A Fly.io account and its API token in <b>◐ › Keys</b>",
      "An Anthropic API key (Claude Code) or OpenAI key (Codex) in Keys, for the agent in the cloud"],
-    [("Open <b>☁ Sandboxes</b>.",
+    [("Open <b>☁ Cloud</b>.",
       "Three steps: the image (what it holds: Ubuntu, tmux, git, Claude Code, Codex), deploy with an estimate first, "
       "and this month's costs against your budget. Below, a live card per sandbox: the machine, the SSH tunnel and "
       "its latency, the branch, files not committed, commits not pushed, and what it cost today."),
-     ("Click <b>Deploy + agentic coding session</b>, or pick <b>☁ A cloud sandbox</b> under <b>Where</b> in New "
+     ("Click <b>A machine + an agentic coding session</b>, or pick <b>☁ A cloud sandbox</b> under <b>Where</b> in New "
       "session.",
       "The same dialog as for this computer. The machine starts in about 30 seconds; the session's terminal is the "
       "agent's terminal in the cloud, through an SSH tunnel. It reaches your Second Brain through that tunnel, with a "

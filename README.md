@@ -58,7 +58,8 @@ sessions you give it to.
 
 **And more.** Resume any conversation, fork it, give a session its own git branch. Review a diff and comment lines.
 Wrap a session up into a summary and brief the next one with it. Hold F8 to dictate into a box you send with Enter,
-F9 for voice commands. Run an agent in a throw-away cloud sandbox. See token usage per session and day.
+F9 for voice commands. Run an agent in a throw-away cloud sandbox, and give a service there a public URL when you
+say so. See token usage per session and day.
 
 ## Install
 
