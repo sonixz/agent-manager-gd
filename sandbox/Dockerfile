@@ -1,4 +1,4 @@
-# Agent Manager GD sandbox image: tmux, git, SSH server (port 2222, keys only), Node, Claude Code, Codex.
+# Agent Manager GD sandbox image: tmux, git, SSH server (port 2222, keys only), Node, Claude Code, Codex, the door (8443).
 # Built remotely by Fly (flyctl deploy --build-only --push) into the organisation's private registry.
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM=xterm-256color
@@ -9,6 +9,7 @@ RUN apt-get update -qq \
  && mkdir -p /run/sshd /root/.ssh /work && chmod 700 /root/.ssh \
  && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/; s/^#\?AllowTcpForwarding.*/AllowTcpForwarding yes/; s/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 COPY start.sh /usr/local/bin/agmgd-start
-RUN chmod +x /usr/local/bin/agmgd-start
+COPY door.py /usr/local/bin/agmgd-door
+RUN chmod +x /usr/local/bin/agmgd-start /usr/local/bin/agmgd-door
 WORKDIR /work
 CMD ["/usr/local/bin/agmgd-start"]

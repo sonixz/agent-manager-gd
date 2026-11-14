@@ -512,7 +512,7 @@ class SandboxesTest(unittest.TestCase):
         self.assertEqual(vol[vol.index("--size") + 1], "3")
         run = next(c for c in self.fly.calls if c[:2] == ("machine", "run") and sb["app"] in c)
         ports = [run[i + 1] for i, a in enumerate(run) if a == "--port"]
-        self.assertEqual(ports, ["443:8080/tcp:tls:http"])                               # one door, toward its port; no plain HTTP
+        self.assertEqual(ports, ["443:8443/tcp:tls:http"])                               # one door (Loop 48: ours, 8443); no plain HTTP
         self.assertIn("data:/data", run)
         self.assertFalse(any(c[:2] == ("ips", "allocate-v4") or c[:2] == ("ips", "allocate-v6") for c in self.fly.calls))  # private
         self.assertEqual(d["sandbox"]["kind"], "online")
@@ -524,10 +524,12 @@ class SandboxesTest(unittest.TestCase):
         plain = self.s.create("Private", "shell", "", host="sandbox")
         with self.assertRaises(ValueError):
             self.s.sandboxes.expose(self.s.sandboxes.by_session(plain["id"])["id"], confirmed=True)
-        info = self.s.sandboxes.expose(sb["id"], confirmed=True)
+        with self.assertRaises(ValueError):                                              # Loop 48: its door first, by bind
+            self.s.sandboxes.expose(sb["id"], confirmed=True)
+        info = self.s.sandboxes.bind(sb["id"], 8080, True, lambda i, c: (0, "DOOR-RUNS"))
         self.assertEqual(info["url"], f"https://{sb['app']}.fly.dev")
         self.assertIn(("ips", "allocate-v4", "--shared", "--app", sb["app"]), self.fly.calls)   # shared: free
-        self.s.sandboxes.expose(sb["id"], confirmed=True)                                 # again: no second address
+        self.s.sandboxes.bind(sb["id"], 8080, True, lambda i, c: (0, "DOOR-RUNS"))      # again: no second address
         self.assertEqual(len([c for c in self.fly.calls if c[:2] == ("ips", "allocate-v6")]), 1)
         info = self.s.sandboxes.unexpose(sb["id"])
         self.assertEqual((info["exposed"], self.fly.ips), (False, []))
@@ -541,6 +543,173 @@ class SandboxesTest(unittest.TestCase):
         # destroyed: its whole app goes (volume and addresses with it)
         self.s.sandboxes.destroy(sb["id"], True)
         self.assertIn(("apps", "destroy", sb["app"], "--yes"), self.fly.calls)
+
+    # ------------------------------------------------------------ Loop 48: one Cloud page, a public URL per machine
+    def test_every_new_machine_has_its_own_app_and_a_door_but_no_address(self):
+        """Owner, 2026-11-14: « Bind to a public URL » beside « Bring to my localhost »; model A chosen (« t'es reco sont
+        bonne »): each machine in its own Fly app, 443 → our door 8443 declared at its making, no address."""
+        from engine.sandboxes import DOOR_PORT
+        self.s.sandboxes.prepare()
+        d = self.s.create("Plain", "shell", "", host="sandbox")
+        sb = self.s.sandboxes.by_session(d["id"])
+        self.assertTrue(sb["app"].startswith("agmgd-sb-"))
+        self.assertNotEqual(sb["app"], self.s.sandboxes.config("app"))
+        self.assertEqual((sb["door"], sb["own_app"], sb["kind"], sb["workdir"]), (DOOR_PORT, 1, "sandbox", "/work"))
+        self.assertIn(("apps", "create", sb["app"], "--org", "agent-manager"), self.fly.calls)
+        run = next(c for c in self.fly.calls if c[:2] == ("machine", "run") and sb["app"] in c)
+        self.assertEqual([run[i + 1] for i, a in enumerate(run) if a == "--port"], ["443:8443/tcp:tls:http"])
+        self.assertNotIn("--volume", run)
+        self.assertNotIn("--restart", run)                       # a sandbox is not started again by Fly on its own
+        self.assertFalse(any(c[:2] in (("ips", "allocate-v4"), ("ips", "allocate-v6")) for c in self.fly.calls))
+        self.assertEqual(self.s.sandboxes.door_kind(sb), "relay")
+        over = self.s.sandboxes.overview()
+        row = next(r for r in over["sandboxes"] if r["id"] == sb["id"])
+        self.assertEqual((row["door"]["door"], row["door"]["exposed"], row["door"]["url"]), ("relay", False, ""))
+        self.assertIsNone(row["online"])
+        self.assertFalse(any(o["app"] == sb["app"] for o in over["orphans"]))
+        # a named one with a volume: a machine for a service; a name is optional, twice the same is refused
+        d2 = self.s.create_online_session("", "shell", "", 0, volume_gb=2)
+        sb2 = self.s.sandboxes.by_session(d2["id"])
+        self.assertEqual((sb2["kind"], sb2["workdir"], sb2["volume_gb"], sb2["door"]), ("online", "/data/work", 2, DOOR_PORT))
+        d3 = self.s.create_online_session("api", "shell", "", 0, volume_gb=0)     # a name without a volume: a sandbox
+        sb3 = self.s.sandboxes.by_session(d3["id"])
+        self.assertTrue(sb3["app"].startswith("agmgd-sb-api-"))
+        self.assertEqual(sb3["kind"], "sandbox")
+        with self.assertRaises(ValueError):
+            self.s.create_online_session("api", "shell", "", 0, volume_gb=1)
+        # stop_all and the idle cap reach a sandbox in its own app (they asked only the shared app before)
+        self.assertIn(sb["machine"], self.s.sandboxes.stop_all())
+        self.assertNotIn(sb2["machine"], self.s.sandboxes.stop_all())                   # a service is never paused by them
+        # destroyed: its own app goes with it
+        self.s.sandboxes.destroy(sb["id"], True)
+        self.assertIn(("apps", "destroy", sb["app"], "--yes"), self.fly.calls)
+
+    def test_binding_a_port_sets_the_door_then_gives_addresses_live(self):
+        from engine.sandboxes import door_command
+        self.s.sandboxes.prepare()
+        sb = self.s.sandboxes.by_session(self.s.create("Web", "shell", "", host="sandbox")["id"])
+        sent = []
+
+        def ssh(i, c, answer="DOOR-RUNS"):
+            sent.append(c)
+            return 0, answer
+        with self.assertRaises(ValueError):
+            self.s.sandboxes.bind(sb["id"], 3000, False, ssh)                      # the owner's confirmation first
+        for bad in (22, 2222, 8443, 8765, 0, 70000):
+            with self.assertRaises(ValueError):
+                self.s.sandboxes.bind(sb["id"], bad, True, ssh)
+        self.assertEqual(sent, [])
+        with self.assertRaises(ValueError):                                        # an image without the door
+            self.s.sandboxes.bind(sb["id"], 3000, True, lambda i, c: (0, "NO-DOOR"))
+        self.assertEqual(self.fly.ips, [])                                         # and then no address is given
+        before = len(self.fly.calls)
+        info = self.s.sandboxes.bind(sb["id"], 3000, True, ssh)
+        self.assertEqual(sent, [door_command(3000)])
+        self.assertEqual((info["exposed"], info["port"], info["url"]), (True, 3000, f"https://{sb['app']}.fly.dev"))
+        self.assertEqual(len(self.fly.ips), 2)
+        live = [c for c in self.fly.calls[before:] if c[:1] == ("machine",)]
+        self.assertFalse(any(c[1] in ("update", "restart", "stop") for c in live))     # live: the machine is not restarted
+        info = self.s.sandboxes.bind(sb["id"], 5173, True, ssh)                     # another port: the door moves
+        self.assertEqual((sent[-1], info["port"], len(self.fly.ips)), (door_command(5173), 5173, 2))
+        info = self.s.sandboxes.unbind(sb["id"], ssh)
+        self.assertEqual((info["exposed"], self.fly.ips, sent[-1]), (False, [], door_command(0)))
+        self.assertIn("rm -f", door_command(0))
+        self.assertIn("echo 3000 > /var/lib/agmgd/door", door_command(3000))
+        self.assertIn("[a]gmgd-door", door_command(3000))                 # never matches the shell that asks
+
+    def test_machines_made_before_keep_their_ways(self):
+        """A sandbox of the shared app stays private; an Online machine made before binds its own port only."""
+        import sqlite3, time as _t
+        self.s.sandboxes.prepare()
+        with sqlite3.connect(self.s.store.path) as db:
+            db.execute("INSERT INTO sandboxes (id, session_id, app, machine, region, size, secret, created) VALUES "
+                       "('old1', '', ?, 'm-old1', 'yyz', 'shared-cpu-1x-256', 's1', ?)", (self.s.sandboxes.config("app"), _t.time()))
+            db.execute("INSERT INTO sandboxes (id, session_id, app, machine, region, size, secret, created, kind, name, port, volume_gb) "
+                       "VALUES ('old2', '', 'agmgd-on-shop-old2', 'm-old2', 'yyz', 'shared-cpu-1x-256', 's2', ?, 'online', 'shop', 8080, 1)", (_t.time(),))
+        sbx = self.s.sandboxes
+        self.assertEqual((sbx.door_kind(sbx.get("old1")), sbx.door_kind(sbx.get("old2"))), ("none", "fixed"))
+        with self.assertRaises(ValueError):
+            sbx.bind("old1", 3000, True, lambda i, c: (0, "DOOR-RUNS"))
+        with self.assertRaises(ValueError):
+            sbx.bind("old2", 3000, True, None)                                     # its door goes to 8080 only
+        self.assertTrue(sbx.bind("old2", 8080, True, None)["exposed"])            # no SSH needed: Fly's door is its port
+        self.assertTrue(sbx.expose("old2", True)["exposed"])                      # as before Loop 48
+        self.assertFalse(sbx.own_app(sbx.get("old1")))
+        self.assertTrue(sbx.own_app(sbx.get("old2")))
+
+    def test_the_door_passes_on_to_the_bound_port_read_at_each_connection(self):
+        """sandbox/door.py itself, on this computer: nothing passes without a door file; binding another port needs
+        no restart."""
+        import socket, subprocess, sys, threading, time as _t
+        from engine.sandbox_attach import free_port
+
+        def serve(word):
+            srv = socket.socket()
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.bind(("127.0.0.1", 0))
+            srv.listen(5)
+
+            def loop():
+                while True:
+                    try:
+                        c, _ = srv.accept()
+                    except OSError:
+                        return
+                    c.recv(100)
+                    c.sendall(word)
+                    c.close()
+            threading.Thread(target=loop, daemon=True).start()
+            return srv
+        a, b = serve(b"from A"), serve(b"from B")
+        door_file = os.path.join(self.tmp, "door")
+        listen = free_port()
+        here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        proc = subprocess.Popen([sys.executable, os.path.join(here, "sandbox", "door.py")],
+                                env={**os.environ, "AGMGD_DOOR_LISTEN": str(listen), "AGMGD_DOOR_FILES": door_file,
+                                     "AGMGD_DOOR_HOST": "127.0.0.1"})
+
+        def ask():
+            for _ in range(50):
+                try:
+                    c = socket.create_connection(("127.0.0.1", listen), timeout=3)
+                    break
+                except OSError:
+                    _t.sleep(0.1)
+            c.sendall(b"GET /")
+            got = b""
+            while True:
+                try:
+                    part = c.recv(100)
+                except ConnectionResetError:   # closed at once by the door: nothing passed
+                    break
+                if not part:
+                    break
+                got += part
+            c.close()
+            return got
+        try:
+            self.assertEqual(ask(), b"")                                            # no door file: nothing passes
+            with open(door_file, "w") as f:
+                f.write(f"{a.getsockname()[1]}\n")
+            self.assertEqual(ask(), b"from A")
+            with open(door_file, "w") as f:
+                f.write(str(b.getsockname()[1]))
+            self.assertEqual(ask(), b"from B")                                      # moved, the door not restarted
+        finally:
+            proc.kill()
+            proc.wait()
+            a.close()
+            b.close()
+
+    def test_the_image_holds_the_door(self):
+        from engine.sandboxes import IMAGE_DIR, IMAGE_VERSION
+        with open(os.path.join(IMAGE_DIR, "Dockerfile")) as f:
+            docker = f.read()
+        with open(os.path.join(IMAGE_DIR, "start.sh")) as f:
+            start = f.read()
+        self.assertIn("COPY door.py /usr/local/bin/agmgd-door", docker)
+        self.assertIn("python3 /usr/local/bin/agmgd-door", start)
+        self.assertGreaterEqual(IMAGE_VERSION, 3)
 
     def test_an_online_machine_half_made_leaves_nothing_billed(self):
         self.s.sandboxes.prepare()
@@ -689,7 +858,7 @@ class SandboxesTest(unittest.TestCase):
         with self.assertRaises(ValueError):                                    # never a secret it does not hold
             self.s.machine_request(lead, "create", {"kind": "sandbox", "secrets": ["NOT_HELD"]})
         with self.assertRaises(ValueError):
-            self.s.machine_request(lead, "create", {"kind": "online"})       # an Online machine needs its name
+            self.s.machine_request(lead, "create", {"kind": "online", "online_name": "Bad Name!"})   # Loop 48: a name is optional, a bad one refused
         a = self.s.machine_request(lead, "create", {"kind": "online", "online_name": "shop", "port": 3000, "secrets": ["HELD"]})
         self.s.machine_request(lead, "create", {"kind": "sandbox"})
         with self.assertRaises(ValueError):                                    # two per root session, waiting ones counted
@@ -700,14 +869,19 @@ class SandboxesTest(unittest.TestCase):
         sbid = done["result"]["sandbox"]
         self.assertEqual(self.s.sandboxes.get(sbid)["kind"], "online")
         self.assertEqual(self.s.secrets_of(done["result"]["session"]), ["HELD"])
-        ex = self.s.machine_request(lead, "expose", {"sandbox": sbid})
-        self.assertIn("https://", ex["what"])
-        self.assertFalse(self.fly.ips)                                          # asked, not done
-        self.s.decide_machine_request(ex["id"], True)
-        self.assertEqual(self._settle(ex["id"])["status"], "done")
-        self.assertTrue(self.fly.ips)
-        self.s.agent_machine_action(lead, sbid, "unexpose")                     # closing: at once
-        self.assertEqual(self.fly.ips, [])
+        from unittest import mock
+        doors = []
+        with mock.patch("engine.sandbox_ops.ssh_run", lambda sbx, i, c, timeout=60: (doors.append(c), (0, "DOOR-RUNS"))[1]):
+            ex = self.s.machine_request(lead, "expose", {"sandbox": sbid})       # its port: the one it said at its making
+            self.assertIn("https://", ex["what"])
+            self.assertIn("port 3000", ex["what"])
+            self.assertFalse(self.fly.ips)                                      # asked, not done
+            self.s.decide_machine_request(ex["id"], True)
+            self.assertEqual(self._settle(ex["id"])["status"], "done")
+            self.assertTrue(self.fly.ips)
+            self.assertIn("echo 3000 >", doors[0])                              # Loop 48: its door set first
+            self.s.agent_machine_action(lead, sbid, "unexpose")                 # closing: at once
+            self.assertEqual(self.fly.ips, [])
         de = self.s.machine_request(lead, "destroy", {"sandbox": sbid})
         self.s.decide_machine_request(de["id"], True)
         self.assertEqual(self._settle(de["id"])["status"], "done")

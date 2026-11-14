@@ -330,8 +330,7 @@ const SESSION_VIEWS := [["focus", "Focus"], ["grid", "Grid"], ["board", "Board"]
 const MANAGERS := [
 	["setup", "", "", ""],  # the ground: WSL on Windows, the computer on Linux. Its button is alive: see _render_ground_button
 	["keys", "⚷ Keys", "⚷", "Your keys, step by step: the voice (OpenAI), cloud sandboxes (Fly.io), your projects' secrets (dotenvx)"],
-	["sandboxes", "☁ Sandboxes", "☁", "Cloud sandboxes: the manager and their connections"],
-	["online", "⬡ Online", "⬡", "Machines for services on the internet: one public door (443), the rest private"],
+	["sandboxes", "☁ Cloud", "☁", "Cloud machines on Fly.io: private sandboxes, and services bound to a public URL"],
 	["experts", "✦ Experts", "✦", "Experts: skills (the open Agent Skills standard) and the experts made of them, launched in Claude Code or Codex"],
 	["repos", "⎇ Repos", "⎇", "Connected repositories and their deploy keys"],
 ]
@@ -2269,6 +2268,8 @@ func _ground_poll() -> void:
 
 
 func set_view(v: String) -> void:
+	if v == "online":   # Loop 48: Online and Sandboxes are one page, ☁ Cloud
+		v = "sandboxes"
 	view = v
 	if _is_session_view(v):
 		session_view = v
@@ -2387,11 +2388,6 @@ func _layout_view() -> void:
 			if not exp_last.is_empty():
 				_render_experts.call_deferred()
 			_load_experts()
-		"online":
-			content.add_child(_online_view())
-			if not sbx_last.is_empty():
-				_render_online.call_deferred(sbx_last)
-			_load_sandboxes()
 		"sandboxes":
 			content.add_child(_sandboxes_view())
 			if not sbx_last.is_empty():
@@ -3489,8 +3485,6 @@ func _load_sandboxes() -> void:
 	sbx_loading = false
 	if not r.has("error"):
 		sbx_last = r
-	if view == "online":
-		_render_online(r)
 	var sig := _sbx_page_sig(r)
 	if sig != sbx_page_sig or not is_instance_valid(sbx_box) or sbx_box.get_child_count() == 0:
 		_render_sandboxes(r)   # built again only when something it shows changed: a click is not swallowed by a rebuild
@@ -3505,7 +3499,8 @@ func _sbx_page_sig(r: Dictionary) -> String:
 	var rows: Array = (r.get("inventory", {}).get("sandboxes", []) as Array).map(func(x: Dictionary) -> Array:
 		return [x.get("id"), x.get("state"), x.get("destroyed"), x.get("finished"), x.get("runs", []).size(), snappedf(float(x.get("cost_usd", 0)), 0.01)])
 	return JSON.stringify([rows, r.get("sizes", {}).get("chosen", ""), r.get("job", {}), r.get("image_info", {}).get("ready", false),
-		r.get("orphans", []).size(), r.get("token", false), snappedf(float(r.get("month_spend_usd", 0)), 0.01), sbx_open, sbx_image_open])
+		r.get("orphans", []).size(), r.get("token", false), snappedf(float(r.get("month_spend_usd", 0)), 0.01), sbx_open, sbx_image_open,
+		(r.get("sandboxes", []) as Array).map(func(x: Dictionary) -> Array: return [x.get("id"), x.get("door"), x.get("sessions", [])]), online_form_open])
 
 
 func _render_sandboxes(r: Dictionary) -> void:
@@ -3527,14 +3522,14 @@ func _render_sandboxes(r: Dictionary) -> void:
 		sbx_tick.timeout.connect(_sbx_second)
 		sbx_tick.start()
 	var title := Label.new()
-	title.text = "Cloud sandboxes"
+	title.text = "Cloud"
 	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_font_override("font", AmTheme.ui_font(650))
 	sbx_box.add_child(title)
 	if r.has("error"):
 		sbx_box.add_child(_muted(str(r["error"])))
 		return
-	var head := _wrap("Fly.io · organisation %s · region %s · one machine per sandbox, one or more sessions on it, always listed on the left · Agent Manager never destroys a sandbox on its own." % [
+	var head := _wrap("Fly.io · organisation %s · region %s · each machine has its own Fly app and one or more sessions, always listed on the left · it is private: one of its ports reaches the internet only when you bind it to its public URL, and you unbind it at any time · Agent Manager never destroys a machine on its own." % [
 		r.get("org", "—") if str(r.get("org", "")) != "" else "—", r.get("region", "yyz")])
 	head.add_theme_font_size_override("font_size", 12)
 	sbx_box.add_child(head)
@@ -3545,10 +3540,13 @@ func _render_sandboxes(r: Dictionary) -> void:
 	# A dashboard (owner, 2026-11-12: « une interface un peu plus dense »): the tiles across, then two columns; a
 	# narrow window stacks them.
 	var inv: Dictionary = r.get("inventory", {}).duplicate()
-	if inv.has("sandboxes"):  # Loop 41: an Online machine is on its own page, never among the sandboxes
-		inv["sandboxes"] = (inv["sandboxes"] as Array).filter(func(x: Dictionary) -> bool: return str(x.get("kind", "sandbox")) != "online")
-	if not inv.is_empty():
-		var tiles = RepoWidgets.Tiles.new(SandboxView.tiles(inv))
+	if not inv.is_empty():   # Loop 48: every machine on one page, its public URL in its tile
+		var public: Array = (r.get("sandboxes", []) as Array).filter(func(x: Dictionary) -> bool:
+			return int(x.get("destroyed", 0)) == 0 and x.get("door") is Dictionary and bool(x["door"].get("exposed", false)))
+		var ts: Array = SandboxView.tiles(inv)
+		ts.insert(1, {"id": "public", "label": "Public URL", "value": str(public.size()), "level": "warn" if not public.is_empty() else "ok",
+			"note": "none faces the internet" if public.is_empty() else ", ".join(public.map(func(x: Dictionary) -> String: return "%s → :%d" % [_machine_name(x), int(x["door"].get("port", 0))]))})
+		var tiles = RepoWidgets.Tiles.new(ts)
 		tiles.name = "SandboxTiles"
 		sbx_box.add_child(tiles)
 	var width := maxf(sbx_box.size.x, content.size.x - 30.0)
@@ -3581,7 +3579,7 @@ func _render_sandboxes(r: Dictionary) -> void:
 	var lines: Array = SandboxView.order(inv.get("sandboxes", []))
 	var rh := HBoxContainer.new()
 	rh.add_theme_constant_override("separation", 10)
-	rh.add_child(_section_label("Sandboxes (%d)" % lines.size()))
+	rh.add_child(_section_label("Machines (%d)" % lines.size()))
 	var said := _muted("the destroyed ones stay · bars: the last %d days" % SandboxView.DAYS)
 	said.add_theme_font_size_override("font_size", 11)
 	said.size_flags_horizontal = SIZE_EXPAND_FILL
@@ -3596,7 +3594,7 @@ func _render_sandboxes(r: Dictionary) -> void:
 				await _load_sandboxes())))
 	right.add_child(rh)
 	if lines.is_empty():
-		right.add_child(_muted("No sandbox was ever made from here. Deploy one on the left."))
+		right.add_child(_muted("No machine was ever made from here. Make one on the left."))
 	var now := float(inv.get("now", Time.get_unix_time_from_system()))
 	for row in lines:
 		right.add_child(_sbx_line(row, live.get(str(row["id"]), {}), r, now))
@@ -3736,6 +3734,7 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 		if x["open"]:
 			words.add_theme_color_override("font_color", AmTheme.col("WARN") if SandboxView.port_warns(x) else AmTheme.col("TEXT"))
 		line.add_child(words)
+		_sbx_bind_button(line, sbid, port)
 		if not x["open"]:
 			line.add_child(_small("Bring it to my localhost", _sbx_tunnel_do.bind(sbid, "ports/%d/open" % port, {"label": str(x["program"])}, ""), "Opens it on 127.0.0.1 of this computer, on the same number when nothing holds it there (in WSL or in Windows); else on the next free one, and the line says so. Nothing is made public."))
 			continue
@@ -3781,6 +3780,26 @@ func _sbx_tunnel_fill(sbid: String) -> void:
 			_sbx_tunnel_do(sbid, "back/%d/open" % int(text.strip_edges()), {}, "")), "Without a rule, a sandbox reaches nothing of this computer but its way back to the Second Brain."))
 
 
+## Loop 48: on a port's line, « Bind to a public URL » beside « Bring it to my localhost » (a machine with a door), or
+## the public URL when it is this port that is bound, with Unbind.
+func _sbx_bind_button(line: HBoxContainer, sbid: String, port: int) -> void:
+	var sb: Dictionary = {}
+	for x in sbx_last.get("sandboxes", []):
+		if str(x.get("id", "")) == sbid:
+			sb = x
+	var on: Dictionary = sb.get("door") if sb.get("door") is Dictionary else {}
+	if on.is_empty() or port in [8443, 2222, 8765, 22]:
+		return
+	if bool(on.get("exposed", false)) and int(on.get("port", 0)) == port:
+		var url := str(on.get("url", ""))
+		var pub := _small("PUBLIC ↗", func() -> void: OS.shell_open(url), url)
+		pub.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		line.add_child(pub)
+		line.add_child(_small("Unbind", _cloud_unbind.bind(sbid), "Gives its public addresses back: nothing of it is reachable from the internet"))
+	elif str(on.get("door", "")) == "relay" or int(on.get("port", 0)) == port:
+		line.add_child(_small("Bind to a public URL", _cloud_bind.bind(sb, port), "https://%s.fly.dev would reach this port, on your confirmation. One port per machine." % str(sb.get("app", ""))))
+
+
 ## One sandbox's line: its state's sign, its name, its size, its life as a bar, how long it ran, its cost, an arrow.
 ## Unfolded (click its name or the arrow): its card, with its tunnel and ports, or for a destroyed one what is kept.
 func _sbx_line(row: Dictionary, sb: Dictionary, r: Dictionary, now: float) -> Control:
@@ -3819,6 +3838,23 @@ func _sbx_line(row: Dictionary, sb: Dictionary, r: Dictionary, now: float) -> Co
 	name.add_theme_font_override("font", AmTheme.ui_font(400 if lv == "off" else 650))
 	name.pressed.connect(toggle)
 	line.add_child(name)
+	# Loop 48: whether a port of it reaches the internet, at a glance: its gate, lit when bound to its public URL
+	var door: Dictionary = sb.get("door") if sb.get("door") is Dictionary else {}
+	var pub := bool(door.get("exposed", false)) and int(sb.get("destroyed", 0)) == 0
+	var gate = OnlineWidgets.Gate.new(pub, str(sb.get("state", "")) == "started")
+	gate.custom_minimum_size = Vector2(40, 22)
+	if door.is_empty():
+		gate.tooltip_text = "Made before machines had a door: private for good"
+	line.add_child(gate)
+	var badge := Label.new()
+	badge.text = ("PUBLIC → :%d" % int(door.get("port", 0))) if pub else ""
+	badge.custom_minimum_size.x = 96.0
+	badge.add_theme_color_override("font_color", AmTheme.col("WARN"))
+	badge.add_theme_font_size_override("font_size", 11)
+	badge.add_theme_font_override("font", AmTheme.ui_font(650))
+	if pub:
+		badge.tooltip_text = str(door.get("url", ""))
+	line.add_child(badge)
 	var state := _muted(str(st["text"]))
 	state.add_theme_font_size_override("font_size", 12)
 	state.custom_minimum_size.x = 84.0
@@ -3847,7 +3883,7 @@ func _sbx_line(row: Dictionary, sb: Dictionary, r: Dictionary, now: float) -> Co
 	line.add_child(arrow)
 	if open:
 		if not sb.is_empty() and int(sb.get("destroyed", 0)) == 0:
-			inner.add_child(_sandbox_card(sb, r))
+			inner.add_child(_online_card(sb, r) if sb.get("door") is Dictionary else _sandbox_card(sb, r))
 		else:
 			var gone := _wrap(SandboxView.tip(row, now, int(Time.get_time_zone_from_system().get("bias", 0))).replace("\n", "  ·  "))
 			gone.add_theme_font_size_override("font_size", 12)
@@ -3860,7 +3896,7 @@ func _sbx_second() -> void:
 	# the page is asked again every thirty seconds while it is shown, by this one clock. Before, every drawing of the
 	# page started a timer of its own that asked again, so each click added a loop: eight clicks, ten reloads in
 	# thirty seconds (measured), each one rebuilding the page.
-	if (view == "sandboxes" and is_instance_valid(sbx_box) or view == "online" and is_instance_valid(online_box)) and sbx_seconds % 30 == 0:
+	if view == "sandboxes" and is_instance_valid(sbx_box) and sbx_seconds % 30 == 0:
 		_load_sandboxes()
 	if view in ["sandboxes", "online"] and sbx_seconds % 3 == 0:  # what passes and what listens, asked again while one looks (the engine answers from what it last read)
 		for sbid in sbx_tunnel_boxes.keys():
@@ -3973,7 +4009,7 @@ func _sbx_image_step(r: Dictionary) -> Control:
 func _sbx_deploy_step(r: Dictionary) -> Control:
 	var e: Dictionary = r.get("estimate", {})
 	var ready := bool(r.get("ready", false))
-	var parts := _step_panel("2", "Deploy a sandbox for an agent", false)
+	var parts := _step_panel("2", "Make a machine", false)
 	var v: VBoxContainer = parts[1]
 	var est := _wrap("Estimated, before you deploy (%s, %s): ≈ %s an hour while it runs · ≈ %s a day if left on · ≈ %s a month paused (its disk only)." % [
 		str(e.get("size", "")), str(e.get("source", "")), CostChart.money(float(e.get("per_hour", 0))), CostChart.money(float(e.get("per_day_on", 0))), CostChart.money(float(e.get("paused_per_month", 0)))])
@@ -4000,14 +4036,23 @@ func _sbx_deploy_step(r: Dictionary) -> Control:
 		v.add_child(note)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
-	var a := _small("☁ Deploy + open a shell", func() -> void: _open_new("sandbox", "shell"))
-	var b := _small("☁ Deploy + agentic coding session", func() -> void: _open_new("sandbox", "claude"))
+	var a := _small("☁ A machine + a shell", func() -> void: _open_new("sandbox", "shell"))
+	var b := _small("☁ A machine + an agentic coding session", func() -> void: _open_new("sandbox", "claude"))
 	for x in [a, b]:
 		x.disabled = not ready
 		x.tooltip_text = "" if ready else "Deploy the image first (step 1)"
 		row.add_child(x)
 	v.add_child(row)
-	v.add_child(_muted("Each sandbox belongs to the session that made it: it is on the left with ☁, and goes away only when you destroy it. More sessions can open on the same machine from its card."))
+	# Loop 48: a machine with a name, a volume, a repository, secrets, an expert (the Online form before)
+	var more := _small("− Close the form" if online_form_open else "+ A machine with a name, a volume, a repository…", func() -> void:
+		online_form_open = not online_form_open
+		_render_sandboxes(sbx_last))
+	more.name = "CloudNew"
+	more.disabled = not ready
+	v.add_child(more)
+	if online_form_open and ready:
+		v.add_child(_online_new())
+	v.add_child(_wrap("Each machine belongs to the session that made it: it is on the left with ☁, and goes away only when you destroy it. More sessions can open on the same machine from its card. It is private: bind one of its ports to its public URL from its card when you want the internet to reach it."))
 	return parts[0]
 
 
@@ -4812,139 +4857,37 @@ func _read_skill(skill_id: String) -> void:
 
 
 # ------------------------------------------------------------------ Online machines (Loop 41)
-var online_box: VBoxContainer
-var online_sig := ""
 var online_form := {}
-var online_open := {}          # Loop 47: a machine -> its line is unfolded
-var online_form_open := false  # the « new machine » form, folded once there are machines
+var online_form_open := false  # Loop 48: the « new machine » form in ☁ Cloud, step 2
 
 
 ## Machines for services on the internet (owner, 2026-11-14: « ce serait pour lancer des services en ligne… un
 ## service sur le port 443. Le reste ce serait en backend »; the name « Online » is the owner's). Never mixed with
 ## the sandboxes: a sandbox is private and throw-away, an Online machine lasts and may have one public door.
-func _online_view() -> Control:
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	online_box = VBoxContainer.new()
-	online_box.size_flags_horizontal = SIZE_EXPAND_FILL
-	online_box.add_theme_constant_override("separation", 12)
-	scroll.add_child(online_box)
-	online_sig = ""
-	online_box.add_child(SandboxWidgets.Loading.new("Asking Fly.io for your Online machines…", 300.0))
-	return scroll
-
-
-func _render_online(r: Dictionary) -> void:
-	if online_box == null or not is_instance_valid(online_box):
-		return
-	var mine: Array = (r.get("sandboxes", []) as Array).filter(func(x: Dictionary) -> bool: return str(x.get("kind", "")) == "online")
-	var sig := JSON.stringify([mine.map(func(x: Dictionary) -> Array: return [x["id"], x["state"], x["destroyed"], x.get("online", {}), x.get("sessions", []), x.get("health", {}).get("tunnel", "") if x.get("health") is Dictionary else ""]),
-		r.get("token", false), r.get("ready", false), r.has("error"), online_open, online_form_open])
-	if sig == online_sig and online_box.get_child_count() > 0:
-		return
-	online_sig = sig
-	if sbx_tick == null:
-		sbx_tick = Timer.new()
-		sbx_tick.wait_time = 1.0
-		add_child(sbx_tick)
-		sbx_tick.timeout.connect(_sbx_second)
-		sbx_tick.start()
-	for c in online_box.get_children():
-		online_box.remove_child(c)
-		c.queue_free()
-	sbx_live.clear()
-	var title := Label.new()
-	title.text = "Online"
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_font_override("font", AmTheme.ui_font(650))
-	online_box.add_child(title)
-	var head := _wrap("Machines for services on the internet: a website, an API, with its database beside it. Each has its own Fly.io app and address, a volume for what must last (/data), and one door: port 443 (HTTPS, Fly's certificate) toward the port your service listens on. Everything else in it listens on 127.0.0.1 and is never public. It is made private: it becomes public only when you expose it, and you can close it again at any time. You manage it like a sandbox: its terminal, its sessions, its tunnel, over Fly's private network.")
-	head.add_theme_font_size_override("font_size", 12)
-	online_box.add_child(head)
-	if r.has("error"):
-		online_box.add_child(_muted(str(r["error"])))
-		return
-	if not (r.get("token", false) and r.get("flyctl", false)):
-		var need := _wrap("First paste your Fly.io token in ⚷ Keys (step 2).")
-		need.add_theme_color_override("font_color", AmTheme.col("WARN"))
-		online_box.add_child(need)
-	elif not r.get("ready", false):
-		var need2 := _wrap("Build the image once in ☁ Sandboxes (step 1): Online machines start from it.")
-		need2.add_theme_color_override("font_color", AmTheme.col("WARN"))
-		online_box.add_child(need2)
-	var live := mine.filter(func(x: Dictionary) -> bool: return int(x["destroyed"]) == 0)
-	# Loop 47: one line per service, unfolded on a click; the tiles say the whole at a glance
-	var public := live.filter(func(x: Dictionary) -> bool: return bool((x.get("online") if x.get("online") is Dictionary else {}).get("exposed", false)))
-	var running := live.filter(func(x: Dictionary) -> bool: return str(x["state"]) == "started")
-	var today := 0.0
-	for x in live:
-		today += float(x.get("cost_today", 0.0))
-	if not live.is_empty():
-		var tiles = RepoWidgets.Tiles.new([
-			{"id": "public", "label": "Public", "value": str(public.size()), "level": "warn" if not public.is_empty() else "ok",
-				"note": ", ".join(public.map(func(x: Dictionary) -> String: return str(x["online"].get("name", "")))) if not public.is_empty() else "none faces the internet"},
-			{"id": "private", "label": "Private", "value": str(live.size() - public.size()), "level": "ok", "note": "no public address"},
-			{"id": "running", "label": "Running", "value": "%d / %d" % [running.size(), live.size()], "level": "ok", "note": "the others are paused (only their disk is billed)"},
-			{"id": "cost", "label": "Today", "value": CostChart.money(today), "level": "ok", "note": "measured: running time × published price"}])
-		tiles.name = "OnlineTiles"
-		online_box.add_child(tiles)
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 10)
-	online_box.add_child(bar)
-	bar.add_child(_section_label("Your Online machines (%d)" % live.size()))
-	var sp := Control.new()
-	sp.size_flags_horizontal = SIZE_EXPAND_FILL
-	bar.add_child(sp)
-	if not live.is_empty():
-		var all_open := live.all(func(x: Dictionary) -> bool: return online_open.get(str(x["id"]), false))
-		bar.add_child(_small("Fold all" if all_open else "Unfold all", func() -> void:
-			for x in live:
-				online_open[str(x["id"])] = not all_open
-			_render_online(sbx_last)))
-	var mk := _small("− Close the form" if online_form_open or live.is_empty() else "+ New Online machine", func() -> void:
-		online_form_open = not online_form_open
-		_render_online(sbx_last))
-	mk.name = "OnlineNew"
-	bar.add_child(mk)
-	if online_form_open or live.is_empty():
-		online_box.add_child(_online_new())
-	if live.is_empty():
-		online_box.add_child(_muted("None yet. Make one above: it starts private."))
-	for sb in live:
-		online_box.add_child(_online_line(sb, r))
-	var gone := mine.filter(func(x: Dictionary) -> bool: return int(x["destroyed"]) == 1)
-	if not gone.is_empty():
-		online_box.add_child(_muted("Destroyed, kept in ☁ Sandboxes' inventory with what they cost: " + ", ".join(gone.map(func(x: Dictionary) -> String: return str(x.get("name", x["id"]))))))
-
-
-## Making one: its name (in its address), the port its service listens on, its volume, the tool of its first session.
+## Making one (Loop 48: in ☁ Cloud, step 2): its name in its address (optional), its volume (none: a sandbox; one: a
+## machine for a service, its start script at boot), its size, repository, expert, secrets, the tool of its first session.
 func _online_new() -> Control:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, Color(AmTheme.col("MINT"), 0.35), 1, 14))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	panel.add_child(v)
-	v.add_child(_section_label("A new Online machine"))
+	v.add_child(_section_label("A new machine"))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	v.add_child(row)
 	row.add_child(_muted("name"))
 	var name_edit := LineEdit.new()
-	name_edit.placeholder_text = "shop"
+	name_edit.placeholder_text = "optional: shop"
 	name_edit.custom_minimum_size.x = 160
-	name_edit.tooltip_text = "Lowercase letters, digits, dashes: it goes in the address (agmgd-on-<name>-….fly.dev)"
+	name_edit.tooltip_text = "Lowercase letters, digits, dashes: it goes in its public URL (agmgd-…-<name>-….fly.dev). Optional."
 	row.add_child(name_edit)
-	row.add_child(_muted("its service listens on port"))
-	var port := SpinBox.new()
-	port.min_value = 1
-	port.max_value = 65535
-	port.value = 8080
-	row.add_child(port)
-	row.add_child(_muted("volume (GB)"))
+	row.add_child(_muted("volume /data (GB, 0: none)"))
 	var vol := SpinBox.new()
-	vol.min_value = 1
+	vol.min_value = 0
 	vol.max_value = 500
-	vol.value = 1
+	vol.value = 0
+	vol.tooltip_text = "With a volume it is a machine for a service: /data is kept, /data/start.sh runs at every boot, Fly starts it again if it stops. Without, a sandbox."
 	row.add_child(vol)
 	var tool := OptionButton.new()
 	for t in [["claude", "Claude Code"], ["codex", "Codex"], ["shell", "Shell"]]:
@@ -4994,7 +4937,7 @@ func _online_new() -> Control:
 			picks.add_child(_muted("none in Keys › Secrets"))
 	fill.call()
 	if bool(sbx_last.get("image_info", {}).get("outdated", false)):
-		var old := _wrap("Your image was built before start scripts: Rebuild it in ☁ Sandboxes (step 1) so a service starts again by itself after a restart.")
+		var old := _wrap("Your image was built before the door: Rebuild it (step 1) so a machine made from it can be bound to a public URL.")
 		old.add_theme_color_override("font_color", AmTheme.col("WARN"))
 		v.add_child(old)
 	# its size (owner, 2026-11-14: « ça l'a déployé directement de ma chaîne performance à 2 gigs… faudra avoir les
@@ -5020,109 +4963,40 @@ func _online_new() -> Control:
 	row3.add_child(cost)
 	var say_cost := func(i: int) -> void:
 		var z: Dictionary = sizes[i] if i < sizes.size() else {}
-		cost.text = "≈ %s a month while it runs + $%.2f per GB of volume · the addresses are free" % [CostChart.money(float(z.get("month", 0))), 0.15]
+		cost.text = "≈ %s a month while it runs + $%.2f per GB of volume · its own Fly app and its public addresses are free" % [CostChart.money(float(z.get("month", 0))), 0.15]
 	size.item_selected.connect(say_cost)
 	say_cost.call(0)
 	var go := _small("Make it (private)", func() -> void:
 		var n := name_edit.text.strip_edges().to_lower()
-		if n == "":
-			_toast("Give it a name first")
-			return
-		_toast("Making the Online machine « %s »: its app, its volume, its machine (about a minute)…" % n)
+		_toast("Making the machine%s: its app%s, its machine (about a minute)…" % [(" « %s »" % n) if n != "" else "", ", its volume" if int(vol.value) > 0 else ""])
 		var chosen := []
 		for c in picks.get_children():
 			if c is CheckBox and (c as CheckBox).button_pressed:
 				chosen.append((c as CheckBox).text)
-		var d := await engine.call_api("POST", "/online", {"name": n, "port": int(port.value), "volume_gb": int(vol.value),
+		var d := await engine.call_api("POST", "/online", {"name": n, "port": 0, "volume_gb": int(vol.value),
 			"tool": str(tool.get_selected_metadata()), "repo": str(repo.get_selected_metadata()), "secrets": chosen,
 			"size": str(size.get_selected_metadata()),
 			"expert": str(ex.get_selected_metadata())}, true, 900.0)
 		if d.has("error"):
 			_toast(str(d["error"]))
 			return
-		_toast("« %s » is made, private. Expose it when its service is ready." % n)
+		_toast("The machine is made, private. Bind a port to its public URL from its card when its service is ready.")
+		online_form_open = false
 		await refresh()
-		await _load_sandboxes(), "Its own Fly app, a volume on /data, the service 443 (HTTPS) declared toward its port: no public address until you expose it.")
+		await _load_sandboxes(), "Its own Fly app, Fly's HTTPS declared toward its door: no public address until you bind one of its ports.")
 	go.name = "OnlineMake"
 	v.add_child(go)
 	return panel
 
 
-## Loop 47: one service on one line: its gate, its name, public or private and its address, port and size, its
-## sessions, its start script, its cost today; a click unfolds the whole card (the door drawn, the sandbox card).
-func _online_line(sb: Dictionary, r: Dictionary) -> Control:
-	var sbid := str(sb["id"])
-	var on: Dictionary = sb.get("online") if sb.get("online") is Dictionary else {}
-	var exposed := bool(on.get("exposed", false))
-	var st := str(sb["state"])
-	var open := bool(online_open.get(sbid, false))
-	var box := VBoxContainer.new()
-	box.name = "OnlineLine_" + sbid
-	box.add_theme_constant_override("separation", 4)
-	var panel := PanelContainer.new()
-	var edge := AmTheme.col("WARN") if exposed else Color(AmTheme.col("FAINT"), 0.5)
-	panel.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 8, Color(edge, 0.8 if open else 0.5), 1, 8))
-	box.add_child(panel)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	panel.add_child(row)
-	row.add_child(OnlineWidgets.Gate.new(exposed, st == "started"))
-	var toggle := func() -> void:
-		online_open[sbid] = not open
-		_render_online(sbx_last)
-	var name := Button.new()
-	name.text = str(on.get("name", sbid))
-	name.flat = true
-	name.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	name.custom_minimum_size.x = 150
-	name.add_theme_font_override("font", AmTheme.ui_font(650))
-	name.add_theme_font_size_override("font_size", 14)
-	name.pressed.connect(toggle)
-	row.add_child(name)
-	var badge := Label.new()
-	badge.text = "PUBLIC" if exposed else "PRIVATE"
-	badge.custom_minimum_size.x = 64
-	badge.add_theme_color_override("font_color", AmTheme.col("WARN") if exposed else AmTheme.col("FAINT"))
-	badge.add_theme_font_size_override("font_size", 11)
-	badge.add_theme_font_override("font", AmTheme.ui_font(650))
-	row.add_child(badge)
-	var addr := Control.new()
-	addr.custom_minimum_size.x = 0
-	if exposed:
-		var url := str(on.get("url", ""))
-		var link := _small(url.replace("https://", "") + " ↗", func() -> void: OS.shell_open(url), "Opens it in your browser")
-		link.clip_text = true
-		link.custom_minimum_size.x = 260
-		row.add_child(link)
-	else:
-		var none := _muted("no public address")
-		none.custom_minimum_size.x = 260
-		row.add_child(none)
-	var meta := _muted("%s · :%d · %s" % [{"started": "running", "stopped": "paused"}.get(st, st), int(on.get("port", 0)), str(sb.get("size", "")).replace("shared-cpu-", "")])
-	meta.custom_minimum_size.x = 190
-	row.add_child(meta)
-	var sess: Array = sb.get("sessions", [])
-	row.add_child(_muted("%d session%s" % [sess.size(), "" if sess.size() == 1 else "s"]))
-	var hl: Dictionary = sb.get("health") if sb.get("health") is Dictionary else {}
-	var ss = hl.get("start_script")
-	row.add_child(_chip("start script" if ss != false else "no start script", ss if ss != null else null))
-	var fill := Control.new()
-	fill.size_flags_horizontal = SIZE_EXPAND_FILL
-	row.add_child(fill)
-	row.add_child(_muted(CostChart.money(float(sb.get("cost_today", 0.0))) + " today"))
-	var arrow := _small("▾" if open else "▸", toggle, "Everything about this machine: its door, its sessions, its tunnel and ports, its actions")
-	row.add_child(arrow)
-	if open:
-		box.add_child(_online_card(sb, r))
-	return box
-
-
-## One Online machine: the door drawn, whether it is public, its address, Expose / Close, then what a sandbox's card
-## has (state, sessions, actions, tunnel and ports).
+## A machine with a door (Loop 48: every machine made now; Online machines made before): the door drawn, whether a
+## port of it is bound to its public URL, Bind / Unbind, then what a sandbox's card has (state, sessions, actions,
+## tunnel and ports, where each port can be bound too).
 func _online_card(sb: Dictionary, r: Dictionary) -> Control:
 	var sbid := str(sb["id"])
-	var on: Dictionary = sb.get("online") if sb.get("online") is Dictionary else {}
+	var on: Dictionary = sb.get("door") if sb.get("door") is Dictionary else {}
 	var exposed := bool(on.get("exposed", false))
+	var relay := str(on.get("door", "")) == "relay"
 	var box := VBoxContainer.new()
 	box.name = "Online_" + sbid
 	box.add_theme_constant_override("separation", 6)
@@ -5130,12 +5004,12 @@ func _online_card(sb: Dictionary, r: Dictionary) -> Control:
 	top.add_theme_constant_override("separation", 12)
 	box.add_child(top)
 	var n := Label.new()
-	n.text = "⬡ " + str(on.get("name", sbid))
+	n.text = ("⬡ " if str(sb.get("kind", "")) == "online" else "☁ ") + _machine_name(sb)
 	n.add_theme_font_size_override("font_size", 17)
 	n.add_theme_font_override("font", AmTheme.ui_font(650))
 	top.add_child(n)
 	var badge := Label.new()
-	badge.text = "PUBLIC" if exposed else "PRIVATE"
+	badge.text = ("PUBLIC → port %d" % int(on.get("port", 0))) if exposed else "PRIVATE"
 	badge.add_theme_color_override("font_color", AmTheme.col("WARN") if exposed else AmTheme.col("FAINT"))
 	badge.add_theme_font_override("font", AmTheme.ui_font(650))
 	top.add_child(badge)
@@ -5146,39 +5020,78 @@ func _online_card(sb: Dictionary, r: Dictionary) -> Control:
 	spacer.size_flags_horizontal = SIZE_EXPAND_FILL
 	top.add_child(spacer)
 	if exposed:
-		top.add_child(_small("Close to the internet", func() -> void:
-			var d := await engine.call_api("POST", "/sandboxes/%s/unexpose" % sbid, {}, true, 120.0)
-			_toast(str(d.get("error", "Closed: nothing of it is reachable from the internet any more")))
-			await _load_sandboxes(), "Gives its public addresses back. The machine, its service and its data stay."))
+		top.add_child(_small("Unbind the public URL", _cloud_unbind.bind(sbid), "Gives its public addresses back and closes its door. The machine, its service and its data stay."))
+	elif relay:
+		top.add_child(_small("Bind a port to the public URL…", func() -> void:
+			_ask("Which port of « %s » should https://%s.fly.dev reach? (the port its service listens on inside, 127.0.0.1 is fine)" % [_machine_name(sb), sb["app"]], "", func(text: String) -> void:
+				if not text.strip_edges().is_valid_int():
+					_toast("A port is a number, like 3000")
+					return
+				_cloud_bind(sb, int(text.strip_edges()))), "Or from Tunnel and ports below, beside « Bring it to my localhost »: one port, on your confirmation"))
 	else:
-		top.add_child(_small("Expose to the internet…", func() -> void:
-			_confirm("Expose « %s » to the internet?
-
-Anyone will reach https://%s.fly.dev, which goes to port %d inside the machine. Only that port: SSH and everything on 127.0.0.1 stay private.
-The service there sees the machine's files: make sure it shows only what it should.
-
-Two public addresses are given (IPv6 and a shared IPv4, both free). Close it again at any time." % [
-				on.get("name", sbid), sb["app"], int(on.get("port", 0))], func() -> void:
-				var d := await engine.call_api("POST", "/sandboxes/%s/expose" % sbid, {"confirmed": true}, true, 180.0)
-				_toast(str(d.get("error", "Public: " + str(d.get("url", "")))))
-				await _load_sandboxes()), "Gives it public addresses, on your confirmation"))
-	box.add_child(OnlineWidgets.Door.new(exposed, int(on.get("port", 8080)), str(sb["app"])))
+		top.add_child(_small("Bind port %d to the public URL…" % int(on.get("port", 0)), _cloud_bind.bind(sb, int(on.get("port", 0))), "Made before Loop 48: its public URL goes to this port only"))
+	box.add_child(OnlineWidgets.Door.new(exposed, int(on.get("port", 0)), str(sb["app"]), relay, int(sb.get("volume_gb", 0)) > 0))
 	var hl: Dictionary = sb.get("health") if sb.get("health") is Dictionary else {}
 	var svc := HBoxContainer.new()
 	svc.add_theme_constant_override("separation", 14)
 	box.add_child(svc)
-	var ss = hl.get("start_script")
-	svc.add_child(_chip("start script /data/start.sh " + ("ready" if ss == true else ("missing: the service will not come back after a restart" if ss == false else "not checked")), ss if ss != null else null))
-	svc.add_child(_muted("test it on your localhost first: Tunnel and ports › Bring it to my localhost (port %d), then expose" % int(on.get("port", 0))))
+	if relay:
+		var dr = hl.get("door")
+		svc.add_child(_chip("door " + ("runs" if dr == true else ("missing: its image was built before Loop 48" if dr == false else "not checked")), dr if dr != null else null))
+	if str(sb.get("kind", "")) == "online":
+		var ss = hl.get("start_script")
+		svc.add_child(_chip("start script /data/start.sh " + ("ready" if ss == true else ("missing: the service will not come back after a restart" if ss == false else "not checked")), ss if ss != null else null))
+	var tip := _wrap("try it on your localhost first (Tunnel and ports › Bring it to my localhost), then bind it")
+	tip.size_flags_horizontal = SIZE_EXPAND_FILL
+	svc.add_child(tip)
 	if str(hl.get("service_log", "")) != "":
 		var lg := _muted("/data/start.log: " + str(hl["service_log"]).replace("\n", "  ⏎  "))
 		lg.add_theme_font_override("font", font)
 		lg.add_theme_font_size_override("font_size", 11)
 		lg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(lg)
-	box.add_child(_muted("volume %d GB (≈ $%.2f a month) · port %d inside · app %s" % [int(on.get("volume_gb", 0)), float(on.get("volume_month", 0)), int(on.get("port", 0)), sb["app"]]))
+	var facts := "public URL https://%s.fly.dev (one per machine) · app %s" % [sb["app"], sb["app"]]
+	if int(on.get("volume_gb", 0)) > 0:
+		facts = "volume %d GB (≈ $%.2f a month) · " % [int(on.get("volume_gb", 0)), float(on.get("volume_month", 0))] + facts
+	box.add_child(_wrap(facts))
 	box.add_child(_sandbox_card(sb, r))
 	return box
+
+
+## A machine's name as the page says it: the name it was given, else its session's.
+func _machine_name(sb: Dictionary) -> String:
+	if str(sb.get("name", "")) != "":
+		return str(sb["name"])
+	var sess := _session(str(sb.get("session_id", "")))
+	return str(sess.get("name", "machine " + str(sb.get("id", ""))))
+
+
+## Loop 48: one port of the machine bound to its public URL, on the owner's confirmation; live, no restart.
+func _cloud_bind(sb: Dictionary, port: int) -> void:
+	var sbid := str(sb["id"])
+	var on: Dictionary = sb.get("door") if sb.get("door") is Dictionary else {}
+	var moving := bool(on.get("exposed", false)) and int(on.get("port", 0)) != port
+	_confirm("Bind port %d of « %s » to its public URL?
+
+Anyone will reach https://%s.fly.dev, which goes to port %d inside the machine. Only that port: SSH and everything else stay private.%s
+The service there sees the machine's files: make sure it shows only what it should.
+
+Two public addresses are given (IPv6 and a shared IPv4, both free). Unbind it at any time." % [
+		port, _machine_name(sb), sb["app"], port, ("\nPort %d is no longer reached." % int(on.get("port", 0))) if moving else ""], func() -> void:
+		_toast("Binding port %d to https://%s.fly.dev…" % [port, sb["app"]])
+		var d := await engine.call_api("POST", "/sandboxes/%s/bind" % sbid, {"port": port, "confirmed": true}, true, 180.0)
+		_toast(str(d.get("error", "Public: %s → port %d" % [str(d.get("url", "")), port])))
+		await _load_sandboxes()
+		if is_instance_valid(sbx_tunnel_boxes.get(sbid)):
+			_sbx_tunnel_fill(sbid))
+
+
+func _cloud_unbind(sbid: String) -> void:
+	var d := await engine.call_api("POST", "/sandboxes/%s/unbind" % sbid, {}, true, 120.0)
+	_toast(str(d.get("error", "Unbound: nothing of it is reachable from the internet any more")))
+	await _load_sandboxes()
+	if is_instance_valid(sbx_tunnel_boxes.get(sbid)):
+		_sbx_tunnel_fill(sbid)
 
 
 ## Loop 40: every session on this machine (owner, 2026-11-14: « ouvrir plusieurs sessions SSH sur la même VM
@@ -6613,9 +6526,8 @@ func open_palette() -> void:
 	items.append({"label": "Keys", "hint": "your API keys: OpenAI (voice), Fly.io, Anthropic", "run": set_view.bind("keys")})
 	items.append({"label": "Agent permissions", "hint": "every agent: level, file access, Claude Code's sandbox, git rights", "run": set_view.bind("permissions")})
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
-	items.append({"label": "Sandboxes", "hint": "cloud sandboxes: manager, connections, costs", "run": set_view.bind("sandboxes")})
+	items.append({"label": "Cloud", "hint": "cloud machines: sandboxes, services, their public URL, connections, costs", "run": set_view.bind("sandboxes")})
 	items.append({"label": "Experts", "hint": "skills and the experts made of them: launch one in a repository", "run": set_view.bind("experts")})
-	items.append({"label": "Online", "hint": "machines for services on the internet: 443 public, the rest private", "run": set_view.bind("online")})
 	items.append({"label": "Dictate (hold %s)" % key_text("dictate"), "hint": "what you say is put together in the box; Enter there sends it all", "run": func() -> void: _toast("Hold %s and speak. Release, read it in the box, then Enter sends it all" % key_text("dictate"))})
 	items.append({"label": "Voice command (hold %s)" % key_text("command"), "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold %s and say a command" % key_text("command"))})
 	items.append({"label": "Shortcuts", "hint": "change the keyboard shortcuts", "run": set_view.bind("shortcuts")})
@@ -6718,13 +6630,9 @@ func _refused(r: Dictionary, sid: String) -> bool:
 	var why := str(r["error"])
 	var sb = _session(sid).get("sandbox")
 	if sb is Dictionary and "cloud sandbox" in why:
-		var online := str(sb.get("kind", "")) == "online"
 		_toast("« %s » runs its cloud machine: destroy the machine first (its line is open), then remove the session." % str(_session(sid).get("name", sid)))
-		if online:
-			online_open[str(sb.get("id", ""))] = true
-		else:
-			sbx_open[str(sb.get("id", ""))] = true
-		set_view("online" if online else "sandboxes")
+		sbx_open[str(sb.get("id", ""))] = true
+		set_view("sandboxes")
 	else:
 		_toast(why)
 	return true

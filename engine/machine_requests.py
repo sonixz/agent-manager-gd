@@ -105,7 +105,7 @@ def describe(req: dict) -> str:
     if req["kind"] == "destroy":
         return f"destroy the machine {p.get('sandbox', '')} (« {p.get('label', '')} »): its files and keys are deleted for good"
     if req["kind"] == "expose":
-        return f"expose the Online machine « {p.get('label', '')} » to the internet: https://{p.get('app', '')}.fly.dev reaches its port {p.get('port', '')}"
+        return f"bind port {p.get('port', '')} of the machine « {p.get('label', '')} » to its public URL: https://{p.get('app', '')}.fly.dev reaches it from the internet"
     return req["kind"]
 
 

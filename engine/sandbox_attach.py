@@ -12,7 +12,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engine.keys import Keys                      # noqa: E402
-from engine.sandboxes import FLYCTL, Fly, Sandboxes  # noqa: E402
+from engine.sandboxes import FLYCTL, Fly, Sandboxes, door_command  # noqa: E402
 from engine.store import Store                    # noqa: E402
 
 def port_file(home: str, sbid: str, sid: str = "") -> str:
@@ -74,25 +74,49 @@ def secrets_text(values: dict) -> str:
     return "".join(f"export {k}={shlex.quote(v)}\n" for k, v in sorted(values.items()))
 
 
-def online_guide(port: int, app: str) -> str:
+def online_guide(port: int, app: str, door: str = "fixed", volume: bool = True) -> str:
     """Loop 43: what an agent on an Online machine is told (Claude Code reads ~/.claude/CLAUDE.md, Codex
-    ~/.codex/AGENTS.md). The owner's way: test on localhost first, then the owner exposes it."""
-    return f"""# This machine is an Online machine of Agent Manager GD
+    ~/.codex/AGENTS.md). The owner's way: test on localhost first, then the owner exposes it. Loop 48: a machine
+    with our door (any port may be bound to its public URL by the owner)."""
+    if door == "relay":
+        head = f"""# This machine is a cloud machine of Agent Manager GD
+
+It can serve one service on the internet, when the owner decides. Until then it is private.
+
+- Its public URL is https://{app}.fly.dev. It reaches nothing until the owner binds one port of this machine to it
+  (Agent Manager › ☁ Cloud › Tunnel and ports › Bind to a public URL); then HTTPS (by Fly.io) goes to that port.
+  One port only, chosen by the owner; you never bind or expose anything yourself.
+- Your service may listen on 127.0.0.1 (the door reaches it there). Say which port it uses.
+- Everything else (a database, a cache, workers, admin pages) listens on 127.0.0.1 and is never public.
+- Port 8443 is the door itself, 2222 is SSH, 8765 the way back to the Brain: never use them.
+"""
+    else:
+        head = f"""# This machine is an Online machine of Agent Manager GD
 
 It is made to serve one service on the internet, when the owner decides. Until then it is private.
 
 - The public service listens on 0.0.0.0:{port}. Only this port can ever be public: when the owner exposes the
   machine, https://{app}.fly.dev reaches it (HTTPS by Fly.io, port 443 → {port}). You never expose it yourself.
 - Everything else (a database, a cache, workers, admin pages) listens on 127.0.0.1 only.
-- Test first: the owner opens your port on their own computer (Agent Manager › Tunnel and ports › Bring it to my
+"""
+    head += """- Test first: the owner opens your port on their own computer (Agent Manager › Tunnel and ports › Bring it to my
   localhost) and tries it there. Say which port to bring and what to look at.
-- Keep what must last on the volume /data (your work is in /data/work). The rest of the disk is reset by an update.
+"""
+    if volume:
+        head += """- Keep what must last on the volume /data (your work is in /data/work). The rest of the disk is reset by an update.
 - Write /data/start.sh (executable, `chmod +x`): it must start everything the service needs, in the background or
   in the foreground, from a fresh boot. The machine runs it at every start; its output goes to /data/start.log.
   Fly.io starts the machine again if it stops, so the service comes back by itself.
 - Secrets given to this machine (Agent Manager › Keys › Secrets) are in the environment of your session and of
   /data/start.sh (file /data/.agmgd/secrets, readable by root only). Never print them, never commit them.
 """
+    else:
+        head += """- This machine has no volume: a service you start does not come back by itself after a restart. Say so to the
+  owner if it must stay up (a machine with a volume runs /data/start.sh at every boot).
+- Secrets given to this machine (Agent Manager › Keys › Secrets) are in your session's environment. Never print
+  them, never commit them.
+"""
+    return head
 
 
 def free_port() -> int:
@@ -235,7 +259,11 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
             say("first start: setting up the sandbox…")
             setup(sbs, sb, rec, keys, base, store)
             sb = sbs.get(sbid)  # the setup chose its working folder
-        guide = online_guide(int(sb.get("port") or 0), sb["app"]) if sb.get("kind") == "online" else ""
+        door = Sandboxes.door_kind(sb)
+        if door == "relay":   # Loop 48: the door set again at each connection (a restart may have reset the disk)
+            subprocess.run(base + ["root@127.0.0.1", door_command(int(sb.get("port") or 0) if sb.get("exposed") else 0)],
+                           capture_output=True, timeout=60)
+        guide = online_guide(int(sb.get("port") or 0), sb["app"], door, bool(sb.get("volume_gb"))) if door != "none" else ""
         guide += give_experts(sbs, sb, store, base)
         if guide:
             subprocess.run(base + ["root@127.0.0.1", "mkdir -p /root/.claude /root/.codex && cat > /root/.claude/CLAUDE.md && "

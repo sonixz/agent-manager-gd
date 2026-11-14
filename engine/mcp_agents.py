@@ -38,15 +38,15 @@ TOOLS = [
     {"name": "list_experts", "description": "The experts the owner made (Loop 45): name, title, what they know (their skills), the tool by default, the secrets they need. start_session with expert: <name> starts one.",
      "inputSchema": {"type": "object", "properties": {}}},
     # Loop 46: cloud machines. Creating, destroying and exposing are asked: the owner approves in the app.
-    {"name": "list_machines", "description": "Every cloud machine (private sandboxes and Online machines): state, size, sessions on it, whether it is exposed and its address, and « yours » when you may act on it. No secret.",
+    {"name": "list_machines", "description": "Every cloud machine (sandboxes, and Online machines with a volume): state, size, sessions on it, whether a port is bound to its public URL (exposed, url, port), and « yours » when you may act on it. No secret.",
      "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "create_machine", "description": "Asks the owner for a new cloud machine (it costs money): kind sandbox (private) or online (one public door, 443 → port, once exposed). Waits for the owner's answer (up to timeout_s), then returns the machine and its first session (your child: write to it, read its screen like any session).",
+    {"name": "create_machine", "description": "Asks the owner for a new cloud machine (it costs money): kind sandbox (no volume) or online (a volume /data and a start script at boot, for a service). Every machine is private; one of its ports can later be bound to its public URL, on the owner's OK (expose_machine). Waits for the owner's answer (up to timeout_s), then returns the machine and its first session (your child: write to it, read its screen like any session).",
      "inputSchema": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["sandbox", "online"]},
                      "name": {"type": "string", "description": "the first session's name"}, "tool": {"type": "string", "enum": ["claude", "codex", "shell"]},
                      "repo": {"type": "string", "description": "a connected repository's id: cloned on the machine"},
                      "size": {"type": "string", "description": "e.g. shared-cpu-1x-1024 (the owner's default if not said)"},
-                     "online_name": {"type": "string", "description": "online only: its name in its address, lowercase"},
-                     "port": {"type": "integer", "description": "online only: the port the service listens on inside"},
+                     "online_name": {"type": "string", "description": "its name in its address, lowercase (optional)"},
+                     "port": {"type": "integer", "description": "the port its service will listen on inside (a hint)"},
                      "volume_gb": {"type": "integer"}, "expert": {"type": "string"},
                      "secrets": {"type": "array", "items": {"type": "string"}, "description": "names of secrets your session holds; never values"},
                      "timeout_s": {"type": "integer", "minimum": 10, "maximum": 900}}, "required": ["kind"]}},
@@ -56,9 +56,9 @@ TOOLS = [
     {"name": "start_machine", "description": "Starts one of YOUR paused machines again (within the owner's monthly budget).", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
     {"name": "destroy_machine", "description": "Asks the owner to destroy one of YOUR machines (its files are lost). Waits for the answer (up to timeout_s).",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "timeout_s": {"type": "integer", "minimum": 10, "maximum": 900}}, "required": ["id"]}},
-    {"name": "expose_machine", "description": "Asks the owner to expose one of YOUR Online machines to the internet (https://<its app>.fly.dev → its port). Waits for the answer. Test it first on the owner's localhost (Tunnel and ports).",
-     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "timeout_s": {"type": "integer", "minimum": 10, "maximum": 900}}, "required": ["id"]}},
-    {"name": "unexpose_machine", "description": "Closes one of YOUR Online machines to the internet at once (gives its addresses back).", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+    {"name": "expose_machine", "description": "Asks the owner to bind one port of YOUR machine to its public URL (https://<its app>.fly.dev → that port, HTTPS by Fly.io). Waits for the answer. Test it first on the owner's localhost (Tunnel and ports). The service may listen on 127.0.0.1.",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "port": {"type": "integer", "description": "the port inside the machine"}, "timeout_s": {"type": "integer", "minimum": 10, "maximum": 900}}, "required": ["id"]}},
+    {"name": "unexpose_machine", "description": "Unbinds YOUR machine's public URL at once (its addresses given back: nothing of it is reachable from the internet).", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
     {"name": "send_to_session", "description": "Types a message into one of YOUR child sessions and presses Enter.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]}},
     {"name": "wait_for_session", "description": "Waits until a session stops working (done, waiting for an answer or an OK, ended), then returns its state and screen.",
@@ -156,7 +156,7 @@ def machine_tool(eng, name, a):
         req = eng.call("POST", f"/sessions/{me}/machine-requests", {"kind": "create", "params": params})
         return _wait_request(eng, req, a.get("timeout_s", 300))
     kind = {"destroy_machine": "destroy", "expose_machine": "expose"}[name]
-    req = eng.call("POST", f"/sessions/{me}/machine-requests", {"kind": kind, "params": {"sandbox": str(a.get("id", ""))}})
+    req = eng.call("POST", f"/sessions/{me}/machine-requests", {"kind": kind, "params": {"sandbox": str(a.get("id", "")), **({"port": int(a["port"])} if a.get("port") else {})}})
     return _wait_request(eng, req, a.get("timeout_s", 300))
 
 

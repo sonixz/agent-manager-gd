@@ -11,14 +11,18 @@ class Door extends Control:
 	var exposed := false
 	var port := 8080
 	var app := ""
+	var relay := false   # Loop 48: our door (8443) between the gate and the port bound; any port can be bound
+	var volume := true
 	var font: Font
 	var bold: Font
 	var _t := 0.0
 
-	func _init(is_exposed: bool, inner_port: int, app_name: String) -> void:
+	func _init(is_exposed: bool, inner_port: int, app_name: String, has_relay := false, has_volume := true) -> void:
 		exposed = is_exposed
 		port = inner_port
 		app = app_name
+		relay = has_relay
+		volume = has_volume
 		font = AmTheme.ui_font(400)
 		bold = AmTheme.ui_font(650)
 		custom_minimum_size = Vector2(560, 150)
@@ -52,7 +56,7 @@ class Door extends Control:
 		var box := Rect2(Vector2(220, 10), Vector2(maxf(w - 232, 300), 104))
 		draw_rect(box, Color(AmTheme.col("PANEL"), 0.6), true)
 		draw_rect(box, Color(mint, 0.5), false, 1.2)
-		_text(box.position + Vector2(10, 18), "Online machine · " + app, 12, AmTheme.col("MUTED"))
+		_text(box.position + Vector2(10, 18), ("Cloud machine · " if relay else "Online machine · ") + app, 12, AmTheme.col("MUTED"))
 		# the gate: 443 on the machine's edge
 		var gate := Rect2(Vector2(box.position.x - 34, 34), Vector2(68, 36))
 		draw_rect(gate, Color(live, 0.18) if exposed else Color(faint, 0.08), true)
@@ -74,21 +78,35 @@ class Door extends Control:
 			while x < b.x:
 				draw_line(Vector2(x, a.y), Vector2(minf(x + 6, b.x), a.y), Color(faint, 0.6), 1.0)
 				x += 12
+		# Loop 48: our door, between the gate and the port bound to the public URL
+		var sx := gate.end.x + 50
+		if relay:
+			var door := Rect2(Vector2(gate.end.x + 30, 34), Vector2(74, 36))
+			draw_rect(door, Color(live, 0.10) if exposed else Color(faint, 0.06), true)
+			draw_rect(door, Color(live if exposed else faint, 0.8), false, 1.2)
+			_text(door.position + Vector2(8, 16), "door", 12, live if exposed else faint, bold)
+			_text(door.position + Vector2(8, 31), ":8443", 10, live if exposed else faint)
+			draw_line(Vector2(gate.end.x + 2, 52), Vector2(door.position.x - 2, 52), Color(live if exposed else faint, 0.7), 1.6, true)
+			sx = door.end.x + 36
+			gate = Rect2(door.position, door.size)   # the line to the service starts from the door
 		# the service inside
-		var svc := Rect2(Vector2(gate.end.x + 50, 34), Vector2(150, 36))
+		var svc := Rect2(Vector2(sx, 34), Vector2(150, 36))
 		draw_rect(svc, Color(mint, 0.14), true)
 		draw_rect(svc, mint, false, 1.4)
 		_text(svc.position + Vector2(10, 16), "your service", 12, ink, bold)
-		_text(svc.position + Vector2(10, 31), "listens on :%d" % port, 11, AmTheme.col("MUTED"))
+		if relay:
+			_text(svc.position + Vector2(10, 31), ("port :%d bound" % port) if exposed and port > 0 else "no port bound", 11, AmTheme.col("MUTED"))
+		else:
+			_text(svc.position + Vector2(10, 31), "listens on :%d" % port, 11, AmTheme.col("MUTED"))
 		draw_line(Vector2(gate.end.x + 2, 52), Vector2(svc.position.x - 2, 52), Color(live if exposed else faint, 0.7), 1.6, true)
 		# what stays private
 		var px := svc.end.x + 24
 		if px + 200 < box.end.x:
 			_text(Vector2(px, 46), "127.0.0.1 only, never public:", 11, AmTheme.col("MUTED"))
 			_text(Vector2(px, 64), "database · cache · workers", 12, ink)
-		_text(box.position + Vector2(10, 98), "/data: the volume, kept across restarts", 11, AmTheme.col("MUTED"))
+		_text(box.position + Vector2(10, 98), "/data: the volume, kept across restarts" if volume else "no volume: its disk starts again from the image after an update", 11, AmTheme.col("MUTED"))
 		# Agent Manager's own way in, from below
-		var am := Vector2(box.position.x + box.size.x * 0.62, box.end.y)
+		var am := Vector2(box.position.x + minf(box.size.x * 0.62, box.size.x - 440.0), box.end.y)
 		draw_line(am, am + Vector2(0, 26), Color(mint, 0.8), 1.6, true)
 		_text(am + Vector2(8, 22), "Agent Manager · SSH 2222 over Fly's private network (never public)", 11, mint)
 		# the address

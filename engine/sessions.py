@@ -1294,12 +1294,16 @@ class Sessions:
             if missing:
                 raise ValueError("add these secrets in Keys › Secrets first: " + ", ".join(missing))
             secrets = list(dict.fromkeys(list(secrets or []) + e["secrets"]))
-        rec = self.store.add(name[:60], tool, "/work", grp or "Online", repo_id=repo, parent=parent)
+        name = self.sandboxes.check_name(name)   # Loop 48: a name is optional, a volume too (none: a sandbox in its own app)
+        rec = self.store.add((name or "cloud machine")[:60], tool, "/work", grp or ("Online" if volume_gb else "Cloud"), repo_id=repo, parent=parent)
         self.store.update(rec["id"], expert=expert, **({"level": self.level_for("", grp, parent)} if parent else {}))
         if secrets:   # Loop 43: written before its terminal first connects, so the machine has them from the start
             self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets)))
         try:
-            sb = self.sandboxes.create_online(rec["id"], name, int(port), size, int(volume_gb), repo)
+            if int(volume_gb):
+                sb = self.sandboxes.create_online(rec["id"], name, int(port or 0), size, int(volume_gb), repo)
+            else:
+                sb = self.sandboxes._new_machine(rec["id"], "sandbox", name, size, 0, repo, int(port or 0))
         except Exception:
             self.store.delete(rec["id"])
             raise
@@ -1396,16 +1400,17 @@ class Sessions:
             p = {"kind": mk, "name": name, "tool": tool, "size": size, "repo": repo, "repo_name": repo_name, "expert": expert,
                  "secrets": want, "month": PRICES[size]}
             if mk == "online":
-                p.update(online_name=str(params.get("online_name") or "")[:30], port=int(params.get("port", 8080)),
-                         volume_gb=int(params.get("volume_gb", 1)))
-                if not p["online_name"]:
-                    raise ValueError("online_name: the machine's name in its address (lowercase letters, digits, dashes)")
+                p.update(online_name=self.sandboxes.check_name(str(params.get("online_name") or "")[:30]),
+                         port=int(params.get("port") or 0), volume_gb=int(params.get("volume_gb", 1)))
         else:
             sb = self._own_machine(sid, str(params.get("sandbox", "")))
-            if kind == "expose" and sb.get("kind") != "online":
-                raise ValueError("only an Online machine can be exposed; a sandbox stays private")
+            if kind == "expose" and self.sandboxes.door_kind(sb) == "none":
+                raise ValueError("this sandbox was made before machines had a door: it stays private")
             first = self.store.get(sb["session_id"]) or {}
-            p = {"sandbox": sb["id"], "label": first.get("name", sb["id"]), "app": sb["app"], "port": sb.get("port", 0)}
+            port = int(params.get("port") or sb.get("port") or 0) if kind == "expose" else int(sb.get("port") or 0)
+            if kind == "expose" and not port:
+                raise ValueError("port: the port of your machine to bind to its public URL")
+            p = {"sandbox": sb["id"], "label": first.get("name", sb["id"]), "app": sb["app"], "port": port}
         req = self.machine_requests.add(sid, kind, p)
         self._mr_cache = (0.0, [])
         by = self.machines_auto_for(sid)
@@ -1473,8 +1478,9 @@ class Sessions:
                 for x in on:
                     self.tmux.kill(self.tmux_name(x))
                 result = {"destroyed": p["sandbox"]}
-            else:
-                result = self.sandboxes.expose(p["sandbox"], True)
+            else:   # Loop 48: the port the agent named bound to the machine's public URL (its door set, then its addresses)
+                from .sandbox_ops import ssh_run
+                result = self.sandboxes.bind(p["sandbox"], int(p.get("port") or 0), True, lambda i, c: ssh_run(self.sandboxes, i, c))
             self.machine_requests.set(rid, status="done", result=result)
         except Exception as e:   # said to the agent and to the owner
             self.machine_requests.set(rid, status="failed", result={"error": str(e)[:300]})
@@ -1488,7 +1494,8 @@ class Sessions:
             self.sandboxes.guard_new()   # the monthly budget holds for starting again too
             self.sandboxes.start(sb["id"])
         elif act == "unexpose":
-            self.sandboxes.unexpose(sb["id"])
+            from .sandbox_ops import ssh_run
+            self.sandboxes.unbind(sb["id"], lambda i, c: ssh_run(self.sandboxes, i, c))
         else:
             raise ValueError("stop, start or unexpose")
         return next((m for m in self.agent_machines(sid) if m["id"] == sb["id"]), {"id": sb["id"]})

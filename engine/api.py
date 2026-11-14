@@ -266,8 +266,8 @@ def make_handler(sessions: Sessions, token: str):
                 if parts == ["online"] and method == "POST":   # Loop 41: a machine for a service online, private until exposed
                     b = self._body()
                     return self._reply(201, sessions.create_online_session(str(b.get("name", "")), str(b.get("tool", "claude")),
-                                                                           str(b.get("group", "")), int(b.get("port", 8080)),
-                                                                           int(b.get("volume_gb", 1)), str(b.get("size", "")),
+                                                                           str(b.get("group", "")), int(b.get("port", 0) or 0),
+                                                                           int(b.get("volume_gb", 1) or 0), str(b.get("size", "")),
                                                                            str(b.get("repo", "")), bool(b.get("brain", True)),
                                                                            b.get("secrets") or [], str(b.get("expert", ""))))
                 if parts == ["sandboxes", "size"] and method == "POST":   # the size the next sandboxes get
@@ -297,6 +297,15 @@ def make_handler(sessions: Sessions, token: str):
                         return self._reply(200, sbx.expose(sbid, bool(self._body().get("confirmed", False))))
                     if act == "unexpose" and method == "POST":
                         return self._reply(200, sbx.unexpose(sbid))
+                    # Loop 48: one port of the machine bound to its public URL (its door), on the owner's confirmed request
+                    if act == "bind" and method == "POST":
+                        from .sandbox_ops import ssh_run
+                        b = self._body()
+                        return self._reply(200, sbx.bind(sbid, int(b.get("port", 0) or 0), bool(b.get("confirmed", False)),
+                                                         lambda i, c: ssh_run(sbx, i, c)))
+                    if act == "unbind" and method == "POST":
+                        from .sandbox_ops import ssh_run
+                        return self._reply(200, sbx.unbind(sbid, lambda i, c: ssh_run(sbx, i, c)))
                     if act == "ips" and method == "GET":
                         return self._reply(200, {"ips": sbx.public_ips(sbid), **sbx.online_info(sbid)})
                     if act == "stop" and method == "POST":

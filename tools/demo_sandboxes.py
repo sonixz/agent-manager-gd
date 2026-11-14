@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from engine.sandboxes import SCHEMA  # noqa: E402
 db.executescript(SCHEMA)
 for k, v in {"org": "agent-manager", "app": "agmgd-demo0001", "image": "registry.fly.io/agmgd-demo0001:v1",
-             "image_built": str(now - 3 * 86400), "image_version": "2", "region": "yyz", "budget_usd": "5", "stop_idle_minutes": "30"}.items():
+             "image_built": str(now - 3 * 86400), "image_version": "3", "region": "yyz", "budget_usd": "5", "stop_idle_minutes": "30"}.items():
     db.execute("INSERT OR REPLACE INTO sandbox_config VALUES (?, ?)", (k, v))
 rows = [("a1c4e9f2", s_run, "e7843a1f0c2d98", now - 86400 * 2), ("b07d3e55", s_paused, "9185b2e4d01376", now - 86400 * 6)]
 for sbid, sid, mid, created in rows:
@@ -26,6 +26,9 @@ for sbid, sid, mid, created in rows:
 # a third one, destroyed nine days ago: it stays in the inventory with the runs it had
 db.execute("INSERT OR REPLACE INTO sandboxes (id, session_id, app, machine, region, size, secret, workdir, destroyed, created) "
            "VALUES ('old-5e21', '', 'agmgd-demo0001', '3d8c0b77a1e254', 'yyz', 'shared-cpu-1x-1024', 'demo', '/work', 1, ?)", (now - 86400 * 26,))
+# Loop 48: the running one is made as machines are now, in its own app with its door (« Bind to a public URL »)
+if "door" in {r[1] for r in db.execute("PRAGMA table_info(sandboxes)")}:
+    db.execute("UPDATE sandboxes SET door = 8443, own_app = 1, app = 'agmgd-sb-a1c4e9f2' WHERE id = 'a1c4e9f2'")
 db.execute("UPDATE sessions SET brain_client = 'demo-key' WHERE id = ?", (s_run,))
 added = sys.argv[4:]
 for i, sid in enumerate(added):   # the first added one is an agent (its own worktree), the others shells

@@ -1215,6 +1215,7 @@ for i in range(600):
 			await main._sbx_tunnel_do(sbid, "ports/%d/open" % inside, {"label": "streamlit"})
 			await wait(0.5)
 			var brought: Dictionary = SandboxView.port_rows(main.sbx_tunnels[sbid])[0]
+			report.append("ports: « Bind to a public URL » beside « Bring it to my localhost » (Loop 48): %s" % (_find_button(main.sbx_tunnel_boxes[sbid], "Bind to a public URL") != null))
 			# the page is asked for a few times a second for a while, as a browser left on a dashboard would
 			var fetch := OS.create_process("python3", ["-c", "import time, urllib.request\nfor i in range(60):\n    urllib.request.urlopen('%s/', timeout=5).read()\n    time.sleep(0.15)\n" % str(brought["address"])])
 			await wait(4.0)
@@ -1376,7 +1377,7 @@ for i in range(600):
 				scroller.scroll_vertical = int(maxf(0.0, (head as Control).global_position.y - main.sbx_box.global_position.y - 330.0))
 			await wait(0.8)
 			await shot("sandbox-sessions")
-		"online":  # Loop 41: machines for services on the internet, one public door (443), the rest private
+		"cloud", "online":  # Loop 48: one ☁ Cloud page (sandboxes and Online machines), a public URL per machine bound on a port
 			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
 			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})
 			var c: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Shop", "tool": "claude", "cwd": "~", "brain": false})
@@ -1392,38 +1393,59 @@ for i in range(600):
 			await main.engine.call_api("POST", "/secrets", {"name": "DATABASE_URL", "value": "demo-not-a-key"})
 			await main.engine.call_api("POST", "/repos", {"url": "git@github.com:dev/shop.git", "local_path": ""})
 			await main.refresh()
-			main.set_view("online")
+			main.set_view("online")   # the old page's name leads to ☁ Cloud
 			await wait(3.0)
 			await main._load_sandboxes()
 			await wait(2.0)
-			var lines: Array = main.online_box.find_children("OnlineLine_*", "", true, false)
-			report.append("online: %d services on one line each, folded: %s" % [lines.size(), main.online_box.find_children("Online_*", "", true, false).is_empty()])
-			await shot("online-lines")
-			main.online_open["c51e0a77"] = true
-			main._render_online(main.sbx_last)
-			await wait(1.0)
-			var cards: Array = main.online_box.find_children("Online_*", "", true, false)
-			var doors: Array = main.online_box.find_children("*", "Control", true, false).filter(func(x: Node) -> bool: return x.get_script() == OnlineWidgetsRef.Door)
-			var labels: Array = main.online_box.find_children("*", "Label", true, false).map(func(x: Node) -> String: return (x as Label).text)
-			report.append("online: %d cards, %d doors drawn, badges: %s | make button: %s" % [cards.size(), doors.size(),
-				", ".join(labels.filter(func(t: String) -> bool: return t in ["PUBLIC", "PRIVATE"])), main.online_box.find_child("OnlineMake", true, false) != null])
-			main.view_buttons["sandboxes"].pressed.emit()
-			await wait(3.0)
-			var names: Array = (main.sbx_box.find_children("Sandbox_*", "", true, false) as Array).map(func(x: Node) -> String: return str(x.name))
-			report.append("online: the Sandboxes page lists only sandboxes: %s" % ", ".join(names))
-			main.online_open["c51e0a77"] = false
-			main.online_open["d903b2f1"] = true   # the private one unfolded: its door barred, Expose offered
-			main.set_view("online")
-			await wait(2.5)
-			await shot("online")
-			for btn in main.online_box.find_children("*", "Button", true, false):
-				if (btn as Button).text.begins_with("Expose to the internet"):
-					(btn as Button).pressed.emit()
-					break
+			var names: Array = (main.sbx_box.find_children("Sandbox_*", "", true, false) as Array).map(func(x: Node) -> String: return str(x.name).trim_prefix("Sandbox_"))
+			var labels: Array = main.sbx_box.find_children("*", "Label", true, false).map(func(x: Node) -> String: return (x as Label).text)
+			report.append("cloud: the view is « %s », its button « %s » | one line per machine: %s | public badges: %s" % [main.view,
+				str(main.MANAGERS.filter(func(m: Array) -> bool: return m[0] == "sandboxes")[0][1]), ", ".join(names),
+				", ".join(labels.filter(func(t: String) -> bool: return t.begins_with("PUBLIC")))])
+			report.append("cloud: no Online button any more: %s" % main.MANAGERS.all(func(m: Array) -> bool: return m[0] != "online"))
+			await shot("cloud")
+			main.sbx_open["c51e0a77"] = true   # the public one unfolded: its door drawn, port 3000 bound
+			main._render_sandboxes(main.sbx_last)
+			await wait(1.2)
+			var card: Node = main.sbx_box.find_child("Online_c51e0a77", true, false)
+			var doors: Array = main.sbx_box.find_children("*", "Control", true, false).filter(func(x: Node) -> bool: return x.get_script() == OnlineWidgetsRef.Door)
+			report.append("cloud: shop's card: %s, doors drawn: %d, door relay: %s, Unbind offered: %s" % [card != null, doors.size(),
+				doors.any(func(x: Node) -> bool: return bool(x.get("relay"))), _find_button(card, "Unbind the public URL") != null if card else false])
+			if card:
+				var scroller: ScrollContainer = main.sbx_box.get_parent()
+				scroller.scroll_vertical = int(maxf(0.0, (card as Control).global_position.y - main.sbx_box.global_position.y - 120.0))
 			await wait(0.8)
-			report.append("online: expose asks first: %s" % main.confirm_dialog.visible)
-			await shot("online-expose")
+			await shot("cloud-door")
+			main.sbx_open["c51e0a77"] = false
+			main.sbx_open["d903b2f1"] = true   # the private one: its door barred, « Bind a port to the public URL… »
+			main._render_sandboxes(main.sbx_last)
+			await wait(1.2)
+			var priv: Node = main.sbx_box.find_child("Online_d903b2f1", true, false)
+			var bind: Button = _find_button(priv, "Bind a port to the public URL…") if priv else null
+			report.append("cloud: blog's card: %s, Bind offered: %s" % [priv != null, bind != null])
+			if priv:
+				var scroller2: ScrollContainer = main.sbx_box.get_parent()
+				scroller2.scroll_vertical = int(maxf(0.0, (priv as Control).global_position.y - main.sbx_box.global_position.y - 120.0))
+			await wait(0.6)
+			await shot("cloud-private")
+			main._cloud_bind(main.sbx_last["sandboxes"].filter(func(x: Dictionary) -> bool: return str(x["id"]) == "d903b2f1")[0], 4000)
+			await wait(0.8)
+			report.append("cloud: binding asks first: %s" % main.confirm_dialog.visible)
+			await shot("cloud-bind")
 			main.confirm_dialog.hide()
+			# the form: a machine with a name, a volume (or none), a repository, secrets
+			main.sbx_open["d903b2f1"] = false
+			main.online_form_open = true
+			main._render_sandboxes(main.sbx_last)
+			await wait(1.5)
+			var mk: Node = main.sbx_box.find_child("OnlineMake", true, false)
+			report.append("cloud: the new machine form in step 2: %s" % (mk != null))
+			if mk:
+				var scroller3: ScrollContainer = main.sbx_box.get_parent()
+				scroller3.scroll_vertical = int(maxf(0.0, (mk as Control).global_position.y - main.sbx_box.global_position.y - 420.0))
+			await wait(0.6)
+			await shot("cloud-new")
+			main.online_form_open = false
 		"github":  # Loop 42: GitHub's CLI under Repos (a stand-in gh, always: AGMGD_GH and GH_STANDIN from tools/showcase.sh)
 			var ghf := FileAccess.open(OS.get_environment("GH_STANDIN"), FileAccess.WRITE)
 			ghf.store_string(JSON.stringify({"logged_in": true, "account": "dev", "where": "keyring", "scopes": ["repo", "read:org", "gist"], "repos": {"dev/shop": []}}))
@@ -1860,6 +1882,7 @@ for i in range(600):
 			await main._sbx_tunnel_do(sbid, "ports/%d/open" % inside, {"label": "streamlit"})
 			await wait(0.5)
 			var brought: Dictionary = SandboxView.port_rows(main.sbx_tunnels[sbid])[0]
+			report.append("ports: « Bind to a public URL » beside « Bring it to my localhost » (Loop 48): %s" % (_find_button(main.sbx_tunnel_boxes[sbid], "Bind to a public URL") != null))
 			var fetch := OS.create_process("python3", ["-c", "import time, urllib.request\nfor i in range(400):\n    urllib.request.urlopen('%s/', timeout=5).read()\n    time.sleep(0.15)\n" % str(brought["address"])])
 			await wait(1.0)
 			await main._sbx_tunnel_ask(sbid)
