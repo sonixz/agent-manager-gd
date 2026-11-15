@@ -5,6 +5,12 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Fix: a session opens without the « pop »
+- Opening a session no longer makes its terminal jump: it took three sizes (where it started, 0×0 in its frame not
+  laid out yet, which tmux saw as 2 columns, then its own), and changed size at each switch between sessions, so tmux
+  and the agent drew everything again. Now it starts and waits at the size of its frame: measured on the private
+  display, one size when opened, none when switching back and forth (nine before, for three round trips).
+
 ### Persistent or sandbox, chosen at the making (after Loop 48)
 - A new machine's form (☁ Cloud, step 2) asks for its disk: **Sandbox** (it starts again from the image after a
   pause, the default) or **Persistent** (its whole disk is kept across pauses, with Fly.io's root disk persistence).

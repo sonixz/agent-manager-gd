@@ -1342,6 +1342,37 @@ for i in range(600):
 			await process_frame
 			var unfolded: bool = main.sbx_box.find_child("Sandbox_a1c4e9f2", true, false).find_children("*", "Button", true, false).any(func(b: Node) -> bool: return (b as Button).text == "▾")
 			report.append("latency: a sandbox's line unfolded in %d ms (unfolded: %s)" % [Time.get_ticks_msec() - t1, unfolded])
+		"open-size":  # owner, 2026-11-14: « quand on les ouvre il y a comme une latence, puis… poup, ça change tout seul ». Every size a session's terminal takes, from its start until it is shown and settled: each change makes tmux and the agent draw everything again
+			var one: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "First", "tool": "shell", "cwd": "~", "group": "Orbit API"})
+			var two: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Second", "tool": "shell", "cwd": "~", "group": "Orbit API"})
+			await main.refresh()
+			main.set_view("focus")
+			await wait(1.0)
+			for pass_n in 2:
+				var sid := str(one["id"]) if pass_n == 0 else str(two["id"])
+				var seen := []
+				main.select(sid)
+				for i in 300:
+					await process_frame
+					if main.terms.has(sid) and is_instance_valid(main.terms[sid]):
+						break
+				var t: Control = main.terms[sid]
+				seen.append(t.size)
+				t.resized.connect(func() -> void: seen.append(t.size))
+				await wait(3.0)
+				var cells := seen.map(func(v: Vector2) -> String: return "%dx%d" % [int(v.x), int(v.y)])
+				report.append("open-size: « %s » opened: the terminal took %d size(s): %s" % ["First" if pass_n == 0 else "Second", seen.size(), " → ".join(cells)])
+			# back and forth: a session shown again should not change size
+			var back := []
+			var t1: Control = main.terms[str(one["id"])]
+			t1.resized.connect(func() -> void: back.append(t1.size))
+			for k in 3:
+				main.select(str(one["id"]))
+				await wait(1.0)
+				main.select(str(two["id"]))
+				await wait(1.0)
+			report.append("open-size: switching three times between them, « First » changed size %d time(s)" % back.size())
+			await shot("open-size")
 		"sandbox-sessions":  # Loop 40: several sessions on one cloud sandbox, each its own terminal in the machine
 			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Backend", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})
 			var b: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Asset bake", "tool": "shell", "cwd": "~", "group": "Pixel Forge"})

@@ -2313,7 +2313,7 @@ func _ensure_terminal(id: String) -> void:
 	t.size_flags_vertical = SIZE_EXPAND_FILL
 	parking.add_child(t)
 	terms[id] = t
-	t.size = Vector2(1000, 700)
+	t.size = _term_size()   # started at the size it will be shown at: no redraw when it is (see _term_size)
 	await get_tree().process_frame
 	var cmd: Array = engine.host_command(r["command"])
 	t.start(cmd[0], PackedStringArray(cmd.slice(1)), "", PackedStringArray(["TERM=xterm-256color", "COLORTERM=truecolor"]))
@@ -2328,8 +2328,8 @@ func _park_all() -> void:
 	for t in terms.values():
 		if is_instance_valid(t) and t.get_parent() != parking:
 			t.reparent(parking, false)
-			if content.size.x > 200:  # off screen, keep a sensible size (tmux follows it)
-				t.size = content.size - Vector2(20, 20)
+			if content.size.x > 200:  # off screen, the size it is shown at (tmux follows it): shown again, nothing moves
+				t.size = _term_size()
 	for c in content.get_children():
 		c.queue_free()
 	board_previews.clear()
@@ -2442,17 +2442,58 @@ func _frame(id: String, titled: bool) -> Control:
 		bar.add_child(focus_btn)
 		bar.set_meta("id", id)
 		v.add_child(bar)
+	# the terminal comes in once the frame has its size (_place_term): put in at once, it was given 0×0 first by the
+	# container not laid out yet, that is 2 columns and 1 line for tmux, then the real size: everything drawn three times
+	var hole := Control.new()
+	hole.size_flags_vertical = SIZE_EXPAND_FILL
+	hole.size_flags_horizontal = SIZE_EXPAND_FILL
+	v.add_child(hole)
+	_place_term(id, v, hole, titled)
+	return outer
+
+
+## Owner, 2026-11-14: « quand on les ouvre il y a comme une latence, puis… poup, ça change tout seul ». A terminal
+## took three sizes when it was opened (1000×700 where it started, 0×0 in its frame not laid out yet, then its own),
+## and changed size at every switch between sessions: each change made tmux and the agent draw it all again. Now it
+## starts, waits off screen and comes in at the size of its frame, measured where it was last shown.
+var term_shown := Vector2.ZERO
+
+
+func _term_size() -> Vector2:
+	if term_shown.x > 200:
+		return term_shown
+	return content.size - Vector2(36, 36) if content and content.size.x > 200 else Vector2(1000, 700)   # a focus frame: its border and margins
+
+
+func _place_term(id: String, v: VBoxContainer, hole: Control, titled: bool) -> void:
+	await get_tree().process_frame   # the frame is laid out: the terminal gets its size in one step
+	if not is_instance_valid(v) or not is_instance_valid(hole) or not terms.has(id) or not is_instance_valid(terms[id]):
+		return
 	var t2: Control = terms[id]
+	var at := hole.get_index()
+	if hole.size.x > 200:
+		t2.size = hole.size   # still off screen: already the size it gets in the frame
+		if not titled:
+			term_shown = hole.size
+	v.remove_child(hole)
+	hole.queue_free()
 	t2.reparent(v, false)
+	v.move_child(t2, at)
 	t2.size_flags_vertical = SIZE_EXPAND_FILL
 	t2.size_flags_horizontal = SIZE_EXPAND_FILL
+	if not t2.has_meta("measured"):   # a window made larger or smaller: the next ones open at the new size
+		t2.set_meta("measured", true)
+		t2.resized.connect(func() -> void:
+			if view == "focus" and t2.get_parent() != parking and t2.size.x > 200:
+				term_shown = t2.size)
 	t2.focus_entered.connect(func() -> void:
 		if selected != id:
 			selected = id
 			tree_sig = ""
 			_render_list()
 			_render_header(), CONNECT_ONE_SHOT)
-	return outer
+	if id == selected and view == "focus":
+		t2.grab_focus()
 
 
 func _update_grid_titles() -> void:
