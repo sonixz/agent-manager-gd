@@ -584,6 +584,26 @@ class SandboxesTest(unittest.TestCase):
         self.s.sandboxes.destroy(sb["id"], True)
         self.assertIn(("apps", "destroy", sb["app"], "--yes"), self.fly.calls)
 
+    def test_persistent_or_sandbox_is_chosen_at_the_making(self):
+        """Owner, 2026-11-14: « Est-ce que c'est persistant ou c'est sandbox? C'est ça la différence. »"""
+        self.s.sandboxes.prepare()
+        plain = self.s.sandboxes.by_session(self.s.create_online_session("", "shell", "", 0, volume_gb=0)["id"])
+        kept = self.s.sandboxes.by_session(self.s.create_online_session("keep", "shell", "", 0, volume_gb=0, persist=True)["id"])
+        served = self.s.sandboxes.by_session(self.s.create_online_session("svc", "shell", "", 0, volume_gb=1, persist=True)["id"])
+
+        def run_of(sb):
+            return next(c for c in self.fly.calls if c[:2] == ("machine", "run") and sb["app"] in c)
+        self.assertNotIn("--rootfs-persist", run_of(plain))                       # a sandbox: the image's disk again
+        for sb in (kept, served):
+            r = run_of(sb)
+            self.assertEqual(r[r.index("--rootfs-persist") + 1], "always")
+        self.assertEqual((plain["persist"], kept["persist"], served["persist"]), (0, 1, 1))
+        self.assertTrue(self.s.sandboxes.online_info(kept["id"])["persist"])
+        lead = self._lead()                                                       # an agent asks for one, the owner sees it
+        req = self.s.machine_request(lead, "create", {"kind": "sandbox", "persistent": True})
+        self.assertIn("persistent", req["what"])
+        self.assertTrue(self.s.machine_requests.get(req["id"])["params"]["persist"])
+
     def test_binding_a_port_sets_the_door_then_gives_addresses_live(self):
         from engine.sandboxes import door_command
         self.s.sandboxes.prepare()

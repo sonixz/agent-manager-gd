@@ -94,7 +94,11 @@ ONLINE_PREFIX = "agmgd-on-"
 # private; Online machines made before keep their door 443 → their port.
 DOOR_PORT = 8443
 SANDBOX_PREFIX = "agmgd-sb-"
-DOOR_COLUMNS = [("door", "INTEGER NOT NULL DEFAULT 0"), ("own_app", "INTEGER NOT NULL DEFAULT 0")]
+DOOR_COLUMNS = [("door", "INTEGER NOT NULL DEFAULT 0"), ("own_app", "INTEGER NOT NULL DEFAULT 0"),
+                # Loop 48, after the live test (owner, 2026-11-14: « Est-ce que c'est persistant ou c'est sandbox? C'est
+                # ça la différence »): a persistent machine keeps its whole disk across a stop and a start (Fly.io's
+                # --rootfs-persist always, tried live: a file stayed); a sandbox starts again from the image's disk.
+                ("persist", "INTEGER NOT NULL DEFAULT 0")]
 DOOR_FILES = ("/data/.agmgd/door", "/var/lib/agmgd/door")
 RESERVED_PORTS = (22, 2222, DOOR_PORT, 8765)   # SSH (Fly's, ours), the door itself, the way back to the Brain
 
@@ -347,13 +351,13 @@ class Sandboxes:
             db.execute(f"UPDATE sandboxes SET {sets} WHERE id = ?", (*f.values(), sbid))
 
     # ---------------------------------------------------------------- lifecycle
-    def create(self, session_id: str, size: str = "", repo_id: str = "", name: str = "", volume_gb: int = 0) -> dict:
+    def create(self, session_id: str, size: str = "", repo_id: str = "", name: str = "", volume_gb: int = 0, persist: bool = False) -> dict:
         """A machine (Loop 48: in its own Fly app, its door declared, no public address). With a volume it is a
         machine for a service (kind online: /data kept, its start script at boot, started again by Fly); without, a
         sandbox."""
         if volume_gb:
-            return self.create_online(session_id, name, 0, size, volume_gb, repo_id)
-        return self._new_machine(session_id, "sandbox", name, size, 0, repo_id, 0)
+            return self.create_online(session_id, name, 0, size, volume_gb, repo_id, persist)
+        return self._new_machine(session_id, "sandbox", name, size, 0, repo_id, 0, persist)
 
     @staticmethod
     def check_name(name: str) -> str:
@@ -362,7 +366,8 @@ class Sandboxes:
             raise ValueError("a name of 1 to 30 lowercase letters, digits or dashes (it goes in the address)")
         return name
 
-    def _new_machine(self, session_id: str, kind: str, name: str, size: str, volume_gb: int, repo_id: str, port: int) -> dict:
+    def _new_machine(self, session_id: str, kind: str, name: str, size: str, volume_gb: int, repo_id: str, port: int,
+                     persist: bool = False) -> dict:
         name = self.check_name(name)
         if not 0 <= int(volume_gb) <= 500:
             raise ValueError("a volume of 1 to 500 GB, or none")
@@ -392,15 +397,18 @@ class Sandboxes:
                 more += ["--volume", "data:/data"]
             if kind == "online":
                 more += ["--restart", "always"]   # a service: Fly starts it again
+            if persist:
+                more += ["--rootfs-persist", "always"]   # its whole disk kept across a stop and a start
             machine = self._launch(sbid, app, size, more)
         except Exception:
             self.fly.run("apps", "destroy", app, "--yes", timeout=300)   # nothing half made is left billed
             raise
         with closing(self._db()) as db, db:
             db.execute("INSERT INTO sandboxes (id, session_id, app, machine, region, size, secret, repo_id, workdir, created, "
-                       "kind, name, port, volume_gb, door, own_app) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                       "kind, name, port, volume_gb, door, own_app, persist) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
                        (sbid, session_id, app, machine, st["region"], size, secrets.token_urlsafe(24), repo_id,
-                        "/data/work" if volume_gb else "/work", time.time(), kind, name, int(port or 0), int(volume_gb), DOOR_PORT))
+                        "/data/work" if volume_gb else "/work", time.time(), kind, name, int(port or 0), int(volume_gb), DOOR_PORT,
+                        int(bool(persist))))
         self.forget_machines()
         return self.get(sbid)
 
@@ -429,12 +437,13 @@ class Sandboxes:
         return machine
 
     # ---------------------------------------------------------------- Loop 41: Online machines
-    def create_online(self, session_id: str, name: str, port: int = 0, size: str = "", volume_gb: int = 1, repo_id: str = "") -> dict:
+    def create_online(self, session_id: str, name: str, port: int = 0, size: str = "", volume_gb: int = 1, repo_id: str = "",
+                      persist: bool = False) -> dict:
         """A machine for a service online, private until a port is bound to its public URL: its own app, a volume on
         /data, its start script at boot. `port`: the port its service will listen on (a hint; bound later)."""
         if not 1 <= int(volume_gb) <= 500:
             raise ValueError("a volume of 1 to 500 GB")
-        return self._new_machine(session_id, "online", name, size, int(volume_gb), repo_id, int(port or 0))
+        return self._new_machine(session_id, "online", name, size, int(volume_gb), repo_id, int(port or 0), persist)
 
     def public_ips(self, sbid: str) -> list[dict]:
         sb = self._online(sbid)
@@ -532,7 +541,7 @@ class Sandboxes:
     def online_info(self, sbid: str) -> dict:
         sb = self.get(sbid)
         return {"id": sbid, "name": sb.get("name", ""), "app": sb["app"], "port": sb.get("port", 0), "exposed": bool(sb.get("exposed")),
-                "door": self.door_kind(sb),
+                "door": self.door_kind(sb), "persist": bool(sb.get("persist")),
                 "url": f"https://{sb['app']}.fly.dev" if sb.get("exposed") else "", "volume_gb": sb.get("volume_gb", 0),
                 "volume_month": round(VOLUME_GB_MONTH * int(sb.get("volume_gb") or 0), 2)}
 

@@ -420,7 +420,7 @@
           <tr><td><code>session_status</code></td><td>working, waits, asks, done</td><td>any session</td></tr>
           <tr><td><code>read_screen</code></td><td>what a terminal shows now</td><td>any session</td></tr>
           <tr><td><code>list_machines</code></td><td>every cloud machine: state, sessions, whether a port is bound to its public URL (and which), « yours »</td><td>all machines</td></tr>
-          <tr><td><code>create_machine</code></td><td>asks you for a cloud machine, without a volume (a sandbox) or with one (for a service): repository, size, name, expert, secrets it holds; waits for your answer; its first session is the agent's child</td><td>on your approval</td></tr>
+          <tr><td><code>create_machine</code></td><td>asks you for a cloud machine, without a volume (a sandbox) or with one (for a service), persistent or not: repository, size, name, expert, secrets it holds; waits for your answer; its first session is the agent's child</td><td>on your approval</td></tr>
           <tr><td><code>destroy_machine</code>, <code>expose_machine</code></td><td>ask you to destroy one, or to bind one of its ports (<code>port</code>) to its public URL; wait for your answer</td><td>its own machines, on your approval</td></tr>
           <tr><td><code>stop_machine</code>, <code>start_machine</code>, <code>unexpose_machine</code>, <code>machine_status</code></td><td>pause, start again (within the budget), unbind its public URL, read one machine or a request</td><td>its own machines, at once</td></tr>
           <tr><td><code>list_experts</code></td><td>the experts: what they know, the tool, the secrets they need</td><td>the owner's experts</td></tr>
@@ -463,7 +463,8 @@
             when private), the door 8443, your service and its port, what stays private, and Agent Manager's own way in
             from below. A machine's line shows its gate and <b>PUBLIC → :port</b>; the tiles count the public URLs.</li>
           <li><b>Machines for a service</b>: <b>+ A machine with a name, a volume, a repository…</b> (☁ Cloud, step 2)
-            takes a name (in its address, optional), a volume in GB (0: none), its size (the smallest first, with its
+            takes a name (in its address, optional), a volume in GB (0: none), its disk (<b>Sandbox</b> or
+            <b>Persistent</b>, below), its size (the smallest first, with its
             price), a connected repository (cloned with its own deploy key), an expert, the secrets of Keys › Secrets
             the machine gets, and the tool of its first session. With a volume, <code>/data</code> lasts (about $0.15 per
             GB a month; its work in <code>/data/work</code>), the agent writes <code>/data/start.sh</code>, which runs at
@@ -714,10 +715,13 @@
           past 80 %, no new sandbox at 100 %) and two caps you can turn on that only <i>pause</i>: a sandbox idle for N
           minutes, or all of them once the budget is reached. <b>Stop everything</b> pauses every running sandbox.</p>
         <div class="note warn">Seen on Fly.io on 2026-11-14: a paused machine that starts again has the disk of its
-          image again. What was on it, outside a volume, is gone: the clone, files not committed, programs started. Only
+          image again, unless it is persistent (below). What was on it, outside a volume, is gone: the clone, files not committed, programs started. Only
           a machine's volume (<code>/data</code>) is kept. Commit and push before you pause one, or before an idle pause
           could come. Fly.io can keep the whole disk too (its <code>--rootfs-persist</code> setting, tried once on a test
-          machine: a file stayed across a stop and a start); Agent Manager does not use it yet.</div>
+          machine: a file stayed across a stop and a start). So you choose it when you make a machine (☁ Cloud, step 2):
+          <b>Sandbox</b>, its disk starts again from the image after a pause (the default, and what <i>New session › a
+          cloud sandbox</i> makes); <b>Persistent</b>, its whole disk is kept across pauses. The card says which one a
+          machine is. Fly.io bills a paused machine's disk either way; whether keeping it costs more was not checked.</div>
         <div class="note warn">Agent Manager never destroys a sandbox on its own. <b>Destroy</b> is yours, confirmed,
           after it showed the work not pushed. Machines it does not know are listed, never touched unless you destroy
           them.</div>

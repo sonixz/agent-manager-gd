@@ -90,6 +90,7 @@ def describe(req: dict) -> str:
     p = req["params"]
     if req["kind"] == "create":
         what = "an Online machine (it can face the internet once exposed)" if p.get("kind") == "online" else "a private cloud sandbox"
+        what += ", persistent (its disk kept across a pause)" if p.get("persist") else ""
         extra = []
         if p.get("repo_name"):
             extra.append("repository " + p["repo_name"])

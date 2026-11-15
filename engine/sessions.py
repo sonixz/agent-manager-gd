@@ -1255,7 +1255,7 @@ class Sessions:
             threading.Thread(target=close, daemon=True).start()
 
     def create_sandbox_session(self, name: str, tool: str, grp: str, repo: str, brain: bool, on: str = "", parent: str = "",
-                               secrets: list | None = None, expert: str = "", size: str = "") -> dict:
+                               secrets: list | None = None, expert: str = "", size: str = "", persist: bool = False) -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
@@ -1268,7 +1268,7 @@ class Sessions:
         self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert,
                           **({"level": self.level_for("", grp, parent)} if parent else {}))
         try:
-            sb = self.sandboxes.create(rec["id"], size=size, repo_id=repo)
+            sb = self.sandboxes.create(rec["id"], size=size, repo_id=repo, persist=persist)
         except Exception:
             self.store.delete(rec["id"])
             raise
@@ -1283,7 +1283,7 @@ class Sessions:
 
     def create_online_session(self, name: str, tool: str, grp: str, port: int, volume_gb: int = 1, size: str = "",
                               repo: str = "", brain: bool = True, secrets: list | None = None, expert: str = "",
-                              parent: str = "") -> dict:
+                              parent: str = "", persist: bool = False) -> dict:
         """Loop 41: an Online machine (its own Fly app, a volume, 443 toward `port` once exposed) and its first
         session, the one that works on the service. Private until the owner exposes it."""
         if tool not in TOOLS:
@@ -1301,9 +1301,9 @@ class Sessions:
             self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets)))
         try:
             if int(volume_gb):
-                sb = self.sandboxes.create_online(rec["id"], name, int(port or 0), size, int(volume_gb), repo)
+                sb = self.sandboxes.create_online(rec["id"], name, int(port or 0), size, int(volume_gb), repo, persist)
             else:
-                sb = self.sandboxes._new_machine(rec["id"], "sandbox", name, size, 0, repo, int(port or 0))
+                sb = self.sandboxes._new_machine(rec["id"], "sandbox", name, size, 0, repo, int(port or 0), persist)
         except Exception:
             self.store.delete(rec["id"])
             raise
@@ -1398,7 +1398,7 @@ class Sessions:
             if not NAME_OK.match(name):
                 raise ValueError("a name of 1 to 60 characters")
             p = {"kind": mk, "name": name, "tool": tool, "size": size, "repo": repo, "repo_name": repo_name, "expert": expert,
-                 "secrets": want, "month": PRICES[size]}
+                 "secrets": want, "month": PRICES[size], "persist": bool(params.get("persistent"))}
             if mk == "online":
                 p.update(online_name=self.sandboxes.check_name(str(params.get("online_name") or "")[:30]),
                          port=int(params.get("port") or 0), volume_gb=int(params.get("volume_gb", 1)))
@@ -1466,10 +1466,12 @@ class Sessions:
                 if p["kind"] == "online":
                     # an Online machine's name is in its address: the session is named after it
                     d = self.create_online_session(p["online_name"], p["tool"], "", int(p["port"]), int(p["volume_gb"]), p["size"],
-                                                   p.get("repo", ""), True, p.get("secrets") or [], p.get("expert", ""), parent=sid)
+                                                   p.get("repo", ""), True, p.get("secrets") or [], p.get("expert", ""), parent=sid,
+                                                   persist=bool(p.get("persist")))
                 else:
                     d = self.create_sandbox_session(p["name"], p["tool"], "", p.get("repo", ""), True, parent=sid,
-                                                    secrets=p.get("secrets") or [], expert=p.get("expert", ""), size=p["size"])
+                                                    secrets=p.get("secrets") or [], expert=p.get("expert", ""), size=p["size"],
+                                                    persist=bool(p.get("persist")))
                 sb = self.sandboxes.by_session(d["id"]) or {}
                 result = {"session": d["id"], "sandbox": sb.get("id", ""), "kind": p["kind"]}
             elif req["kind"] == "destroy":

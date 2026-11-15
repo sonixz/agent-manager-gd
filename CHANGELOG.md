@@ -5,6 +5,11 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Persistent or sandbox, chosen at the making (after Loop 48)
+- A new machine's form (☁ Cloud, step 2) asks for its disk: **Sandbox** (it starts again from the image after a
+  pause, the default) or **Persistent** (its whole disk is kept across pauses, with Fly.io's root disk persistence).
+  The card says which one it is; an agent's `create_machine` takes `persistent`.
+
 ### One Cloud page, a public URL per machine (Loop 48)
 - **☁ Cloud** replaces the two pages ☁ Sandboxes and ⬡ Online: every cloud machine (ours, on Fly.io) on one page,
   its line showing its gate and **PUBLIC → :port** when a port of it is public. A tile counts the public URLs.

@@ -269,7 +269,8 @@ def make_handler(sessions: Sessions, token: str):
                                                                            str(b.get("group", "")), int(b.get("port", 0) or 0),
                                                                            int(b.get("volume_gb", 1) or 0), str(b.get("size", "")),
                                                                            str(b.get("repo", "")), bool(b.get("brain", True)),
-                                                                           b.get("secrets") or [], str(b.get("expert", ""))))
+                                                                           b.get("secrets") or [], str(b.get("expert", "")),
+                                                                           persist=bool(b.get("persistent", False))))
                 if parts == ["sandboxes", "size"] and method == "POST":   # the size the next sandboxes get
                     return self._reply(200, sessions.sandboxes.choose_size(str(self._body().get("size", ""))))
                 if parts == ["sandboxes", "budget"] and method == "POST":

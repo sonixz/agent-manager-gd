@@ -4255,7 +4255,7 @@ func _sandbox_card(sb: Dictionary, r: Dictionary) -> Control:
 	elif st == "started":
 		row.add_child(_small("Stop (pause)", func() -> void:
 			await engine.call_api("POST", "/sandboxes/%s/stop" % sbid, {}, true, 120.0)
-			await _load_sandboxes(), "Only its disk is billed while paused. Seen on Fly.io (2026-11-14): when it starts again its disk is the image's again; only a volume (/data) is kept. Commit and push first." if int(sb.get("volume_gb", 0)) == 0 else "Only its disk and volume are billed while paused. /data is kept; the rest of its disk starts again from the image."))
+			await _load_sandboxes(), "Only its disk is billed while paused; it is persistent: its disk is kept." if int(sb.get("persist", 0)) == 1 else ("Only its disk is billed while paused. Seen on Fly.io (2026-11-14): when it starts again its disk is the image's again; only a volume (/data) is kept. Commit and push first." if int(sb.get("volume_gb", 0)) == 0 else "Only its disk and volume are billed while paused. /data is kept; the rest of its disk starts again from the image.")))
 	row.add_child(_small("Not finished" if int(sb["finished"]) == 1 else "Mark finished", func() -> void:
 		await engine.call_api("POST", "/sandboxes/%s/finish" % sbid, {"finished": int(sb["finished"]) == 0})
 		await _load_sandboxes()))
@@ -4889,6 +4889,15 @@ func _online_new() -> Control:
 	vol.value = 0
 	vol.tooltip_text = "With a volume it is a machine for a service: /data is kept, /data/start.sh runs at every boot, Fly starts it again if it stops. Without, a sandbox."
 	row.add_child(vol)
+	# owner, 2026-11-14: « Est-ce que c'est persistant ou c'est sandbox? C'est ça la différence »
+	var disk := OptionButton.new()
+	disk.name = "CloudDisk"
+	disk.add_item("Sandbox: its disk starts again from the image")
+	disk.set_item_metadata(0, false)
+	disk.add_item("Persistent: its disk is kept across pauses")
+	disk.set_item_metadata(1, true)
+	disk.tooltip_text = "A sandbox is throw-away: when it starts again after a pause, its disk is the image's again (only a volume is kept). A persistent machine keeps its whole disk (Fly.io's root disk persistence)."
+	row.add_child(disk)
 	var tool := OptionButton.new()
 	for t in [["claude", "Claude Code"], ["codex", "Codex"], ["shell", "Shell"]]:
 		tool.add_item(t[1])
@@ -4973,7 +4982,7 @@ func _online_new() -> Control:
 		for c in picks.get_children():
 			if c is CheckBox and (c as CheckBox).button_pressed:
 				chosen.append((c as CheckBox).text)
-		var d := await engine.call_api("POST", "/online", {"name": n, "port": 0, "volume_gb": int(vol.value),
+		var d := await engine.call_api("POST", "/online", {"name": n, "port": 0, "volume_gb": int(vol.value), "persistent": bool(disk.get_selected_metadata()),
 			"tool": str(tool.get_selected_metadata()), "repo": str(repo.get_selected_metadata()), "secrets": chosen,
 			"size": str(size.get_selected_metadata()),
 			"expert": str(ex.get_selected_metadata())}, true, 900.0)
@@ -5050,7 +5059,7 @@ func _online_card(sb: Dictionary, r: Dictionary) -> Control:
 		lg.add_theme_font_size_override("font_size", 11)
 		lg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(lg)
-	var facts := "public URL https://%s.fly.dev (one per machine) · app %s" % [sb["app"], sb["app"]]
+	var facts := ("persistent: its disk is kept across pauses · " if bool(on.get("persist", false)) else "sandbox: its disk starts again from the image after a pause · ") + "public URL https://%s.fly.dev (one per machine) · app %s" % [sb["app"], sb["app"]]
 	if int(on.get("volume_gb", 0)) > 0:
 		facts = "volume %d GB (≈ $%.2f a month) · " % [int(on.get("volume_gb", 0)), float(on.get("volume_month", 0))] + facts
 	box.add_child(_wrap(facts))

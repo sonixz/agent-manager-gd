@@ -48,6 +48,7 @@ TOOLS = [
                      "online_name": {"type": "string", "description": "its name in its address, lowercase (optional)"},
                      "port": {"type": "integer", "description": "the port its service will listen on inside (a hint)"},
                      "volume_gb": {"type": "integer"}, "expert": {"type": "string"},
+                     "persistent": {"type": "boolean", "description": "true: its whole disk is kept across a pause; false (default): a sandbox, its disk starts again from the image"},
                      "secrets": {"type": "array", "items": {"type": "string"}, "description": "names of secrets your session holds; never values"},
                      "timeout_s": {"type": "integer", "minimum": 10, "maximum": 900}}, "required": ["kind"]}},
     {"name": "machine_status", "description": "One machine as list_machines shows it, or a request's answer (request: its id).",
@@ -152,7 +153,7 @@ def machine_tool(eng, name, a):
     if name in ("stop_machine", "start_machine", "unexpose_machine"):
         return eng.call("POST", f"/sessions/{me}/machines/{a.get('id', '')}/{name.split('_')[0]}", {})
     if name == "create_machine":
-        params = {k: a[k] for k in ("kind", "name", "tool", "repo", "size", "online_name", "port", "volume_gb", "expert", "secrets") if k in a}
+        params = {k: a[k] for k in ("kind", "name", "tool", "repo", "size", "online_name", "port", "volume_gb", "expert", "secrets", "persistent") if k in a}
         req = eng.call("POST", f"/sessions/{me}/machine-requests", {"kind": "create", "params": params})
         return _wait_request(eng, req, a.get("timeout_s", 300))
     kind = {"destroy_machine": "destroy", "expose_machine": "expose"}[name]
