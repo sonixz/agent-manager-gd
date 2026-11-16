@@ -333,6 +333,11 @@ class GuardTest(unittest.TestCase):
         back = self.raw(b"GET /health HTTP/1.1\r\nHost: x\r\n\r\n"
                         b"POST /sessions HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{}")
         self.assertIn(b"403", back)
+        # the relay closes the connection at the refusal: the stand-in may still be writing down /health
+        deadline = time.monotonic() + 3
+        while not Seen.paths and time.monotonic() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.1)
         self.assertEqual([p[1] for p in Seen.paths], ["/health"])
 
     def test_bodies_by_length_and_by_chunks_pass_whole_and_two_requests_in_a_row_too(self):
