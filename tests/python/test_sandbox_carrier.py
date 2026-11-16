@@ -218,8 +218,8 @@ class CarrierTest(unittest.TestCase):
         self.carrier.links["sb1"]["health_prev"]["at"] -= 5.0                # as five seconds later
         h = self.carrier.health("sb1")
         self.assertAlmostEqual(h["cpu"], 800 / 2000)                          # 800 busy ticks of 2000
-        self.assertAlmostEqual(h["rx_rate"], 250000 / 5.0, delta=2000)
-        self.assertAlmostEqual(h["tx_rate"], 50000 / 5.0, delta=400)
+        self.assertAlmostEqual(h["rx_rate"], 250000 / 5.0, delta=5000)   # the real time between the two readings counts too
+        self.assertAlmostEqual(h["tx_rate"], 50000 / 5.0, delta=1000)
         self.assertEqual(len(h["history"]), 1)
         self.assertEqual(set(h["history"][0]), {"t", "cpu", "mem", "rx", "tx", "load"})
 

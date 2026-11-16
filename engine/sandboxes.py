@@ -306,7 +306,7 @@ class Sandboxes:
         """Every session of a sandbox: its first one, then those added, oldest first."""
         sb = self.get(sbid)
         with closing(self._db()) as db:
-            added = [r[0] for r in db.execute("SELECT session_id FROM sandbox_sessions WHERE sandbox = ? ORDER BY created, rowid", (sbid,))]
+            added = [r[0] for r in db.execute("SELECT session_id FROM sandbox_sessions WHERE sandbox = ? ORDER BY rowid", (sbid,))]
         return ([sb["session_id"]] if sb["session_id"] else []) + added
 
     def seat(self, sbid: str, sid: str) -> dict:
