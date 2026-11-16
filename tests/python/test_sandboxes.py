@@ -2,6 +2,7 @@
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -634,8 +635,32 @@ class SandboxesTest(unittest.TestCase):
         info = self.s.sandboxes.unbind(sb["id"], ssh)
         self.assertEqual((info["exposed"], self.fly.ips, sent[-1]), (False, [], door_command(0)))
         self.assertIn("rm -f", door_command(0))
+        self.assertNotIn("nohup", door_command(0))                         # closing never starts it
         self.assertIn("echo 3000 > /var/lib/agmgd/door", door_command(3000))
         self.assertIn("[a]gmgd-door", door_command(3000))                 # never matches the shell that asks
+
+    def test_a_door_that_stopped_is_started_again_and_one_that_dies_says_why(self):
+        # owner, 2026-11-15: a machine made after the rebuild said « no door »: the door was not running there
+        from engine.sandboxes import door_start
+        tmp = tempfile.mkdtemp(prefix="agmgd-door-")
+        try:
+            name = "agmgdtest-" + os.urandom(4).hex()                                       # nothing else on this computer has it
+            door, log = os.path.join(tmp, name), os.path.join(tmp, "door.log")
+            run = lambda: subprocess.run(["sh", "-c", door_start(door, log)], capture_output=True, text=True, timeout=20).stdout  # noqa: E731
+            self.assertEqual(run().split()[0], "NO-DOOR")                                  # an image without it
+            with open(door, "w") as f:
+                f.write("import sys\nprint('OSError: [Errno 98] address already in use', file=sys.stderr)\nsys.exit(1)\n")
+            out = run()
+            self.assertEqual(out.split()[0], "DOOR-DIED")                                 # it is there, it does not stay up
+            self.assertIn("address already in use", out)                                  # and its log says why
+            with open(door, "w") as f:
+                f.write("import time\ntime.sleep(30)\n")
+            self.assertEqual(run().split()[0], "DOOR-RUNS")                               # started again
+            self.assertEqual(run().split()[0], "DOOR-RUNS")                               # running: not a second one
+            self.assertEqual(len(subprocess.run(["pgrep", "-f", door], capture_output=True, text=True).stdout.split()), 1)
+        finally:
+            subprocess.run(["pkill", "-f", tmp + "/agmgdtest-"])
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def test_machines_made_before_keep_their_ways(self):
         """A sandbox of the shared app stays private; an Online machine made before binds its own port only."""

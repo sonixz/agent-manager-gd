@@ -5,6 +5,12 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Fix: binding a machine's port when its door had stopped
+- A machine made after the image's rebuild could say « this machine's image has no door » when its port was bound to
+  its public URL: the door (port 8443) was in the image but not running. Binding now starts it again; « no door » is
+  said only when the image really lacks it, and a door that will not stay up says why (its log on the machine,
+  `/var/log/agmgd_door.log`, written from the next image rebuild on).
+
 ### Fix: the session list follows at once (closed sessions leave, new ones appear)
 - The list took 7 to 15 seconds to answer with sessions on connected repositories: to show each one's repository
   name, the engine read its folder with two git commands, every 2 seconds. A closed session stayed long after, a new
