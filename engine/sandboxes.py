@@ -292,11 +292,14 @@ class Sandboxes:
                 shutil.copy(os.path.join(IMAGE_DIR, name), tmp)
             with open(os.path.join(tmp, "fly.toml"), "w", encoding="utf-8") as f:
                 f.write(f'app = "{app}"\nprimary_region = "{region}"\n\n[build]\n  dockerfile = "Dockerfile"\n')
-            rc, out = self.fly.run("deploy", "--build-only", "--push", "--remote-only", "--app", app, "--image-label", "v1",
+            # each build its own label (owner, 2026-11-15: a machine made after a rebuild still had the image of Loop 12:
+            # every build was pushed as « v1 » and new machines kept getting the first one)
+            label = f"v{IMAGE_VERSION}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime())}"
+            rc, out = self.fly.run("deploy", "--build-only", "--push", "--remote-only", "--app", app, "--image-label", label,
                                    "--config", os.path.join(tmp, "fly.toml"), cwd=tmp, timeout=1800)
         if rc != 0:
             raise ValueError("the image did not build: " + out[-300:])
-        self.set_config("image", f"registry.fly.io/{app}:v1")
+        self.set_config("image", f"registry.fly.io/{app}:{label}")
         self.set_config("image_built", str(time.time()))
         self.set_config("image_version", str(IMAGE_VERSION))
         return self.status()
@@ -689,7 +692,9 @@ class Sandboxes:
         built = float(self.config("image_built", "0") or 0)
         return {"name": "Agent Manager sandbox image", "recipe": "sandbox/Dockerfile", "contents": [list(c) for c in IMAGE_CONTENTS],
                 "ready": bool(self.config("image")), "built": built, "image": self.config("image"),
-                "outdated": bool(self.config("image")) and int(self.config("image_version", "1") or 1) < IMAGE_VERSION,
+                # an image still labelled « v1 » was pushed under the label every build reused: new machines may get an older one
+                "outdated": bool(self.config("image")) and (int(self.config("image_version", "1") or 1) < IMAGE_VERSION
+                                                            or str(self.config("image")).endswith(":v1")),
                 "build_note": "Fly builds it in your organisation's private registry, about 2 minutes, once"}
 
     def sizes(self) -> dict:

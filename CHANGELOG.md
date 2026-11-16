@@ -5,6 +5,11 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Fix: new cloud machines run the image last built
+- Every build of the image was pushed under the same label (v1), and new machines kept getting the very first one
+  (seen on a machine made after a rebuild: the image of Loop 12, without the door). Each build now has its own label
+  and new machines run the latest. An image built before this fix shows as outdated in ☁ Cloud: rebuild it once.
+
 ### Fix: binding a machine's port when its door had stopped
 - A machine made after the image's rebuild could say « this machine's image has no door » when its port was bound to
   its public URL: the door (port 8443) was in the image but not running. Binding now starts it again; « no door » is

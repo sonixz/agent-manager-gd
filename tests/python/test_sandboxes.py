@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 import urllib.request
 from urllib.error import HTTPError
@@ -126,6 +127,23 @@ class SandboxesTest(unittest.TestCase):
         self.assertTrue(any(a.startswith("AGMGD_AUTHORIZED_KEY=ssh-ed25519") for a in run))   # a public key, not a secret
         self.assertFalse(any("fake-token" in a for c in self.fly.calls for a in c))            # the Fly token never in arguments
         self.assertEqual(sb["brain_client"], "cbrain1")
+
+    def test_each_image_build_has_its_own_label_and_new_machines_run_the_latest(self):
+        # owner, 2026-11-15: a machine made after the rebuild ran the image of Loop 12 (every build was pushed as v1)
+        first = self.s.sandboxes.prepare()["image"]
+        time.sleep(1.1)
+        second = self.s.sandboxes.prepare()["image"]
+        self.assertNotEqual(first, second)
+        self.assertNotIn(":v1", second)
+        labels = [c[c.index("--image-label") + 1] for c in self.fly.calls if c[:1] == ("deploy",)]
+        self.assertEqual(len(set(labels)), 2)
+        self.assertTrue(second.endswith(":" + labels[-1]))
+        self.s.create("Web", "shell", "", host="sandbox")
+        run = [c for c in self.fly.calls if c[:2] == ("machine", "run")][-1]
+        self.assertEqual(run[2], second)                                            # the machine runs the latest build
+        self.assertFalse(self.s.sandboxes.image_info()["outdated"])
+        self.s.sandboxes.set_config("image", first.rsplit(":", 1)[0] + ":v1")      # an install built before this fix
+        self.assertTrue(self.s.sandboxes.image_info()["outdated"])                   # offers Rebuild
 
     def test_a_new_machine_that_is_not_in_the_list_at_once_is_still_found(self):
         self.s.sandboxes.prepare()
