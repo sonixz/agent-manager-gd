@@ -133,6 +133,22 @@ func setup(s: Dictionary, selected: bool, activity: Array, line := false) -> voi
 	_animate(str(s.get("activity", "")), attention)
 
 
+## Draws the card again with what changed, keeping this node: the list used to replace a changed card by a new one,
+## and a card replaced between the press and the release of a click lost the click (owner, 2026-11-15: « des
+## sessions que je clique… il reste collé »). The node stays, so the release still reaches it.
+func refill(s: Dictionary, selected: bool, activity: Array, line := false) -> void:
+	for t in [_pulse, _glow]:
+		if t:
+			t.kill()
+	_pulse = null
+	_glow = null
+	for c in get_children():
+		remove_child(c)
+		c.queue_free()
+	scale = Vector2.ONE
+	setup(s, selected, activity, line)
+
+
 ## One session per line: the state dot, the tool, the name, short marks, the ✦ light and the state in a word.
 func _setup_line(s: Dictionary, selected: bool, activity: Array) -> void:
 	var acc: Color = activity[0]

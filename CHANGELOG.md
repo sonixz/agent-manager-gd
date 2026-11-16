@@ -11,6 +11,16 @@ Newest first.
   and the agent drew everything again. Now it starts and waits at the size of its frame: measured on the private
   display, one size when opened, none when switching back and forth (nine before, for three round trips).
 
+### The session list answers clicks and keeps up
+- Fix: a click on a session in the list could be lost: a session whose card changed (an agent at work changes it
+  every refresh) had its card replaced between the press and the release of the click, so nothing happened. Its card
+  is now drawn again in place. Measured: 5 clicks out of 5 taken during a refresh (before: 0 out of 5).
+- Fix: the list asked the engine again every 2 seconds even when the last answer had not come; slow answers piled up
+  and an older one could draw the list as it was before. Now one question at a time: 11 refreshes asked at once
+  answered in 108 ms (before: 999 ms).
+- The engine reads each session's git branch aside when it is old, instead of one after the other in the list's
+  answer (up to about a second every 15 s with 11 sessions on /mnt/c).
+
 ### Persistent or sandbox, chosen at the making (after Loop 48)
 - A new machine's form (☁ Cloud, step 2) asks for its disk: **Sandbox** (it starts again from the image after a
   pause, the default) or **Persistent** (its whole disk is kept across pauses, with Fly.io's root disk persistence).
