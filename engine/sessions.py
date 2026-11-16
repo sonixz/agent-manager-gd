@@ -716,13 +716,24 @@ class Sessions:
         return env
 
     _branches: dict = {}
+    _branch_reading: set = set()   # folders whose branch is being read again aside
 
     def branch(self, cwd: str) -> str:
-        """The folder's current git branch ('' outside a repository), cached for 15 seconds."""
-        now = time.time()
+        """The folder's current git branch ('' outside a repository), cached for 15 seconds. When it is older, the
+        known one is answered at once and read again aside: on /mnt/c a lookup takes 0.1–0.2 s, and the list asked for
+        every session's branch one after the other every 15 s (about a second with 11 sessions, measured 2026-11-15)."""
+        now = time.monotonic()
         hit = self._branches.get(cwd)
         if hit and now - hit[0] < 15:
             return hit[1]
+        if hit:
+            if cwd not in self._branch_reading:
+                self._branch_reading.add(cwd)
+                threading.Thread(target=self._read_branch, args=(cwd,), daemon=True).start()
+            return hit[1]
+        return self._read_branch(cwd)
+
+    def _read_branch(self, cwd: str) -> str:
         import subprocess
         try:
             out = subprocess.run(["git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True,
@@ -730,7 +741,8 @@ class Sessions:
             name = out.stdout.strip() if out.returncode == 0 else ""
         except (OSError, subprocess.SubprocessError):
             name = ""
-        self._branches[cwd] = (now, name)
+        self._branches[cwd] = (time.monotonic(), name)
+        self._branch_reading.discard(cwd)
         return name
 
     def hook_state(self, sid: str) -> dict:

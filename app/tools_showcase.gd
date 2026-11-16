@@ -171,6 +171,45 @@ func _run() -> void:
 			await wait(3.0)
 			report.append("grid: " + _sizes())
 			await shot("measure-grid")
+		"sidebar-click":  # owner, 2026-11-15: « des latences, des sessions que je clique… il reste collé ». A click on a busy session whose card changes while the button is down, the list refreshing between the press and the release; then many refreshes asked at once
+			var ck_busy: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Busy", "tool": "shell", "cwd": "~", "group": "Orbit API"})
+			var ck_calm: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Calm", "tool": "shell", "cwd": "~", "group": "Orbit API"})
+			var ck_bid := str(ck_busy["id"])
+			OS.execute("tmux", ["-L", "agmgd-showcase", "send-keys", "-t", "am_" + ck_bid, "while true; do date +%N; sleep 0.2; done", "Enter"], [])
+			await main.refresh()
+			main.set_view("focus")
+			await wait(2.0)
+			var ck_hits := 0
+			var ck_same := 0
+			for k in 5:
+				main.select(str(ck_calm["id"]))
+				await wait(1.2)
+				var ck_card: Control = main.cards[ck_bid]
+				var ck_at: Vector2 = ck_card.get_global_rect().get_center()
+				var ck_down := InputEventMouseButton.new()
+				ck_down.button_index = MOUSE_BUTTON_LEFT
+				ck_down.pressed = true
+				ck_down.position = ck_at
+				ck_down.global_position = ck_at
+				get_root().push_input(ck_down)
+				await wait(2.5)  # its screen changes: the list refreshes while the button is down
+				await main.refresh()
+				if main.cards.get(ck_bid) == ck_card:
+					ck_same += 1
+				var ck_up := ck_down.duplicate() as InputEventMouseButton
+				ck_up.pressed = false
+				get_root().push_input(ck_up)
+				await wait(0.5)
+				if main.selected == ck_bid:
+					ck_hits += 1
+			report.append("sidebar-click: 5 clicks on a busy session refreshed mid-click: %d selected it, its card kept %d time(s)" % [ck_hits, ck_same])
+			# ten refreshes asked at once: how many questions reach the engine together
+			var ck_asked_at := Time.get_ticks_msec()
+			for i in 10:
+				main.refresh()
+			await main.refresh()
+			report.append("sidebar-click: 11 refreshes asked at once were answered in %d ms (one question at a time)" % (Time.get_ticks_msec() - ck_asked_at))
+			await shot("sidebar-click")
 		"hero":
 			main.grid_ids = [made["Checkout flow"], made["Flaky tests"], made["Rate limiter"], made["Test runner"]]
 			main.selected = made["Checkout flow"]

@@ -34,6 +34,25 @@ class EngineTest(unittest.TestCase):
             time.sleep(0.1)
         return False
 
+    def test_an_old_branch_is_answered_at_once_and_read_again_aside(self):
+        # owner, 2026-11-15: « des latences »; every 15 s the list read each session's branch one after the other
+        import subprocess
+        repo = os.path.join(self.tmp, "repo")
+        os.makedirs(repo)
+        subprocess.run(["git", "init", "-q", "-b", "one", repo], check=True)
+        subprocess.run(["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "a"], check=True)
+        subprocess.run(["git", "-C", repo, "branch", "two"], check=True)
+        self.assertEqual(self.sessions.branch(repo), "one")
+        subprocess.run(["git", "-C", repo, "symbolic-ref", "HEAD", "refs/heads/two"], check=True)
+        self.assertEqual(self.sessions.branch(repo), "one")             # fresh enough: from the cache
+        Sessions._branches[repo] = (time.monotonic() - 60, "one")       # now too old
+        self.assertEqual(self.sessions.branch(repo), "one")             # answered at once, read again aside
+        end = time.monotonic() + 5
+        while time.monotonic() < end and Sessions._branches[repo][1] != "two":
+            time.sleep(0.05)
+        self.assertEqual(self.sessions.branch(repo), "two")
+        self.assertNotIn(repo, Sessions._branch_reading)
+
     def test_a_session_runs_in_tmux_and_outlives_its_records_reader(self):
         s = self.sessions.create("Shell é", "shell", self.tmp)
         self.assertEqual(s["state"], "running")

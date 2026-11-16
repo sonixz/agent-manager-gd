@@ -3,6 +3,8 @@ extends Control
 ## sessions' real terminals: Focus (one), Grid (up to four side by side), Board (tiles with live previews).
 ## Sessions live in tmux through the engine: closing the app leaves them running; reopening attaches again.
 
+signal list_refreshed  # a refresh of the list is over (refresh(): one question to the engine at a time)
+
 const SETTINGS := "user://settings.cfg"
 const SetupProbe := preload("res://scripts/setup_probe.gd")  # by its path: a new class name is unknown until Godot scans the project again
 const HostView := preload("res://scripts/host_view.gd")
@@ -40,6 +42,8 @@ var cards := {}               # id -> SessionCard
 var rows: Array = []          # the list as drawn: [kind, key, signature, node], to draw again only what changed
 var local_wait := 0           # changes shown at once and not yet confirmed by the engine
 var local_stamp := 0          # grows at each change shown at once: an older answer from the engine is not drawn over it
+var refreshing := false       # a question for the list is on its way to the engine
+var refresh_again := false    # another was asked meanwhile: asked once more when the answer comes
 var queue_sig := ""           # « They wait for you » as drawn
 
 var side_box: VBoxContainer
@@ -962,7 +966,24 @@ func _open_new(where := "", tool := "") -> void:
 
 
 # ------------------------------------------------------------------ data
+## One question to the engine at a time (owner, 2026-11-15: « des latences »). The 2-second timer asked again even
+## when the last answer had not come: slow answers piled up, and an older one arriving last drew the list as it was
+## before. Now a refresh asked while one is on its way is done once, right after it.
 func refresh() -> void:
+	if refreshing:
+		refresh_again = true
+		await list_refreshed  # who waits for it (« await refresh() » after a change) gets the answer asked after it
+		return
+	refreshing = true
+	await _refresh_once()
+	while refresh_again:
+		refresh_again = false
+		await _refresh_once()
+	refreshing = false
+	list_refreshed.emit()
+
+
+func _refresh_once() -> void:
 	if local_wait > 0:  # a change shown at once is being told to the engine: its own refresh comes right after
 		return
 	var stamp := local_stamp
@@ -1765,6 +1786,16 @@ func _render_list() -> void:
 		if have.has(key) and have[key][2] == w[2]:
 			node = have[key][3]
 			have.erase(key)
+		elif have.has(key) and w[0] == "session" and have[key][3] is SessionCard:
+			# a session whose card changed (its state, its time, picked): the same card drawn again, not a new one,
+			# so a click begun on it is not lost when the list refreshes between the press and the release
+			node = have[key][3]
+			have.erase(key)
+			var s: Dictionary = w[3]
+			var sid := str(s["id"])
+			(node as SessionCard).refill(s, sid == selected, activity_of(s), density == "line")
+			(node as SessionCard).set_brain(brain_info(sid), false)
+			cards[sid] = node
 		else:
 			node = _row(w)
 			list_box.add_child(node)
@@ -1805,7 +1836,7 @@ func _card(s: Dictionary) -> SessionCard:
 	card.set_drag_forwarding(
 		func(_at: Vector2) -> Variant:
 			var prev := Label.new()
-			prev.text = "  " + str(s["name"])
+			prev.text = "  " + str(card.data.get("name", s["name"]))
 			card.set_drag_preview(prev)
 			return {"type": "session", "id": id},
 		func(_at: Vector2, d: Variant) -> bool: return d is Dictionary and d.get("type") == "session" and d.get("id") != id,
