@@ -5,6 +5,12 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Fix: the session list follows at once (closed sessions leave, new ones appear)
+- The list took 7 to 15 seconds to answer with sessions on connected repositories: to show each one's repository
+  name, the engine read its folder with two git commands, every 2 seconds. A closed session stayed long after, a new
+  one did not seem to appear (the app gives up after 10 s). The name is now read without git: the list answers in
+  about 0.05 s (measured on the owner's 9 sessions, 16.7 s before).
+
 ### Fix: a session opens without the « pop »
 - Opening a session no longer makes its terminal jump: it took three sizes (where it started, 0×0 in its frame not
   laid out yet, which tmux saw as 2 columns, then its own), and changed size at each switch between sessions, so tmux

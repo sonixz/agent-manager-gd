@@ -84,6 +84,17 @@ class ReposTest(unittest.TestCase):
         self.assertTrue(w["cwd"].endswith("shop-worktrees/shop-feature"))
         self.assertEqual({x["name"] for x in self.s.repo_sessions(r["id"])}, {"Shop agent", "Shop feature"})
 
+    def test_the_session_list_runs_no_git_command_for_a_repository_name(self):
+        # owner, 2026-11-15: « j'ai fermé des terminaux et ils ont disparu très après… une nouvelle session ne semble
+        # pas apparaître »: the list read each session's repository folder with two git commands (15 s on /mnt/c)
+        r = self.s.repos.add("file://" + self.bare)
+        self.s.repos.check(r["id"])
+        self.s.create("Shop agent", "shell", "", repo=r["id"])
+        from unittest import mock
+        with mock.patch.object(type(self.s.repos), "_git", side_effect=AssertionError("git run by the list")):
+            rows = [x for g in self.s.tree()["groups"] for x in g["sessions"]]
+        self.assertEqual([x["repo_name"] for x in rows if x["name"] == "Shop agent"], ["shop"])
+
     def test_rotate_and_disconnect(self):
         r = self.s.repos.add("git@github.com:sonixz/demo-shop.git")
         new = self.s.repos.rotate(r["id"])

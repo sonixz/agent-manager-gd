@@ -296,13 +296,15 @@ class Repos:
             raise ValueError("this repository is already connected")
         return self.get(rid)
 
-    def get(self, rid: str) -> dict:
-        """One repository, its folder read now."""
+    def get(self, rid: str, fresh: bool = True) -> dict:
+        """One repository, its folder read now (fresh=False: as it was last read, no git command: the session list
+        asks for every session's repository name every 2 seconds, and two git commands per folder on /mnt/c took
+        about 1.7 s each, 15 s for the list with 9 sessions, measured 2026-11-15)."""
         with closing(self._db()) as db:
             r = db.execute("SELECT * FROM repos WHERE id = ?", (rid,)).fetchone()
         if not r:
             raise KeyError(rid)
-        return self.describe(dict(r))
+        return self.describe(dict(r), fresh=fresh)
 
     def all(self) -> list[dict]:
         """Every repository, at once: no git command is run. The folder is as it was last read (see `refresh`)."""

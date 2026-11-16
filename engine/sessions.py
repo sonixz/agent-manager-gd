@@ -193,7 +193,7 @@ class Sessions:
         if not rec.get("repo_id"):
             return ""
         try:
-            r = self.repos.get(rec["repo_id"])
+            r = self.repos.get(rec["repo_id"], fresh=False)
         except KeyError:
             return ""
         return (f"Agent Manager: this session works in the connected repository « {r['name']} » ({r['url']}). git already "
@@ -1581,7 +1581,7 @@ class Sessions:
         if not rid:
             return ""
         try:
-            return self.repos.get(rid)["name"]
+            return self.repos.get(rid, fresh=False)["name"]   # a name: no git command (the list asks every 2 s)
         except KeyError:
             return ""
 
