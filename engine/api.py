@@ -167,6 +167,23 @@ def make_handler(sessions: Sessions, token: str):
                     return self._reply(200, sessions.keys_store.set(str(b.get("name", "")), str(b.get("value", ""))))
                 if len(parts) == 2 and parts[0] == "keys" and method == "DELETE":
                     return self._reply(200, sessions.keys_store.delete(parts[1]))
+                # the owner's MCP servers (Loop 49a): added, tested, given to the sessions where they are ticked
+                if parts == ["mcp"] and method == "GET":
+                    return self._reply(200, {"servers": sessions.mcp.all()})
+                if parts == ["mcp"] and method == "POST":
+                    b = self._body()
+                    return self._reply(201, sessions.mcp.add(str(b.get("name", "")), str(b.get("url", "")), str(b.get("command", "")),
+                                                             bool(b.get("everywhere", False)), str(b.get("note", ""))))
+                if len(parts) == 3 and parts[0] == "mcp" and method == "POST" and parts[2] in ("test", "everywhere", "remove"):
+                    try:
+                        if parts[2] == "test":
+                            return self._reply(200, sessions.mcp.test(parts[1]))
+                        if parts[2] == "everywhere":
+                            return self._reply(200, sessions.mcp.set_everywhere(parts[1], bool(self._body().get("on", False))))
+                        sessions.mcp.remove(parts[1])
+                        return self._reply(200, {"servers": sessions.mcp.all()})
+                    except KeyError:
+                        return self._reply(404, {"error": "no such MCP server"})
                 # the secrets vault (Loop 39): names, notes, dates and the journal; a value goes in, never out
                 if parts == ["secrets"] and method == "GET":
                     return self._reply(200, sessions.vault.all())
@@ -424,7 +441,8 @@ def make_handler(sessions: Sessions, token: str):
                                                             str(b.get("level", "")), str(b.get("model", "")), "",
                                                             str(b.get("access", "")), b.get("extra_dirs") or [],
                                                             bool(b.get("os_sandbox", False)), b.get("secrets") or [],
-                                                            str(b.get("sandbox", "")), str(b.get("expert", ""))))
+                                                            str(b.get("sandbox", "")), str(b.get("expert", "")),
+                                                            b.get("mcps") or [], str(b.get("first", ""))))
                 # Loop 46: agents and cloud machines; what costs or faces the internet waits for the owner
                 if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "machines" and method == "GET":
                     return self._reply(200, {"machines": sessions.agent_machines(parts[1])})
@@ -528,6 +546,8 @@ def make_handler(sessions: Sessions, token: str):
                         b = self._body()
                         sessions.move(sid, str(b.get("group", "")), int(b.get("index", 0)))
                         return self._reply(200, sessions.tree())
+                    if method == "POST" and action == "mcps":   # Loop 49a: from its next start
+                        return self._reply(200, sessions.set_mcps(sid, list(self._body().get("names") or [])))
                     if method == "POST" and action == "secrets":   # Loop 39: from its next start
                         return self._reply(200, sessions.set_secrets(sid, list(self._body().get("names") or [])))
                     if method == "POST" and action == "rename":

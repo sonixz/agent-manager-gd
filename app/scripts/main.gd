@@ -18,6 +18,8 @@ const ExpertWidgets := preload("res://scripts/expert_widgets.gd")
 const SecretView := preload("res://scripts/secret_view.gd")
 const SecretWidgets := preload("res://scripts/secret_widgets.gd")
 const KeyWidgets := preload("res://scripts/key_widgets.gd")
+const McpView := preload("res://scripts/mcp_view.gd")
+const McpWidgets := preload("res://scripts/mcp_widgets.gd")
 const ACT_KEYS := ["working", "approval", "waiting", "done", "idle", "exited", "missing"]
 
 var engine: EngineClient
@@ -167,6 +169,12 @@ const VOICE_MAX_SECONDS := 300  # a key release that got lost (the window lost t
 var keys_list: VBoxContainer
 var f_secrets: HFlowContainer   # New session: a box per secret of the vault (Loop 39)
 var f_secrets_words: Label
+var f_mcps: HFlowContainer      # New session: a box per MCP server of yours (Loop 49a)
+var f_mcps_words: Label
+var f_first: LineEdit           # New session: its first message (an MCP server's prompt, like /mcp__loop0__start)
+var mcp_box: VBoxContainer      # the ⌁ MCP page (Loop 49a)
+var mcp_last: Array = []        # the servers as last read
+var mcp_testing := {}           # name -> true while its Test runs
 var usage_box: VBoxContainer
 var perms_box: VBoxContainer   # Loop 31: the Agent Permissions view
 var access_menu: PopupMenu     # a group's default file access
@@ -337,6 +345,7 @@ const MANAGERS := [
 	["sandboxes", "☁ Cloud", "☁", "Cloud machines on Fly.io: private sandboxes, and services bound to a public URL"],
 	["experts", "✦ Experts", "✦", "Experts: skills (the open Agent Skills standard) and the experts made of them, launched in Claude Code or Codex"],
 	["repos", "⎇ Repos", "⎇", "Connected repositories and their deploy keys"],
+	["mcp", "⌁ MCP", "⌁", "Your MCP servers: add one by its address, test it, give it to the sessions you choose, start a session with it"],
 ]
 
 const DEFAULT_KEYS := {"palette": "Ctrl+K", "new": "Ctrl+N", "focus": "Ctrl+F", "grid": "Ctrl+G", "board": "Ctrl+B",
@@ -835,6 +844,26 @@ func _build_new_dialog() -> void:
 	f_secrets_words.custom_minimum_size = Vector2(420, 0)
 	sec_box.add_child(f_secrets_words)
 	g.add_child(sec_box)
+	var mcp_label := Label.new()   # Loop 49a: the owner's MCP servers, ticked for this session
+	mcp_label.text = "MCP servers"
+	g.add_child(mcp_label)
+	var mcp_col := VBoxContainer.new()
+	f_mcps = HFlowContainer.new()
+	f_mcps.add_theme_constant_override("h_separation", 10)
+	mcp_col.add_child(f_mcps)
+	f_mcps_words = _muted("")
+	f_mcps_words.add_theme_font_size_override("font_size", 11)
+	f_mcps_words.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	f_mcps_words.custom_minimum_size = Vector2(420, 0)
+	mcp_col.add_child(f_mcps_words)
+	g.add_child(mcp_col)
+	var first_label := Label.new()
+	first_label.text = "First message"
+	g.add_child(first_label)
+	f_first = LineEdit.new()
+	f_first.placeholder_text = "optional: what the agent starts with, like /mcp__loop0__start \"my idea\""
+	f_first.tooltip_text = "Sent as the agent's first message (Claude Code or Codex). An MCP server's prompt is called /mcp__<server>__<prompt>."
+	g.add_child(f_first)
 	f_cwd.text_changed.connect(func(_t: String) -> void: _check_brief())
 	f_tool.item_selected.connect(func(_i: int) -> void: _check_brief())
 	f_where.item_selected.connect(func(_i: int) -> void: _check_remote())
@@ -921,8 +950,10 @@ func _check_brief() -> void:
 	f_brief.text = "Brief it with the latest summary of this folder (%s, a short first message)" % _date(float(list[0]["created"]))
 
 
-func _open_new(where := "", tool := "") -> void:
+func _open_new(where := "", tool := "", mcp := "", first := "") -> void:
 	f_name.text = ""
+	if f_first != null:
+		f_first.text = first
 	f_cwd.editable = true
 	f_browse.disabled = false
 	f_repo.clear()
@@ -961,6 +992,7 @@ func _open_new(where := "", tool := "") -> void:
 	f_remote.button_pressed = true
 	_check_remote()
 	await _fill_secret_boxes()
+	await _fill_mcp_boxes(mcp)
 	new_dialog.popup_centered()
 	f_name.grab_focus()
 
@@ -1807,7 +1839,7 @@ func _render_list() -> void:
 		if r[0] == "session" and cards.get(r[1]) == r[3]:
 			cards.erase(r[1])
 	rows = next
-	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "experts", "setup", "shortcuts", "connect", "permissions"]
+	empty_label.visible = sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "experts", "setup", "shortcuts", "connect", "permissions", "mcp"]
 
 
 func _row(w: Array) -> Control:
@@ -2088,7 +2120,7 @@ func select(id: String) -> void:
 	if not grid_ids.has(id):
 		grid_ids.push_front(id)
 	grid_ids = grid_ids.slice(0, 4)
-	if view in ["board", "history", "repos", "keys", "usage", "sandboxes", "online", "experts", "permissions"]:
+	if view in ["board", "history", "repos", "keys", "usage", "sandboxes", "online", "experts", "permissions", "mcp"]:
 		view = "focus"  # picking a session opens it (Review follows the selected session)
 	if view == "review":
 		review_file = 0
@@ -2319,7 +2351,7 @@ func set_view(v: String) -> void:
 	if v == "setup":
 		_setup_read()
 	content.modulate.a = 0.6  # the new view is there at once, a little soft, then sharp: it was 0.18 s from nothing, read as a delay
-	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "online", "experts", "setup", "shortcuts", "connect", "permissions"]
+	empty_label.visible = sessions.is_empty() and v not in ["history", "repos", "keys", "usage", "sandboxes", "online", "experts", "setup", "shortcuts", "connect", "permissions", "mcp"]
 	_layout_view()
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.08)
 	_render_header()
@@ -2369,7 +2401,7 @@ func _park_all() -> void:
 func _layout_view() -> void:
 	_park_all()
 	_mount_orchestrator.call_deferred()
-	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "experts", "setup", "shortcuts", "connect", "permissions"]:
+	if sessions.is_empty() and view not in ["history", "repos", "keys", "usage", "sandboxes", "online", "experts", "setup", "shortcuts", "connect", "permissions", "mcp"]:
 		return
 	match view:
 		"focus":
@@ -2402,6 +2434,11 @@ func _layout_view() -> void:
 		"keys":
 			content.add_child(_keys_view())
 			_load_keys()
+		"mcp":
+			content.add_child(_mcp_view())
+			if not mcp_last.is_empty():
+				_render_mcp.call_deferred()
+			_load_mcp()
 		"usage":
 			content.add_child(_usage_view())
 			_load_usage()
@@ -5433,6 +5470,231 @@ func _load_usage() -> void:
 			grid.add_child(vl)
 
 
+# ------------------------------------------------------------------ ⌁ MCP (Loop 49a)
+## Owner, 2026-11-15: « J'aimerais ça être capable de le brancher en MCP… de partir une session avec. Puis même que ça
+## soit scalable ». The page: four tiles, a drawn card per server with what can be done with it, and the form to add one.
+func _mcp_view() -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	mcp_box = VBoxContainer.new()
+	mcp_box.size_flags_horizontal = SIZE_EXPAND_FILL
+	mcp_box.add_theme_constant_override("separation", 12)
+	scroll.add_child(mcp_box)
+	if mcp_last.is_empty():
+		mcp_box.add_child(SandboxWidgets.Loading.new("Reading your MCP servers…", 300.0))
+	return scroll
+
+
+func _load_mcp() -> void:
+	var r := await engine.call_api("GET", "/mcp")
+	if r.has("error"):
+		_toast(str(r["error"]))
+		return
+	mcp_last = r.get("servers", [])
+	_render_mcp()
+
+
+func _render_mcp() -> void:
+	if mcp_box == null or not is_instance_valid(mcp_box) or view != "mcp":
+		return
+	for c in mcp_box.get_children():
+		mcp_box.remove_child(c)
+		c.queue_free()
+	var title := Label.new()
+	title.text = "MCP servers"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_override("font", AmTheme.ui_font(650))
+	mcp_box.add_child(title)
+	var intro := _muted("Servers that give agents more tools, added once: by its address (over HTTPS), or by the command that starts it on this computer. Each one goes to the sessions where you tick it, or to every agent session. Adding one sends nothing; Test talks to it. Agent Manager's own servers (agent-manager, the Second Brain) are always there.")
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mcp_box.add_child(intro)
+	mcp_box.add_child(RepoWidgets.Tiles.new(McpView.tiles(mcp_last, sessions)))
+	var now := Time.get_unix_time_from_system()
+	for s in mcp_last:
+		mcp_box.add_child(_mcp_card(s, now))
+	if mcp_last.is_empty():
+		var none := _muted("No server yet. Paste an address below, like the one of loop0 (https://…/mcp), then Test it.")
+		none.add_theme_color_override("font_color", AmTheme.col("FAINT"))
+		mcp_box.add_child(none)
+	mcp_box.add_child(_mcp_form())
+
+
+func _mcp_card(s: Dictionary, now: float) -> Control:
+	var name := str(s["name"])
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", AmTheme.box(AmTheme.col("PANEL"), 10, AmTheme.col("BORDER"), 1, 8))
+	var v := VBoxContainer.new()
+	card.add_child(v)
+	var drawn = McpWidgets.Card.new(s, McpView.users(s, sessions))
+	drawn.name = "Mcp_" + name
+	if mcp_testing.has(name):
+		drawn.set_testing(true)
+	v.add_child(drawn)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	var w := _muted(McpView.words(s, now))
+	w.add_theme_font_size_override("font_size", 11)
+	w.size_flags_horizontal = SIZE_EXPAND_FILL
+	w.clip_text = true
+	w.tooltip_text = w.text
+	row.add_child(w)
+	var test := _small("Test", func() -> void: _mcp_test(name, drawn), "Talk to it now: does it answer, what tools and prompts does it offer, how fast")
+	test.disabled = mcp_testing.has(name)
+	row.add_child(test)
+	var every := CheckBox.new()
+	every.text = "Every agent session"
+	every.add_theme_font_size_override("font_size", 12)
+	every.button_pressed = bool(s.get("everywhere", false))
+	every.tooltip_text = "On: every Claude Code or Codex session gets it from its next start. Off: only those where it is ticked."
+	every.toggled.connect(func(on: bool) -> void:
+		var res := await engine.call_api("POST", "/mcp/%s/everywhere" % name, {"on": on})
+		_toast(str(res["error"]) if res.has("error") else ("%s goes to every agent session from its next start" % name if on else "%s goes only where it is ticked" % name))
+		await _load_mcp())
+	row.add_child(every)
+	var give := OptionButton.new()   # tick it for a session that does not have it, from that session's next start
+	give.add_item("Give to a session…")
+	for x in sessions:
+		if str(x.get("tool", "")) in ["claude", "codex"] and str(x.get("cwd", "")) != "/work" and not (name in (x.get("mcps", []) as Array)):
+			give.add_item(str(x["name"]))
+			give.set_item_metadata(give.item_count - 1, str(x["id"]))
+	give.disabled = give.item_count < 2 or bool(s.get("everywhere", false))
+	give.item_selected.connect(func(i: int) -> void:
+		if i == 0:
+			return
+		var sid := str(give.get_item_metadata(i))
+		var have: Array = (_session(sid).get("mcps", []) as Array).duplicate()
+		have.append(name)
+		var res := await engine.call_api("POST", "/sessions/%s/mcps" % sid, {"names": have})
+		_toast(str(res["error"]) if res.has("error") else "%s goes to « %s » from its next start (Restart it to give it now)" % [name, _session(sid).get("name", "")])
+		await refresh()
+		await _load_mcp())
+	row.add_child(give)
+	row.add_child(_small("▶ Start a session with it…", func() -> void:
+		await _open_new("", "claude", name, McpView.first_prompt(s, "")),
+		"New session with this server ticked, and its prompt to begin as the first message when it has one"))
+	row.add_child(_small("Remove…", func() -> void:
+		_confirm("Remove the MCP server %s from the list?\nSessions no longer get it from their next start; an agent already running keeps it until then." % name, func() -> void:
+			await engine.call_api("POST", "/mcp/%s/remove" % name, {})
+			await refresh()
+			await _load_mcp())))
+	return card
+
+
+func _mcp_test(name: String, drawn: Variant) -> void:
+	mcp_testing[name] = true
+	if is_instance_valid(drawn):
+		drawn.set_testing(true)
+	var res := await engine.call_api("POST", "/mcp/%s/test" % name, {}, true, 30.0)
+	mcp_testing.erase(name)
+	if res.has("error"):
+		_toast(str(res["error"]))
+	else:
+		var t: Dictionary = res.get("last_test", {})
+		_toast(("%s answered in %d ms: %s" % [name, int(t.get("ms", 0)), McpView.offers(t)]) if bool(t.get("ok", false)) else ("%s did not answer: %s" % [name, str(t.get("error", ""))]))
+	await _load_mcp()
+
+
+func _mcp_form() -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var head := Label.new()
+	head.text = "Add a server"
+	head.add_theme_font_override("font", AmTheme.ui_font(650))
+	box.add_child(head)
+	var form := HBoxContainer.new()
+	form.add_theme_constant_override("separation", 8)
+	box.add_child(form)
+	var fname := LineEdit.new()
+	fname.placeholder_text = "name (like loop0)"
+	fname.custom_minimum_size = Vector2(170, 0)
+	form.add_child(fname)
+	var fwhere := LineEdit.new()
+	fwhere.placeholder_text = "https://…/mcp, or the command that starts it (npx -y …)"
+	fwhere.size_flags_horizontal = SIZE_EXPAND_FILL
+	form.add_child(fwhere)
+	var fnote := LineEdit.new()
+	fnote.placeholder_text = "a note (what it is for)"
+	fnote.custom_minimum_size = Vector2(200, 0)
+	form.add_child(fnote)
+	var fevery := CheckBox.new()
+	fevery.text = "every agent session"
+	fevery.add_theme_font_size_override("font_size", 12)
+	form.add_child(fevery)
+	var hint := _muted("")
+	hint.add_theme_font_size_override("font_size", 11)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	fname.text_changed.connect(func(text: String) -> void:
+		var tidy := McpView.tidy_name(text)
+		if tidy != text:
+			var at := fname.caret_column
+			fname.text = tidy
+			fname.caret_column = mini(at, tidy.length())
+		hint.text = McpView.name_problem(tidy) if tidy != "" else "")
+	fwhere.text_changed.connect(func(text: String) -> void:
+		hint.text = McpView.address_problem(text) if text.strip_edges() != "" else "")
+	var add := func() -> void:
+		var problem := McpView.name_problem(fname.text)
+		if problem == "":
+			problem = McpView.address_problem(fwhere.text)
+		if problem != "":
+			hint.text = problem
+			return
+		var where := fwhere.text.strip_edges()
+		var body := {"name": fname.text, "note": fnote.text, "everywhere": fevery.button_pressed}
+		body["url" if McpView.is_address(where) else "command"] = where
+		var res := await engine.call_api("POST", "/mcp", body)
+		if res.has("error"):
+			hint.text = str(res["error"])
+			return
+		_toast("Added: %s. Testing it…" % fname.text)
+		mcp_last = (mcp_last.duplicate() + [res])
+		_render_mcp()
+		if str(res.get("kind", "")) == "http":
+			await _mcp_test(str(res["name"]), null)
+	form.add_child(_small("+ Add", func() -> void:
+		var where := fwhere.text.strip_edges()
+		var remote := McpView.is_address(where) and not (McpView.host_of(where) in McpView.LOCAL)
+		if remote:
+			_confirm("Add %s, on the internet?\nThe sessions you give it to will send it what their agent asks it (the text of a request, sometimes your files' content). Agent Manager tests it once now, when you confirm." % McpView.host_of(where), add)
+		else:
+			add.call()))
+	box.add_child(hint)
+	return box
+
+
+## New session: one box per MCP server, the one asked for ticked; the words under them say who gets what.
+func _fill_mcp_boxes(pre := "") -> void:
+	for c in f_mcps.get_children():
+		c.queue_free()
+	var r := await engine.call_api("GET", "/mcp")
+	var servers: Array = r.get("servers", [])
+	if servers.is_empty():
+		f_mcps_words.text = "None of yours: add some in ⌁ MCP, then tick the ones a session needs."
+		return
+	for s in servers:
+		var cb := CheckBox.new()
+		cb.text = str(s["name"])
+		cb.button_pressed = str(s["name"]) == pre
+		cb.disabled = bool(s.get("everywhere", false))
+		if cb.disabled:
+			cb.button_pressed = true
+			cb.tooltip_text = "Given to every agent session (⌁ MCP)"
+		cb.toggled.connect(func(_on: bool) -> void: f_mcps_words.text = McpView.session_words(_ticked_mcps(), servers))
+		f_mcps.add_child(cb)
+	f_mcps_words.text = McpView.session_words(_ticked_mcps(), servers)
+
+
+func _ticked_mcps() -> Array:
+	if f_mcps == null:
+		return []
+	var out := []
+	for c in f_mcps.get_children():
+		if c is CheckBox and (c as CheckBox).button_pressed and not (c as CheckBox).disabled and not c.is_queued_for_deletion():
+			out.append((c as CheckBox).text)
+	return out
+
+
 # ------------------------------------------------------------------ keys (Loop 10)
 ## New session: one box per secret of the vault, none ticked; the words under them say who gets what.
 func _fill_secret_boxes() -> void:
@@ -6609,6 +6871,7 @@ func open_palette() -> void:
 	items.append({"label": "Usage", "hint": "tokens per session and per day, from the agents' logs", "run": set_view.bind("usage")})
 	items.append({"label": "Cloud", "hint": "cloud machines: sandboxes, services, their public URL, connections, costs", "run": set_view.bind("sandboxes")})
 	items.append({"label": "Experts", "hint": "skills and the experts made of them: launch one in a repository", "run": set_view.bind("experts")})
+	items.append({"label": "MCP servers", "hint": "add one by its address, test it, start a session with it", "run": set_view.bind("mcp")})
 	items.append({"label": "Dictate (hold %s)" % key_text("dictate"), "hint": "what you say is put together in the box; Enter there sends it all", "run": func() -> void: _toast("Hold %s and speak. Release, read it in the box, then Enter sends it all" % key_text("dictate"))})
 	items.append({"label": "Voice command (hold %s)" % key_text("command"), "hint": "« approve Themes », « go to Docs », « who is waiting? »", "run": func() -> void: _toast("Hold %s and say a command" % key_text("command"))})
 	items.append({"label": "Shortcuts", "hint": "change the keyboard shortcuts", "run": set_view.bind("shortcuts")})
@@ -6664,7 +6927,7 @@ func _create_now() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled, "level": str(f_level.get_selected_metadata()), "access": str(f_access.get_selected_metadata()), "secrets": _ticked_secrets()}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled, "level": str(f_level.get_selected_metadata()), "access": str(f_access.get_selected_metadata()), "secrets": _ticked_secrets(), "mcps": _ticked_mcps(), "first": f_first.text.strip_edges() if f_first != null else ""}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return

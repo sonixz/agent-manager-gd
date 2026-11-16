@@ -90,6 +90,8 @@ class Store:
                 db.execute("ALTER TABLE sessions ADD COLUMN expert TEXT NOT NULL DEFAULT ''")
             if "machines_auto" not in cols:  # Loop 46: its cloud-machine requests approved without asking (the owner's choice)
                 db.execute("ALTER TABLE sessions ADD COLUMN machines_auto INTEGER NOT NULL DEFAULT 0")
+            if "mcps" not in cols:  # Loop 49a: the owner's MCP servers ticked for this session, as JSON
+                db.execute("ALTER TABLE sessions ADD COLUMN mcps TEXT NOT NULL DEFAULT '[]'")
             gcols = {r[1] for r in db.execute("PRAGMA table_info(groups)")}
             if "level" not in gcols:  # a group's default level
                 db.execute("ALTER TABLE groups ADD COLUMN level TEXT NOT NULL DEFAULT ''")
@@ -131,7 +133,7 @@ class Store:
     def update(self, sid: str, **fields) -> None:
         allowed = {k: v for k, v in fields.items() if k in ("name", "grp", "archived", "archived_at", "cwd", "worktree",
                                                             "brain_client", "remote_control", "brain_document", "level", "role", "model",
-                                                            "git_push", "git_merge", "access", "extra_dirs", "os_sandbox", "secrets", "expert", "machines_auto")}
+                                                            "git_push", "git_merge", "access", "extra_dirs", "os_sandbox", "secrets", "expert", "machines_auto", "mcps")}
         if not allowed:
             return
         sets = ", ".join(f"{k} = :{k}" for k in allowed)

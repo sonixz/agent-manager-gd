@@ -181,6 +181,8 @@ class Sessions:
         self.keys_store = Keys(self.home)
         from .vault import Vault
         self.vault = Vault(self.home, self.keys_store)   # named secrets, given session by session (Loop 39)
+        from .mcp_catalog import McpCatalog
+        self.mcp = McpCatalog(store.path)   # Loop 49a: the owner's MCP servers, ticked session by session
         self._tickets: dict[str, tuple[str, float]] = {}  # single-use tickets a session's launcher trades for its secrets
         self._tickets_lock = threading.Lock()
         from .sandboxes import Sandboxes
@@ -672,10 +674,13 @@ class Sessions:
     # ---------------------------------------------------------------- the Second Brain (Loop 6)
     def _servers(self, rec: dict) -> dict:
         """The MCP servers an agent session gets: Agent Manager itself (6C) and, when shared, the Second Brain."""
-        out = {"agent-manager": {"command": sys.executable or "python3", "args": [AGENTS_MCP]}}
+        out = {}
+        if rec.get("id"):   # Loop 49a: the owner's servers ticked for it, and those given to every session
+            out.update(self.mcp.for_session(self.mcps_of(rec["id"])))
+        out["agent-manager"] = {"type": "stdio", "command": sys.executable or "python3", "args": [AGENTS_MCP]}
         spec = self._brain_spec(rec)
         if spec:
-            out["second-brain"] = spec
+            out["second-brain"] = {"type": "stdio", **spec}
         return out
 
     def _brain_spec(self, rec: dict) -> dict | None:
@@ -687,14 +692,17 @@ class Sessions:
         os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, "mcp.json")
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"mcpServers": {k: {"type": "stdio", **v} for k, v in self._servers(rec).items()}}, f)
+            json.dump({"mcpServers": self._servers(rec)}, f)
         return ["--mcp-config", path]
 
     def _codex_mcp(self, rec: dict) -> list[str]:
         out = []
         for k, v in self._servers(rec).items():
-            out += ["-c", f"mcp_servers.{k}.command=" + json.dumps(v["command"]),
-                    "-c", f"mcp_servers.{k}.args=" + json.dumps(v["args"])]
+            if v.get("type") == "http":   # Codex reaches a Streamable HTTP server by its url (codex mcp add --url)
+                out += ["-c", f"mcp_servers.{k}.url=" + json.dumps(v["url"])]
+            else:
+                out += ["-c", f"mcp_servers.{k}.command=" + json.dumps(v["command"]),
+                        "-c", f"mcp_servers.{k}.args=" + json.dumps(v["args"])]
         return out
 
     def _connect_brain(self, rec: dict) -> None:
@@ -760,7 +768,8 @@ class Sessions:
                worktree: bool = False, brain: bool = True, parent: str = "", brief: bool = False,
                repo: str = "", host: str = "local", remote: bool | None = None, document: bool = False,
                level: str = "", model: str = "", role: str = "", access: str = "", extra_dirs: list | None = None,
-               os_sandbox: bool = False, secrets: list | None = None, sandbox: str = "", expert: str = "") -> dict:
+               os_sandbox: bool = False, secrets: list | None = None, sandbox: str = "", expert: str = "",
+               mcps: list | None = None, first: str = "") -> dict:
         if expert:   # Loop 44: launched as an expert: its secrets go with it (those the vault holds)
             e = self.experts.expert(expert)
             if tool not in ("claude", "codex"):
@@ -810,7 +819,8 @@ class Sessions:
         self.store.update(rec["id"], level=level, model=model, role=role, access=self.access_for(access or self._group_access(grp), parent),
                           extra_dirs=json.dumps(self._clean_dirs(extra_dirs or [])),
                           os_sandbox=int(self.os_sandbox_for(os_sandbox, parent)),
-                          secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert)
+                          secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert,
+                          mcps=json.dumps(self._clean_mcps(mcps)))
         rec = self.store.get(rec["id"])
         if remote is None:  # not said: a child follows its parent (the orchestrator's children too), else no
             remote = bool(parent and (self.store.get(parent) or {}).get("remote_control"))
@@ -827,6 +837,13 @@ class Sessions:
             if last:  # the first message: read the latest summary of this folder (a small prompt, owner-approved)
                 hint = " and search the Second Brain for this project if you need more" if self.store.get(rec["id"]).get("brain_client") else ""
                 cmd = cmd + [BRIEF_PROMPT.format(path=last[0]["path"], brain=hint)]
+        first = (first or "").strip()
+        if first and tool in ("claude", "codex"):
+            # Loop 49a: its first message, given by the owner (an MCP server's prompt, like /mcp__loop0__start "idea").
+            # It takes the place of the brief: a slash command must be the message's beginning.
+            if len(first) > 4000 or "\x00" in first:
+                raise ValueError("a first message of at most 4000 characters")
+            cmd = (cmd[:-1] if (cmd and cmd[-1].startswith("Context from earlier sessions")) else cmd) + [first]
         try:
             self.tmux.new_session(self.tmux_name(rec["id"]), cwd, self.with_secrets(rec["id"], cmd),
                                   env=self.session_env(rec["id"]), width=width, height=height)
@@ -834,6 +851,30 @@ class Sessions:
             self.store.delete(rec["id"])
             raise
         return self.get(rec["id"])
+
+    # ---------------------------------------------------------------- the owner's MCP servers (Loop 49a)
+    def _clean_mcps(self, names) -> list[str]:
+        known = self.mcp.names()
+        missing = [str(n) for n in (names or []) if str(n) not in known]
+        if missing:
+            raise ValueError("no MCP server named " + ", ".join(missing) + " in the list (🔌 MCP)")
+        return self.mcp.clean(names)
+
+    def mcps_of(self, sid: str, rec: dict | None = None) -> list[str]:
+        try:
+            return [str(x) for x in json.loads(((rec if rec is not None else self.store.get(sid)) or {}).get("mcps") or "[]")]
+        except ValueError:
+            return []
+
+    def set_mcps(self, sid: str, names: list) -> dict:
+        """The MCP servers ticked for this session, from its next start (a running agent keeps those it started with)."""
+        if not self.store.get(sid):
+            raise KeyError(sid)
+        clean = self._clean_mcps(names)
+        before = self.mcps_of(sid)
+        self.store.update(sid, mcps=json.dumps(clean))
+        self._log(sid, {"mcps": [before, clean]})
+        return {"id": sid, "mcps": clean, "from": "its next start"}
 
     # ---------------------------------------------------------------- secrets given to a session (Loop 39)
     def _clean_secrets(self, names: list) -> list[str]:
@@ -954,6 +995,7 @@ class Sessions:
                 "access": self.access_of(rec), "extra_dirs": self.extra_dirs(rec),
                 "os_sandbox": bool(rec.get("os_sandbox")),
                 "secrets": self.secrets_of(rec["id"], rec),
+                "mcps": self.mcps_of(rec["id"], rec),
                 "remote_control": bool(rec.get("remote_control")),
                 "repo_name": self._repo_name(rec.get("repo_id", "")),
                 "host": "sandbox" if sb_info else "local",
