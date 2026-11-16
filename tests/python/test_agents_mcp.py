@@ -58,6 +58,26 @@ class AgentsMcpTest(unittest.TestCase):
         (refused,) = self.mcp([("send_to_session", {"id": self.other["id"], "text": "rm -rf ~"})])
         self.assertIn("only write to sessions you started", refused["error"])
 
+    def test_restart_session_brings_back_an_ended_session_but_never_cuts_one_that_runs(self):
+        # owner, 2026-11-16: « ok pour l'outil restart_session pour toutes les sessions. Mais on garde le contrôle »
+        busy, = self.mcp([("restart_session", {"id": self.other["id"]})])
+        self.assertIn("running", busy["error"])                                 # running: never touched
+        self.s.stop(self.other["id"])
+        self.assertEqual(self.s.get(self.other["id"])["state"], "missing")
+        back, = self.mcp([("restart_session", {"id": self.other["id"]})])        # not its child: the owner's too
+        self.assertEqual(back["state"], "running")
+        seen = self.s.get(self.other["id"])["revived"]
+        self.assertEqual((seen["by"], seen["by_name"]), (self.parent["id"], "Lead"))   # it says who brought it back
+        self.s.stop(self.other["id"])
+        outside, = self.mcp([("restart_session", {"id": self.other["id"]})], me="")
+        self.assertIn("only a session of Agent Manager", outside["error"])
+        self.s.store.update(self.other["id"], archived=1)
+        archived, = self.mcp([("restart_session", {"id": self.other["id"]})])
+        self.assertIn("archived", archived["error"])
+        self.s.store.update(self.other["id"], archived=0)
+        self.s.restart(self.other["id"])                                        # the owner starts it: the mark goes
+        self.assertIsNone(self.s.get(self.other["id"])["revived"])
+
     def test_an_outside_tool_looks_and_starts_but_never_types(self):
         listed, started = self.mcp([("list_sessions", {}), ("start_session", {"name": "From outside", "tool": "shell", "cwd": self.tmp})], me="")
         self.assertEqual(listed["me"], "")

@@ -475,6 +475,9 @@ def make_handler(sessions: Sessions, token: str):
                                                                          opt("os_sandbox")))
                     if method == "GET" and action == "level":
                         return self._reply(200, {"log": sessions.level_log(sid)})
+                    if method == "POST" and action == "revive":   # restart_session (MCP): checks in Sessions.revive
+                        b = self._body()
+                        return self._reply(200, sessions.revive(sid, str(b.get("by", "")), bool(b.get("fresh", False))))
                     if method == "POST" and action == "resume":
                         return self._reply(200, sessions.resume(sid, str(self._body().get("conversation", ""))))
                     if method == "POST" and action == "fork":

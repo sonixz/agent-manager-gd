@@ -5,6 +5,12 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Agents can bring back a session that has ended
+- A new tool in Agent Manager's MCP server, `restart_session`, starts again a session that has ended or is gone (any
+  session, yours too), on its own conversation so nothing is lost, or a fresh one. You keep control: a session that
+  runs is never stopped nor restarted by an agent, an archived one stays archived, only a session of Agent Manager can
+  ask, and the session's header says which session brought it back, and when.
+
 ### Fix: new cloud machines run the image last built
 - Every build of the image was pushed under the same label (v1), and new machines kept getting the very first one
   (seen on a machine made after a rebuild: the image of Loop 12, without the door). Each build now has its own label
