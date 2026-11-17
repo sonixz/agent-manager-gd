@@ -162,6 +162,7 @@ class Sessions:
         self._wrapping: dict = {}  # per engine (the class-level dict was shared by every instance in one process)
         self._pending_level: dict[str, bool] = {}  # session id -> a new level waits for the end of its turn (Loop 27)
         self._questions: dict[str, dict] = {}  # session id -> its pending question for the owner (ask_owner, finish_session)
+        self._revived: dict[str, dict] = {}    # session id -> which session brought it back (restart_session), and when
         self._conv_seen: dict[tuple, float] = {}  # (session id, conversation) -> when « seen now » was last written
         self._once = threading.local()  # what list() looks up once for everybody, in the thread that runs it
         self._answered: dict[str, tuple] = {}  # session id -> (wall time, monotonic time) of your answer from the app  # session id -> when you answered it (Approve, Refuse, a reply) from the app
@@ -991,6 +992,7 @@ class Sessions:
                 "brain_document": bool(rec.get("brain_client") and rec.get("brain_document")),
                 "level": rec.get("level") or "auto",
                 "level_pending": rec["id"] in self._pending_level,
+                "revived": self._revived.get(rec["id"]),
                 "git_rights": self.git_rights(rec),
                 "access": self.access_of(rec), "extra_dirs": self.extra_dirs(rec),
                 "os_sandbox": bool(rec.get("os_sandbox")),
@@ -1248,6 +1250,7 @@ class Sessions:
 
     def restart(self, sid: str) -> dict:
         """Starts the tool again in the same session (fresh conversation); recreates the tmux session if it is gone."""
+        self._revived.pop(sid, None)   # started again by the owner: no longer « brought back by » a session
         d = self.get(sid)
         cmd = self.command_for(d)
         there = self._in_sandbox(d)
@@ -1672,6 +1675,7 @@ class Sessions:
 
     def resume(self, sid: str, conversation: str = "") -> dict:
         """Starts the session again on its own conversation (the latest one unless told), so no context is lost."""
+        self._revived.pop(sid, None)
         d = self.get(sid)
         if d["tool"] == "shell":
             return self.restart(sid)
@@ -1683,6 +1687,27 @@ class Sessions:
             d = self.get(sid)
         self._launch(d, self.command_for(d, "resume", conv))
         return self.get(sid)
+
+    def revive(self, sid: str, by: str, fresh: bool = False) -> dict:
+        """restart_session (MCP): another session brings back one that has ended, any session, the owner's too.
+        The owner keeps control (owner, 2026-11-16: « ok pour l'outil restart_session pour toutes les sessions. Mais
+        on garde le contrôle »): only a session that has ended or is gone is started again, never one that runs
+        (its work is never cut); an archived one stays archived (the owner put it away); a session of Agent Manager
+        asks, never a tool from outside; and the session shows who brought it back, and when.
+        It starts again on its own conversation (no context lost), or a fresh one when asked."""
+        caller = self.store.get(by) if by else None
+        if not caller:
+            raise ValueError("only a session of Agent Manager can bring a session back")
+        if by == sid:
+            raise ValueError("a session cannot bring itself back")
+        d = self.get(sid)
+        if d["state"] == "archived":
+            raise ValueError("this session is archived: the owner put it away, only the owner brings it back")
+        if d["state"] == "running":
+            raise ValueError("this session is running: it is never stopped nor restarted by another session, only by the owner")
+        out = self.restart(sid) if fresh or d["tool"] == "shell" else self.resume(sid)
+        self._revived[sid] = {"by": by, "by_name": caller.get("name", ""), "at": time.time(), "fresh": bool(fresh or d["tool"] == "shell")}
+        return {**out, "revived": self._revived[sid]}
 
     def fork(self, sid: str, name: str = "", conversation: str = "") -> dict:
         """A new session continuing a copy of this session's conversation (same tool, folder and group)."""

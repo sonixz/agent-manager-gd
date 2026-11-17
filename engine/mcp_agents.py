@@ -60,6 +60,8 @@ TOOLS = [
     {"name": "expose_machine", "description": "Asks the owner to bind one port of YOUR machine to its public URL (https://<its app>.fly.dev → that port, HTTPS by Fly.io). Waits for the answer. Test it first on the owner's localhost (Tunnel and ports). The service may listen on 127.0.0.1.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "port": {"type": "integer", "description": "the port inside the machine"}, "timeout_s": {"type": "integer", "minimum": 10, "maximum": 900}}, "required": ["id"]}},
     {"name": "unexpose_machine", "description": "Unbinds YOUR machine's public URL at once (its addresses given back: nothing of it is reachable from the internet).", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+    {"name": "restart_session", "description": "Brings back a session that has ended or is gone (any session, the owner's too), on its own conversation so nothing is lost, or a fresh one with fresh: true. Never a session that is running (its work is never cut) nor an archived one: those are the owner's. The session then shows that you brought it back.",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "fresh": {"type": "boolean", "description": "a new conversation instead of its own"}}, "required": ["id"]}},
     {"name": "send_to_session", "description": "Types a message into one of YOUR child sessions and presses Enter.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]}},
     {"name": "wait_for_session", "description": "Waits until a session stops working (done, waiting for an answer or an OK, ended), then returns its state and screen.",
@@ -195,6 +197,11 @@ def run_tool(eng, name, a):
         return r if "error" in r else {"experts": [{"name": e["name"], "title": e.get("title", ""), "tool": e.get("tool", ""),
                                                     "skills": e.get("skills", []), "secrets": e.get("secrets", []),
                                                     "role": str(e.get("context", ""))[:300]} for e in r.get("experts", [])]}
+    if name == "restart_session":
+        if not eng.me:
+            return {"error": "only a session of Agent Manager can bring a session back"}
+        r = eng.call("POST", f"/sessions/{sid}/revive", {"by": eng.me, "fresh": bool(a.get("fresh", False))})
+        return r if "error" in r else {**eng.brief(r), "revived": r.get("revived")}
     if name == "send_to_session":
         target = eng.call("GET", f"/sessions/{sid}")
         if "error" in target:
@@ -245,7 +252,7 @@ def handle(eng, msg):
         return {"jsonrpc": "2.0", "id": mid, "result": {
             "protocolVersion": msg.get("params", {}).get("protocolVersion", PROTOCOL),
             "capabilities": {"tools": {}}, "serverInfo": {"name": "agent-manager", "title": "Agent Manager GD", "version": "0.1"},
-            "instructions": "Sessions of Agent Manager GD. Look at any session; start child sessions and write only to them."}}
+            "instructions": "Sessions of Agent Manager GD. Look at any session; start child sessions and write only to them; bring back a session that has ended (restart_session), never one that runs."}}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": mid, "result": {}}
     if method == "tools/list":

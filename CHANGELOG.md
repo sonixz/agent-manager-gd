@@ -5,6 +5,23 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Agents can bring back a session that has ended
+- A new tool in Agent Manager's MCP server, `restart_session`, starts again a session that has ended or is gone (any
+  session, yours too), on its own conversation so nothing is lost, or a fresh one. You keep control: a session that
+  runs is never stopped nor restarted by an agent, an archived one stays archived, only a session of Agent Manager can
+  ask, and the session's header says which session brought it back, and when.
+
+### Fix: new cloud machines run the image last built
+- Every build of the image was pushed under the same label (v1), and new machines kept getting the very first one
+  (seen on a machine made after a rebuild: the image of Loop 12, without the door). Each build now has its own label
+  and new machines run the latest. An image built before this fix shows as outdated in ☁ Cloud: rebuild it once.
+
+### Fix: binding a machine's port when its door had stopped
+- A machine made after the image's rebuild could say « this machine's image has no door » when its port was bound to
+  its public URL: the door (port 8443) was in the image but not running. Binding now starts it again; « no door » is
+  said only when the image really lacks it, and a door that will not stay up says why (its log on the machine,
+  `/var/log/agmgd_door.log`, written from the next image rebuild on).
+
 ### Fix: the session list follows at once (closed sessions leave, new ones appear)
 - The list took 7 to 15 seconds to answer with sessions on connected repositories: to show each one's repository
   name, the engine read its folder with two git commands, every 2 seconds. A closed session stayed long after, a new

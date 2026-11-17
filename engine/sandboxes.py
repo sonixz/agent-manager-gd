@@ -16,6 +16,7 @@ import json
 import os
 import re
 import secrets
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -103,14 +104,34 @@ DOOR_FILES = ("/data/.agmgd/door", "/var/lib/agmgd/door")
 RESERVED_PORTS = (22, 2222, DOOR_PORT, 8765)   # SSH (Fly's, ours), the door itself, the way back to the Brain
 
 
+DOOR_BIN = "/usr/local/bin/agmgd-door"
+DOOR_LOG = "/var/log/agmgd_door.log"
+
+
+def door_start(door_bin: str = DOOR_BIN, log: str = DOOR_LOG) -> str:
+    """The shell lines that make sure the door runs, and say how it is: DOOR-RUNS; DOOR-DIED (the image has it but it
+    does not stay up: its log says why); NO-DOOR (an image built before Loop 48). The door is started again when it
+    is not running: on a small machine it may have been stopped (owner, 2026-11-15: a machine made after the rebuild
+    said « no door »)."""
+    q = shlex.quote
+    # the door's path is never written whole in this command: `pgrep -f` would find the shell that runs it
+    name = os.path.basename(door_bin)
+    pat = q(f"[{name[0]}]{name[1:]}")
+    head, tail = door_bin[:-4], door_bin[-4:]
+    return (f"d={q(head)}; d=\"$d\"{q(tail)}; "
+            f"if ! pgrep -f {pat} >/dev/null && [ -f \"$d\" ]; then "
+            f"(nohup python3 \"$d\" >>{q(log)} 2>&1 </dev/null &); sleep 1; fi; "
+            f"if pgrep -f {pat} >/dev/null; then echo DOOR-RUNS; "
+            f"elif [ -f \"$d\" ]; then echo DOOR-DIED; tail -n 5 {q(log)} 2>/dev/null; else echo NO-DOOR; fi")
+
+
 def door_command(port: int) -> str:
     """The shell command that sets a machine's door toward `port` (0: closed), and says whether the door runs."""
     if port:
         write = (f"mkdir -p /var/lib/agmgd && echo {int(port)} > /var/lib/agmgd/door && "
                  f"if [ -d /data ]; then mkdir -p /data/.agmgd && echo {int(port)} > /data/.agmgd/door; fi")
-    else:
-        write = "rm -f " + " ".join(DOOR_FILES)
-    return f"{write}; pgrep -f '[a]gmgd-door' >/dev/null && echo DOOR-RUNS || echo NO-DOOR"
+        return f"{write}; {door_start()}"
+    return "rm -f " + " ".join(DOOR_FILES) + "; echo DOOR-CLOSED"
 VOLUME_GB_MONTH = 0.15   # Fly.io's published price of a volume, per GB and month (docs.fly.io/about/pricing)
 MAX_SESSIONS_PER_SANDBOX = 8   # the first one and seven added: each runs an agent on the same machine
 # What our image holds (sandbox/Dockerfile): shown before the owner deploys it
@@ -271,11 +292,14 @@ class Sandboxes:
                 shutil.copy(os.path.join(IMAGE_DIR, name), tmp)
             with open(os.path.join(tmp, "fly.toml"), "w", encoding="utf-8") as f:
                 f.write(f'app = "{app}"\nprimary_region = "{region}"\n\n[build]\n  dockerfile = "Dockerfile"\n')
-            rc, out = self.fly.run("deploy", "--build-only", "--push", "--remote-only", "--app", app, "--image-label", "v1",
+            # each build its own label (owner, 2026-11-15: a machine made after a rebuild still had the image of Loop 12:
+            # every build was pushed as « v1 » and new machines kept getting the first one)
+            label = f"v{IMAGE_VERSION}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime())}"
+            rc, out = self.fly.run("deploy", "--build-only", "--push", "--remote-only", "--app", app, "--image-label", label,
                                    "--config", os.path.join(tmp, "fly.toml"), cwd=tmp, timeout=1800)
         if rc != 0:
             raise ValueError("the image did not build: " + out[-300:])
-        self.set_config("image", f"registry.fly.io/{app}:v1")
+        self.set_config("image", f"registry.fly.io/{app}:{label}")
         self.set_config("image_built", str(time.time()))
         self.set_config("image_version", str(IMAGE_VERSION))
         return self.status()
@@ -495,6 +519,9 @@ class Sandboxes:
             if "NO-DOOR" in out:
                 raise ValueError("this machine's image has no door (built before Loop 48): rebuild the image in ☁ Cloud, "
                                  "then make a new machine")
+            if "DOOR-DIED" in out:
+                said = out.split("DOOR-DIED", 1)[1].strip()[-300:]
+                raise ValueError(f"the door would not start on this machine ({DOOR_LOG} there)" + (": " + said if said else ""))
             self._set(sbid, port=port)
         return self.expose(sbid, True, _door_set=True)
 
@@ -665,7 +692,9 @@ class Sandboxes:
         built = float(self.config("image_built", "0") or 0)
         return {"name": "Agent Manager sandbox image", "recipe": "sandbox/Dockerfile", "contents": [list(c) for c in IMAGE_CONTENTS],
                 "ready": bool(self.config("image")), "built": built, "image": self.config("image"),
-                "outdated": bool(self.config("image")) and int(self.config("image_version", "1") or 1) < IMAGE_VERSION,
+                # an image still labelled « v1 » was pushed under the label every build reused: new machines may get an older one
+                "outdated": bool(self.config("image")) and (int(self.config("image_version", "1") or 1) < IMAGE_VERSION
+                                                            or str(self.config("image")).endswith(":v1")),
                 "build_note": "Fly builds it in your organisation's private registry, about 2 minutes, once"}
 
     def sizes(self) -> dict:

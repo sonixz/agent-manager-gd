@@ -2094,6 +2094,9 @@ func _render_header() -> void:
 			meta += "  ·  ⎇ " + str(s["branch"])
 		if str(s.get("tool", "")) != "shell":
 			meta += "  ·  " + str(LEVELS.get(str(s.get("level", "auto")), LEVELS["auto"])[0]).get_slice(" (", 0).to_lower()
+	if s and s.get("revived") is Dictionary:   # restart_session: which session brought it back, and when
+		var rv: Dictionary = s["revived"]
+		meta += "  ·  ↻ brought back by « %s » at %s" % [str(rv.get("by_name", "a session")), Time.get_time_string_from_unix_time(int(float(rv.get("at", 0))) + int(Time.get_time_zone_from_system().get("bias", 0)) * 60).left(5)]
 	header_meta.text = meta
 	var look := SessionCard.brain_look(brain_info(str(s.get("id", ""))), s and str(s.get("tool", "")) != "shell")
 	header_brain.visible = s and look[0] != ""

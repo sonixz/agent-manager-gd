@@ -425,6 +425,7 @@
           <tr><td><code>stop_machine</code>, <code>start_machine</code>, <code>unexpose_machine</code>, <code>machine_status</code></td><td>pause, start again (within the budget), unbind its public URL, read one machine or a request</td><td>its own machines, at once</td></tr>
           <tr><td><code>list_experts</code></td><td>the experts: what they know, the tool, the secrets they need</td><td>the owner's experts</td></tr>
           <tr><td><code>start_session</code></td><td>a child session: Claude Code, Codex or a shell; with <code>sandbox</code>, on that cloud sandbox's machine (never a new machine); with <code>expert</code>, as that expert (its secrets only if the parent holds them)</td><td>new, shown « ↳ parent »</td></tr>
+          <tr><td><code>restart_session</code></td><td>bring back a session that has ended or is gone, on its own conversation (or a fresh one with <code>fresh</code>); the session's header then says « ↻ brought back by » that session, and when</td><td>any session, yours too; never one that runs nor an archived one</td></tr>
           <tr><td><code>send_to_session</code></td><td>write to a session</td><td>its own children only</td></tr>
           <tr><td><code>wait_for_session</code></td><td>until a child is done or waits</td><td>its own children only</td></tr>
         </table>
