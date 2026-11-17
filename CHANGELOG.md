@@ -5,6 +5,14 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Your MCP servers (Loop 49a)
+- ⌁ MCP, in the top bar: add an MCP server once, by its address (HTTPS) or by the command that starts it, and Test it
+  to see whether it answers, its tools and prompts, and how fast. Each one is a drawn card.
+- New session has a box per server and a First message: tick loop0, write `/mcp__loop0__start "my idea"`, and the
+  agent starts with the server connected and on its prompt. A server can also go to every agent session.
+- A slash command as the first message is typed once Claude Code is ready: on its command line, it came too early and
+  Claude Code answered « Unknown command ».
+
 ### Agents can bring back a session that has ended
 - A new tool in Agent Manager's MCP server, `restart_session`, starts again a session that has ended or is gone (any
   session, yours too), on its own conversation so nothing is lost, or a fresh one. You keep control: a session that

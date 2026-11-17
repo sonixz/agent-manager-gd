@@ -142,6 +142,6 @@ class Card extends Control:
 			var f := clampf(ms / 1000.0, 0.03, 1.0)
 			var gcol := AmTheme.col("MINT") if ms < 300.0 else (AmTheme.col("WARN") if ms < 1000.0 else AmTheme.col("ERROR"))
 			draw_arc(gc, 24.0, PI, PI + PI * f, 24, gcol, 5.0, true)
-			draw_string(bold, gc + Vector2(-gauge_w / 2.0, 2.0), "%d ms" % int(ms), HORIZONTAL_ALIGNMENT_CENTER, gauge_w, 12, ink)
+			draw_string(bold, gc + Vector2(-gauge_w / 2.0, 17.0), "%d ms" % int(ms), HORIZONTAL_ALIGNMENT_CENTER, gauge_w, 12, ink)
 		else:
-			draw_string(font, gc + Vector2(-gauge_w / 2.0, 2.0), "—", HORIZONTAL_ALIGNMENT_CENTER, gauge_w, 12, faint)
+			draw_string(font, gc + Vector2(-gauge_w / 2.0, 17.0), "—", HORIZONTAL_ALIGNMENT_CENTER, gauge_w, 12, faint)

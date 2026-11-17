@@ -70,6 +70,7 @@
         <a href="#repos">Repositories and their keys</a>
         <a href="#remote-control">Remote Control</a>
         <a href="#sandboxes">Cloud machines and costs</a>
+        <a href="#mcp-servers">Your MCP servers</a>
         <a href="#online">A public URL per machine</a>
         <a href="#experts">Experts</a>
         <p class="group">Reference</p>
@@ -443,6 +444,34 @@
         <p>No tool presses keys in someone else's session: an agent never approves on another's behalf.
           <b>◐ › Connect other tools</b> gives the command to plug the same server into Claude Code, Codex or any MCP
           client outside the app; such a tool can list, read and start sessions, never type into one or approve.</p>
+
+        <h2 id="mcp-servers">Your MCP servers</h2>
+        <p><b>⌁ MCP</b>, in the top bar, holds the MCP servers you add for your agents (Agent Manager's own two,
+          <code>agent-manager</code> and the Second Brain, are always there and not in this list). A server is added once:
+          by its address, over HTTPS (<code>https://…/mcp</code>, the MCP « Streamable HTTP » transport), or by the command
+          that starts it on this computer (<code>npx -y …</code>). <code>http://</code> is accepted only for a server on this
+          computer (<code>localhost</code>); an address with a login in it is refused: Agent Manager keeps no password in this list.</p>
+        <ul>
+          <li><b>Add a server</b>: a short name (agents see its tools as <code>mcp__&lt;name&gt;__…</code>), its address or
+            command, a note. A server on the internet asks for your confirmation first: what an agent asks it leaves this
+            computer. Adding sends nothing; it is tested once when you confirm.</li>
+          <li><b>Test</b> talks to it now: it starts an MCP session, then reads its tools and prompts. Its card shows the
+            answer: a plug lit green with ✓ when it answered, red with ✗ and the reason when it did not, grey with ? when it
+            was never tested; a globe for a server on the internet, a house for one on this computer; a bead per tool, a
+            triangle per prompt; a chip per session that has it (filled when that session runs); how fast it answered.
+            A server started by a command is tested when a session starts it.</li>
+          <li><b>Every agent session</b> gives it to every Claude Code and Codex session from its next start;
+            <b>Give to a session…</b> ticks it for one session, from its next start (Restart it to give it now).</li>
+          <li><b>▶ Start a session with it…</b> opens New session with the server ticked and, when it offers a prompt
+            to begin (<code>start</code>), that prompt as the <b>First message</b>.</li>
+          <li><b>New session</b> has a box per server under <b>MCP servers</b>, and a <b>First message</b>: what the agent
+            starts with, for example <code>/mcp__loop0__start "a habit tracker for my team"</code>. Claude Code calls an MCP
+            server's prompt <code>/mcp__&lt;server&gt;__&lt;prompt&gt;</code> (its menu shows it as <code>loop0:start</code>).
+            Such a command is typed once Claude Code has started and its servers are connected: given on its command line,
+            Claude Code read it too early and answered « Unknown command ». Plain words are given at once.</li>
+          <li>Claude Code gets the servers in its MCP configuration; Codex gets a server over HTTP by its URL. Not on a cloud
+            machine yet.</li>
+        </ul>
 
         <h2 id="online">A public URL per machine</h2>
         <p>Every cloud machine (ours, on Fly.io) made since Loop 48 can serve the internet, when you decide. It is made

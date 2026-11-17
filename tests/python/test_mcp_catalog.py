@@ -166,6 +166,38 @@ class SessionsGetTheirServersTest(unittest.TestCase):
         self.s.restart(without["id"])
         self.assertIn("loop0", self.config(without["id"]))
 
+    def test_an_mcp_prompt_as_first_message_is_typed_once_the_servers_are_there(self):
+        # Claude Code reads a command-line prompt before its MCP servers connect: « Unknown command » (seen 2026-11-16).
+        slow = os.path.join(self.tmp, "bin", "claude")
+        with open(slow, "w") as f:
+            f.write("""#!/usr/bin/env python3
+import json, os, sys, time
+start = time.monotonic()
+print("ARGS", sys.argv[1:], flush=True)
+time.sleep(0.5)
+os.makedirs(os.path.join(os.environ["AGMGD_HOME"], "state"), exist_ok=True)
+with open(os.path.join(os.environ["AGMGD_HOME"], "state", os.environ["AGMGD_SESSION"] + ".json"), "w") as f:
+    json.dump({"state": "idle", "time": time.time()}, f)
+for line in sys.stdin:
+    if time.monotonic() - start < 3.0:
+        print("Unknown command: " + line.split()[0], flush=True)
+    else:
+        print("RAN " + line.strip(), flush=True)
+""")
+        os.chmod(slow, 0o755)
+        self.s.FIRST_SETTLE_S, self.s.FIRST_RETRY_S = 0.3, 0.8
+        d = self.s.create("Idea", "claude", self.tmp, mcps=["loop0"], first='/mcp__loop0__start "a habit tracker"')
+        end = time.monotonic() + 15
+        while "RAN" not in self.s.preview(d["id"], 40) and time.monotonic() < end:
+            time.sleep(0.2)
+        screen = self.s.preview(d["id"], 40)
+        self.assertNotIn("mcp__loop0__start", screen.split("ARGS")[1].splitlines()[0])   # not on its command line
+        self.assertIn('RAN /mcp__loop0__start "a habit tracker"', screen)               # typed once it was ready
+        self.assertEqual(screen.count("RAN "), 1)                                       # and not again after
+        plain = self.s.create("Plain", "claude", self.tmp, first="Read the README")
+        time.sleep(0.6)
+        self.assertIn("Read the README", self.s.preview(plain["id"], 40).split("ARGS")[1].splitlines()[0])   # words: on its command line
+
     def test_given_to_every_session_and_codex_reaches_it_by_its_url(self):
         self.s.mcp.set_everywhere("loop0", True)
         d = self.s.create("Codex", "codex", self.tmp)

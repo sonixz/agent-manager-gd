@@ -844,16 +844,60 @@ class Sessions:
             # It takes the place of the brief: a slash command must be the message's beginning.
             if len(first) > 4000 or "\x00" in first:
                 raise ValueError("a first message of at most 4000 characters")
-            cmd = (cmd[:-1] if (cmd and cmd[-1].startswith("Context from earlier sessions")) else cmd) + [first]
+            cmd = cmd[:-1] if (cmd and cmd[-1].startswith("Context from earlier sessions")) else cmd
+            if not (tool == "claude" and first.startswith("/")):
+                cmd = cmd + [first]
         try:
             self.tmux.new_session(self.tmux_name(rec["id"]), cwd, self.with_secrets(rec["id"], cmd),
                                   env=self.session_env(rec["id"]), width=width, height=height)
         except Exception:
             self.store.delete(rec["id"])
             raise
+        if first and tool == "claude" and first.startswith("/"):
+            threading.Thread(target=self._first_when_ready, args=(rec["id"], first), daemon=True).start()
         return self.get(rec["id"])
 
     # ---------------------------------------------------------------- the owner's MCP servers (Loop 49a)
+    FIRST_READY_S = 120.0   # how long to wait for the agent to start (its folder may ask to be trusted first)
+    FIRST_SETTLE_S = 4.0    # then a little more: its MCP servers connect after it starts
+    FIRST_RETRY_S = 3.0
+    FIRST_TRIES = 8
+
+    def _first_when_ready(self, sid: str, text: str) -> None:
+        """A first message that is a slash command (an MCP server's prompt, /mcp__loop0__start "idea") is typed once
+        Claude Code is ready, not given on its command line: given there, Claude Code reads it before its MCP servers
+        have connected and answers « Unknown command » (seen with Claude Code 2.1.326, 2026-11-16). Typed again a few
+        seconds later while it still answers that, a few times at most."""
+        end = time.monotonic() + self.FIRST_READY_S
+        while time.monotonic() < end:
+            try:
+                if self.get(sid)["state"] != "running":
+                    return
+            except KeyError:
+                return
+            if self.hook_state(sid).get("state"):   # its SessionStart hook: started, past « trust this folder? »
+                break
+            time.sleep(0.5)
+        else:
+            return   # never started (its folder still waits to be trusted?): nothing is typed into a question
+        time.sleep(self.FIRST_SETTLE_S)
+        command = text.split()[0]
+        for _ in range(self.FIRST_TRIES):
+            try:
+                seen = self._screen_tail(sid).count("Unknown command: " + command)
+                self.send(sid, text)
+            except (KeyError, ValueError):
+                return
+            time.sleep(self.FIRST_RETRY_S)
+            if self._screen_tail(sid).count("Unknown command: " + command) <= seen:
+                return
+
+    def _screen_tail(self, sid: str) -> str:
+        try:
+            return self.tmux.capture(self.tmux_name(sid), 40)
+        except Exception:
+            return ""
+
     def _clean_mcps(self, names) -> list[str]:
         known = self.mcp.names()
         missing = [str(n) for n in (names or []) if str(n) not in known]
