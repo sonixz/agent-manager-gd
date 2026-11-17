@@ -5,6 +5,12 @@ Newest first.
 
 ## Unreleased: alpha
 
+### Experts that bring their MCP servers (Loop 49c)
+- An expert can start with MCP servers from ⌁ MCP, ticked in its editor and shown as chips on its card; launched, the
+  session has them ticked. An expert whose server is gone says so and waits.
+- Add the Loop 0 expert, offered when a server named loop0 is in ⌁ MCP: an expert made of that server rather than
+  skills.
+
 ### MCP servers on cloud machines (Loop 49b)
 - A session on a cloud machine gets the MCP servers ticked for it, and those for every agent session, when they are
   on the internet; each session of the machine has its own. A server on this computer stays behind, and New session

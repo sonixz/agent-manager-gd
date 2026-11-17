@@ -95,9 +95,10 @@ def make_handler(sessions: Sessions, token: str):
                     b = self._body()
                     return self._reply(200, sessions.experts.save(str(b.get("name", "")), str(b.get("title", "")), str(b.get("context", "")),
                                                                   [str(x) for x in b.get("skills") or []], [str(x) for x in b.get("secrets") or []],
-                                                                  str(b.get("tool", "claude")), str(b.get("model", "")), str(b.get("glyph", "◆"))))
+                                                                  str(b.get("tool", "claude")), str(b.get("model", "")), str(b.get("glyph", "◆")),
+                                                                  sessions._clean_mcps([str(x) for x in b.get("mcps") or []])))
                 if parts == ["experts", "starters"] and method == "POST":
-                    return self._reply(200, sessions.experts.add_starters())
+                    return self._reply(200, sessions.experts.add_starters(sessions.mcp.names()))
                 if parts == ["experts", "root"] and method == "POST":
                     b = self._body()
                     rid = str(b.get("repo", ""))

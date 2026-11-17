@@ -4394,6 +4394,7 @@ var exp_box: VBoxContainer
 var exp_last := {}
 var exp_repos: Array = []
 var exp_secrets: Array = []
+var exp_mcps: Array = []        # Loop 49c: the names of the owner's MCP servers (⌁ MCP), for the experts' chips and editor
 var exp_tab := "experts"          # experts | skills
 var exp_launch := ""             # the expert whose launch panel is open
 var exp_edit := ""               # the expert being edited ("+" for a new one)
@@ -4427,6 +4428,8 @@ func _load_experts() -> void:
 	exp_repos = rr.get("repos", [])
 	var sr := await engine.call_api("GET", "/secrets")
 	exp_secrets = (sr.get("secrets", []) as Array).map(func(x: Dictionary) -> String: return str(x.get("name", "")))
+	var mr := await engine.call_api("GET", "/mcp")
+	exp_mcps = (mr.get("servers", []) as Array).map(func(x: Dictionary) -> String: return str(x.get("name", "")))
 	_render_experts()
 
 
@@ -4518,6 +4521,11 @@ func _render_expert_cards(r: Dictionary) -> void:
 		row.add_child(_small("Add Anthropic's skills…", func() -> void:
 			exp_tab = "skills"
 			_render_experts()))
+	if "loop0" in exp_mcps and not experts.any(func(x: Dictionary) -> bool: return str(x["name"]) == "loop0"):
+		row.add_child(_small("Add the Loop 0 expert", func() -> void:   # Loop 49c: an expert made of an MCP server
+			var d := await engine.call_api("POST", "/experts/starters", {})
+			_toast("Made: " + (", ".join(d.get("made", [])) if not (d.get("made", []) as Array).is_empty() else "none (it is there already)"))
+			await _load_experts(), "An expert that works with the Loop 0 method through your loop0 server (⌁ MCP): it starts with it connected. Never overwrites an expert."))
 	if exp_edit != "":
 		exp_box.add_child(_expert_editor(r, by))
 	var grid := GridContainer.new()
@@ -4565,6 +4573,8 @@ func _expert_card(e: Dictionary, by: Dictionary) -> Control:
 		chips.add_child(_chip(str(k).get_slice("/", 1), true if known else false))
 	for sname in e.get("secrets", []):
 		chips.add_child(_chip("⚷ " + str(sname), true if str(sname) in exp_secrets else "warn"))
+	for m in e.get("mcps", []):   # Loop 49c: the MCP servers it starts with
+		chips.add_child(_chip("⌁ " + str(m), true if str(m) in exp_mcps else "warn"))
 	var mem: Dictionary = exp_last.get("memory", {}).get(name, {})   # Loop 45: what it learned, in the Second Brain
 	if exp_last.has("memory"):
 		var ml := _muted(("◉ %d lesson%s in the Second Brain" % [int(mem.get("lessons", 0)), "s" if int(mem.get("lessons", 0)) != 1 else ""]) +
@@ -4648,6 +4658,13 @@ func _expert_launch(e: Dictionary) -> Control:
 	r2.add_child(_muted("name"))
 	r2.add_child(nm)
 	var missing: Array = (e.get("secrets", []) as Array).filter(func(x) -> bool: return not (str(x) in exp_secrets))
+	var no_server: Array = (e.get("mcps", []) as Array).filter(func(x) -> bool: return not (str(x) in exp_mcps))
+	if not no_server.is_empty():
+		var ws := _wrap("It starts with MCP servers not in ⌁ MCP yet: %s. Add them there first." % ", ".join(no_server))
+		ws.add_theme_color_override("font_color", AmTheme.col("WARN"))
+		v.add_child(ws)
+	elif not (e.get("mcps", []) as Array).is_empty():
+		v.add_child(_muted("It starts with its MCP servers: " + ", ".join(e["mcps"])))
 	if not missing.is_empty():
 		var w := _wrap("It needs secrets not in Keys › Secrets yet: %s. Add them there first." % ", ".join(missing))
 		w.add_theme_color_override("font_color", AmTheme.col("WARN"))
@@ -4761,6 +4778,18 @@ func _expert_editor(r: Dictionary, by: Dictionary) -> Control:
 	extra.placeholder_text = "or names not in the vault yet: DISCORD_BOT_TOKEN, …"
 	extra.text = ", ".join(want.filter(func(x) -> bool: return not (str(x) in exp_secrets)))
 	v.add_child(extra)
+	v.add_child(_muted("The MCP servers it starts with (from ⌁ MCP):"))
+	var mp := HFlowContainer.new()
+	mp.add_theme_constant_override("h_separation", 10)
+	v.add_child(mp)
+	var want_m: Array = editing.get("mcps", [])
+	for n in exp_mcps:
+		var cb := CheckBox.new()
+		cb.text = n
+		cb.button_pressed = n in want_m
+		mp.add_child(cb)
+	if exp_mcps.is_empty():
+		mp.add_child(_muted("None yet: add servers in ⌁ MCP."))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	v.add_child(row)
@@ -4776,8 +4805,12 @@ func _expert_editor(r: Dictionary, by: Dictionary) -> Control:
 		for x in extra.text.split(",", false):
 			if x.strip_edges() != "":
 				sec.append(x.strip_edges().to_upper())
+		var ms := []
+		for c in mp.get_children():
+			if c is CheckBox and (c as CheckBox).button_pressed:
+				ms.append((c as CheckBox).text)
 		var d := await engine.call_api("POST", "/experts", {"name": name.text.strip_edges(), "title": title.text.strip_edges(), "glyph": glyph.text.strip_edges(),
-			"tool": str(tool.get_selected_metadata()), "model": model.text.strip_edges(), "context": ctx.text, "skills": sk, "secrets": sec})
+			"tool": str(tool.get_selected_metadata()), "model": model.text.strip_edges(), "context": ctx.text, "skills": sk, "secrets": sec, "mcps": ms})
 		if d.has("error"):
 			_toast(str(d["error"]))
 			return

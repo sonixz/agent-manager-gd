@@ -1600,6 +1600,17 @@ for i in range(600):
 			await wait(0.8)
 			report.append("mcp: New session on a cloud machine: words « %s », first message editable: %s" % [main.f_mcps_words.text, main.f_first.editable])
 			await shot("mcp-cloud")
+			main.new_dialog.hide()
+			# Loop 49c: the Loop 0 expert, made of the loop0 server, starts with it connected
+			var st: Dictionary = await main.engine.call_api("POST", "/experts/starters", {})
+			main.set_view("experts")
+			await wait(2.5)
+			await main._load_experts()
+			main.exp_launch = "loop0"
+			main._render_experts()
+			await wait(1.2)
+			report.append("mcp: starters made: %s; Loop 0 expert drawn: %s" % [st.get("made", []), main.exp_box.find_child("Expert_loop0", true, false) != null])
+			await shot("experts-loop0")
 			OS.kill(fake)
 		"machine-request":  # Loop 46: an agent asks for a cloud machine; the owner decides in « They wait for you »
 			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})

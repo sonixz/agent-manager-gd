@@ -47,6 +47,13 @@ STARTERS = [
     {"name": "mcp-builder", "title": "MCP builder", "glyph": "⬢", "tool": "claude",
      "skills": ["anthropic/mcp-builder", "anthropic/skill-creator"],
      "context": "You build MCP servers and new skills in the Agent Skills format, small, tested and documented."},
+    # Loop 49c: an expert made of an MCP server rather than skills (owner, 2026-11-16: « caler un expert de Loop 0 »).
+    # Offered when a server named loop0 is in ⌁ MCP; its method comes from the server itself.
+    {"name": "loop0", "title": "Loop 0", "glyph": "∞", "tool": "claude", "skills": [], "mcps": ["loop0"],
+     "context": "You work with the Loop 0 method, through the loop0 MCP server: read its guide (the tool loop0_guide) before "
+                "you start. From an idea, its prompt start validates, develops, sets the standards and writes Loop 001; on a "
+                "repository, improve discovers it first; next carries the work over to the next mission. You build only "
+                "after the owner says go."},
 ]
 
 
@@ -371,6 +378,7 @@ class Experts:
             e["context"] = _read(ctx) if os.path.isfile(ctx) else ""
             e.setdefault("skills", [])
             e.setdefault("secrets", [])
+            e.setdefault("mcps", [])   # Loop 49c: the owner's MCP servers it starts with (⌁ MCP)
             e.setdefault("tool", "claude")
             e.setdefault("model", "")
             e.setdefault("title", name)
@@ -385,7 +393,7 @@ class Experts:
         return e
 
     def save(self, name: str, title: str, context: str, skills: list, secrets: list | None = None, tool: str = "claude",
-             model: str = "", glyph: str = "◆") -> dict:
+             model: str = "", glyph: str = "◆", mcps: list | None = None) -> dict:
         if not NAME_OK.match(name or ""):
             raise ValueError("a name of lowercase letters, digits and dashes (it is a folder)")
         if tool not in ("claude", "codex"):
@@ -397,11 +405,15 @@ class Experts:
         bad = [s for s in (secrets or []) if not SECRET_OK.match(str(s))]
         if bad:
             raise ValueError("secret names in capitals: " + ", ".join(bad))
+        bad = [m for m in (mcps or []) if not re.match(r"^[a-z0-9][a-z0-9_-]{0,39}$", str(m))]
+        if bad:
+            raise ValueError("MCP server names as in ⌁ MCP: " + ", ".join(bad))
         d = self._expert_dir(name)
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "expert.json"), "w", encoding="utf-8") as f:
             json.dump({"title": title.strip()[:60] or name, "glyph": (glyph or "◆")[:2], "tool": tool, "model": model[:60],
-                       "skills": list(dict.fromkeys(skills)), "secrets": list(dict.fromkeys(secrets or []))}, f, indent=2)
+                       "skills": list(dict.fromkeys(skills)), "secrets": list(dict.fromkeys(secrets or [])),
+                       "mcps": list(dict.fromkeys(str(m) for m in (mcps or [])))}, f, indent=2)
             f.write("\n")
         with open(os.path.join(d, "context.md"), "w", encoding="utf-8") as f:
             f.write(context.strip()[:20000] + "\n")
@@ -414,8 +426,9 @@ class Experts:
         shutil.rmtree(self._expert_dir(name), ignore_errors=True)
         return self.state()
 
-    def add_starters(self) -> dict:
-        """The three experts made of Anthropic's skills, those whose skills are in the library; never overwritten."""
+    def add_starters(self, servers: set | None = None) -> dict:
+        """The experts made of Anthropic's skills, those whose skills are in the library, and (Loop 49c) those made of an
+        MCP server, when that server is in ⌁ MCP (`servers`); never overwritten."""
         have = {e["name"] for e in self.experts()}
         known = {s["id"] for s in self.skills()}
         made = []
@@ -423,9 +436,10 @@ class Experts:
             if st["name"] in have:
                 continue
             skills = [k for k in st["skills"] if k in known]
-            if not skills:
+            mcps = [m for m in st.get("mcps", []) if m in (servers or set())]
+            if (st["skills"] and not skills) or (st.get("mcps") and not mcps):
                 continue
-            self.save(st["name"], st["title"], st["context"], skills, [], st["tool"], "", st["glyph"])
+            self.save(st["name"], st["title"], st["context"], skills, [], st["tool"], "", st["glyph"], mcps)
             made.append(st["name"])
         return {**self.state(), "made": made}
 
@@ -496,7 +510,9 @@ class Experts:
     def note(e: dict, brain: bool = False) -> str:
         names = ", ".join(k.split("/", 1)[-1] for k in e["skills"])
         out = (f"Agent Manager: you work as the expert « {e['title']} ». {e['context'].strip()}\n"
-               f"Your skills for this ({names}) are loaded: use them when the task matches."
+               + (f"Your skills for this ({names}) are loaded: use them when the task matches." if names else "")
+               + (" Your MCP servers: " + ", ".join(f"{m} (its tools are mcp__{m}__…)" for m in e.get("mcps", [])) + "."
+                  if e.get("mcps") else "")
                + (f" The secrets you need are in your environment: {', '.join(e['secrets'])} (never print them)." if e["secrets"] else ""))
         if brain:   # Loop 45: an expert's memory, from project to project, in the Second Brain
             out += (f"\nYour memory as this expert is in the Second Brain: before you start, search it for « Expert · {e['title']} » "

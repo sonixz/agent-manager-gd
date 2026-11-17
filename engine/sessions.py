@@ -784,6 +784,10 @@ class Sessions:
                     raise ValueError("this expert needs secrets your session was not given: " + ", ".join(beyond)
                                      + " (the owner launches it, or gives them to you first)")
             secrets = list(dict.fromkeys(list(secrets or []) + e["secrets"]))
+            gone = [m for m in e.get("mcps", []) if m not in self.mcp.names()]
+            if gone:   # Loop 49c: the expert's MCP servers come with it
+                raise ValueError("add these MCP servers in ⌁ MCP first: " + ", ".join(gone))
+            mcps = list(dict.fromkeys(list(mcps or []) + e.get("mcps", [])))
         if host == "sandbox":
             if parent and not sandbox:   # an agent never makes a machine (a cost): it may add a session to one
                 raise ValueError("an agent may add a session to an existing sandbox (sandbox), never make a new machine")

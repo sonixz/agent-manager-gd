@@ -214,6 +214,24 @@ class LaunchTest(unittest.TestCase):
         self.assertIn("You run Discord bots.", cmd[cmd.index("--append-system-prompt") + 1])
         self.assertFalse(any("t0ken" in a for a in cmd))             # a value never on a command line
 
+    def test_the_loop0_expert_comes_with_its_mcp_server(self):
+        # Loop 49c (owner, 2026-11-16: « Comment je peux plugger le MCP de Loop 0? Ou caler un expert de Loop 0 »)
+        self.assertNotIn("loop0", self.s.experts.add_starters(self.s.mcp.names())["made"])   # not without its server
+        self.s.mcp.add("loop0", url="https://loop0.example/mcp")
+        self.assertIn("loop0", self.s.experts.add_starters(self.s.mcp.names())["made"])
+        e = self.s.experts.expert("loop0")
+        self.assertEqual((e["skills"], e["mcps"], e["title"]), ([], ["loop0"], "Loop 0"))
+        d = self.s.create("Habits", "claude", self.work, expert="loop0", brain=False)
+        rec = self.s.store.get(d["id"])
+        self.assertEqual(self.s.mcps_of(d["id"]), ["loop0"])                       # ticked by the expert
+        self.assertEqual(self.s._servers(rec)["loop0"], {"type": "http", "url": "https://loop0.example/mcp"})
+        prompt = (lambda c: c[c.index("--append-system-prompt") + 1])(self.s.command_for(rec))
+        self.assertIn("loop0 (its tools are mcp__loop0__…)", prompt)
+        self.s.mcp.remove("loop0")
+        with self.assertRaises(ValueError) as gone:
+            self.s.create("Again", "claude", self.work, expert="loop0", brain=False)
+        self.assertIn("⌁ MCP", str(gone.exception))
+
     def test_codex_as_an_expert_gets_its_own_worktree(self):
         self.s.vault.set("DISCORD_BOT_TOKEN", "t0ken", "")
         d = self.s.create("Bot codex", "codex", self.work, expert="discord", brain=False)
