@@ -1592,6 +1592,14 @@ for i in range(600):
 			var ticked: Array = main._ticked_mcps()
 			report.append("mcp: New session from loop0: ticked %s, first message « %s », words « %s »" % [ticked, main.f_first.text, main.f_mcps_words.text])
 			await shot("mcp-new-session")
+			main.f_where.select(1)   # Loop 49b: on a cloud machine, those on the internet go
+			main.f_where.item_selected.emit(1)
+			for c in main.f_mcps.get_children():
+				if c is CheckBox and str(c.text) == "notes":
+					c.button_pressed = true
+			await wait(0.8)
+			report.append("mcp: New session on a cloud machine: words « %s », first message editable: %s" % [main.f_mcps_words.text, main.f_first.editable])
+			await shot("mcp-cloud")
 			OS.kill(fake)
 		"machine-request":  # Loop 46: an agent asks for a cloud machine; the owner decides in « They wait for you »
 			var a: Dictionary = await main.engine.call_api("POST", "/sessions", {"name": "Load tests", "tool": "claude", "cwd": "~", "group": "Orbit API", "brain": false})

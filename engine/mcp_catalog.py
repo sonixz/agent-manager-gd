@@ -134,6 +134,18 @@ class McpCatalog:
                                  {"type": "stdio", "command": s["command"], "args": s["args"]}
         return out
 
+    def for_cloud(self, chosen: list[str]) -> tuple[dict, list[str]]:
+        """Loop 49b: what a session on a cloud machine starts with. Only the servers on the internet: one on this
+        computer (localhost, or started by a command) is not on the machine, whose localhost is its own."""
+        given, left = {}, []
+        for s in self.all():
+            if s["everywhere"] or s["name"] in chosen:
+                if s["remote"]:
+                    given[s["name"]] = {"type": "http", "url": s["url"]}
+                else:
+                    left.append(s["name"])
+        return given, left
+
     def clean(self, chosen) -> list[str]:
         known = self.names()
         return [str(n) for n in dict.fromkeys(chosen or []) if str(n) in known]

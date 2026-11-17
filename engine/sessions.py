@@ -788,7 +788,7 @@ class Sessions:
             if parent and not sandbox:   # an agent never makes a machine (a cost): it may add a session to one
                 raise ValueError("an agent may add a session to an existing sandbox (sandbox), never make a new machine")
             d = self.create_sandbox_session(name, tool, grp, repo, brain, on=sandbox, parent=parent,
-                                            secrets=secrets, expert=expert)
+                                            secrets=secrets, expert=expert, mcps=self._clean_mcps(mcps))
             return self.get(d["id"])
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
@@ -1356,17 +1356,19 @@ class Sessions:
             threading.Thread(target=close, daemon=True).start()
 
     def create_sandbox_session(self, name: str, tool: str, grp: str, repo: str, brain: bool, on: str = "", parent: str = "",
-                               secrets: list | None = None, expert: str = "", size: str = "", persist: bool = False) -> dict:
+                               secrets: list | None = None, expert: str = "", size: str = "", persist: bool = False,
+                               mcps: list | None = None) -> dict:
         if tool not in TOOLS:
             raise ValueError(f"unknown tool: {tool}")
         if not NAME_OK.match(name or ""):
             raise ValueError("a name of 1 to 60 characters")
         if on:  # Loop 40: one more session on a sandbox that is there already: no new machine
-            return self._add_to_sandbox(on, name.strip(), tool, grp, parent, secrets=secrets, expert=expert)
+            return self._add_to_sandbox(on, name.strip(), tool, grp, parent, secrets=secrets, expert=expert, mcps=mcps)
         rec = self.store.add(name.strip(), tool, "/work", grp, repo_id=repo, parent=parent)
-        # what the machine gets at its first connection: written before the terminal starts (Loops 43, 45); a child of an
-        # agent never more than its parent (Loop 46: its level is passed to the tool in the machine)
+        # what the machine gets at its first connection: written before the terminal starts (Loops 43, 45, 49b); a child
+        # of an agent never more than its parent (Loop 46: its level is passed to the tool in the machine)
         self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert,
+                          mcps=json.dumps(list(mcps or [])),
                           **({"level": self.level_for("", grp, parent)} if parent else {}))
         try:
             sb = self.sandboxes.create(rec["id"], size=size, repo_id=repo, persist=persist)
@@ -1644,7 +1646,7 @@ class Sessions:
         return {"created": made, **out}
 
     def _add_to_sandbox(self, sbid: str, name: str, tool: str, grp: str, parent: str = "", secrets: list | None = None,
-                        expert: str = "") -> dict:
+                        expert: str = "", mcps: list | None = None) -> dict:
         """Its own tmux session in the machine, its own git worktree when the sandbox holds a repository and the
         tool is an agent (two agents never edit one checkout), the sandbox's Second Brain (one per machine)."""
         sb = self.sandboxes.get(sbid)
@@ -1655,7 +1657,7 @@ class Sessions:
             raise ValueError(f"unknown parent session: {parent}")
         rec = self.store.add(name, tool, "/work", grp or first.get("grp", ""), parent=parent, repo_id=sb["repo_id"])
         self.store.update(rec["id"], secrets=json.dumps(self._clean_secrets(secrets or [])), expert=expert,
-                          **({"level": self.level_for("", grp, parent)} if parent else {}))
+                          mcps=json.dumps(list(mcps or [])), **({"level": self.level_for("", grp, parent)} if parent else {}))
         try:
             self.sandboxes.add_session(sbid, rec["id"], worktree=tool in ("claude", "codex"))
         except Exception:

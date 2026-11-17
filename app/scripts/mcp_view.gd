@@ -72,8 +72,10 @@ static func users(server: Dictionary, sessions: Array) -> Array:
 	var name := str(server.get("name", ""))
 	var out := []
 	for s in sessions:
-		if not (str(s.get("tool", "")) in ["claude", "codex"]) or str(s.get("cwd", "")) == "/work":
+		if not (str(s.get("tool", "")) in ["claude", "codex"]):
 			continue
+		if str(s.get("cwd", "")) == "/work" and not bool(server.get("remote", false)):
+			continue   # Loop 49b: a cloud machine gets only the servers on the internet
 		if bool(server.get("everywhere", false)) or name in (s.get("mcps", []) as Array):
 			out.append({"id": str(s["id"]), "name": str(s.get("name", "")), "running": str(s.get("state", "")) == "running"})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["name"] < b["name"] if a["running"] == b["running"] else a["running"])
@@ -152,9 +154,23 @@ static func tiles(servers: Array, sessions: Array) -> Array:
 	]
 
 
-## New session: the words under the boxes.
-static func session_words(ticked: Array, servers: Array) -> String:
+## New session: the words under the boxes. On a cloud machine (Loop 49b) only the servers on the internet go: one on
+## this computer (localhost, or a command) is not on the machine.
+static func session_words(ticked: Array, servers: Array, cloud := false) -> String:
 	var every := servers.filter(func(s: Dictionary) -> bool: return bool(s.get("everywhere", false))).map(func(s: Dictionary) -> String: return str(s["name"]))
+	if cloud:
+		var remote := {}
+		for s in servers:
+			remote[str(s["name"])] = bool(s.get("remote", false))
+		var all: Array = ticked + every.filter(func(n: String) -> bool: return not (n in ticked))
+		var go := all.filter(func(n: String) -> bool: return remote.get(n, false))
+		var stay := all.filter(func(n: String) -> bool: return not remote.get(n, false))
+		if all.is_empty():
+			return "No MCP server of yours: tick one, or add some in ⌁ MCP. On a cloud machine, those on the internet go."
+		var w := ("On the cloud machine it gets " + ", ".join(go)) if not go.is_empty() else "None of these reaches a cloud machine"
+		if not stay.is_empty():
+			w += "; " + ", ".join(stay) + (" stays" if stay.size() == 1 else " stay") + " on this computer (not on the machine)"
+		return w + "."
 	var parts := []
 	if not ticked.is_empty():
 		parts.append("This session gets " + ", ".join(ticked))
@@ -162,7 +178,7 @@ static func session_words(ticked: Array, servers: Array) -> String:
 		parts.append(("every agent session gets " if ticked.is_empty() else "and every agent session gets ") + ", ".join(every))
 	if parts.is_empty():
 		return "No MCP server of yours: tick one, or add some in 🔌 MCP."
-	return "; ".join(parts) + ". Claude Code and Codex only; not on a cloud machine yet."
+	return "; ".join(parts) + ". Claude Code and Codex only."
 
 
 static func _ago(sec: float) -> String:

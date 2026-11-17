@@ -13,6 +13,7 @@ const Repo := preload("res://scripts/repo_view.gd")
 const Sbx := preload("res://scripts/sandbox_view.gd")
 const Sec := preload("res://scripts/secret_view.gd")
 const SecW := preload("res://scripts/secret_widgets.gd")
+const Mcp := preload("res://scripts/mcp_view.gd")
 
 var failed := 0
 var passed := 0
@@ -46,6 +47,7 @@ func _initialize() -> void:
 			_dashboard_cases()
 			_repo_cases()
 			_sandbox_cases()
+			_mcp_cases()
 			print("%d passed, %d failed" % [passed, failed])
 			quit(1 if failed > 0 else 0)
 			return
@@ -457,6 +459,29 @@ func _repo_cases() -> void:
 
 
 ## The Sandboxes page's inventory (scripts/sandbox_view.gd): states, order, a sandbox's life as a bar, the tiles.
+## Loops 49a and 49b: the owner's MCP servers, in words.
+func _mcp_cases() -> void:
+	check("mcp: a name agents can call", Mcp.name_problem("loop0") == "" and Mcp.name_problem("Loop 0") != "" and Mcp.name_problem("second-brain") != "")
+	check("mcp: a name typed freely is tidied", Mcp.tidy_name(" Loop 0.io ") == "loop-0-io")
+	check("mcp: https, or http on this computer only, no login", Mcp.address_problem("https://loop0.example/mcp") == ""
+		and Mcp.address_problem("http://localhost:3000/mcp") == "" and Mcp.address_problem("http://loop0.example/mcp") != ""
+		and Mcp.address_problem("https://me:pw@x.example/mcp") != "" and Mcp.address_problem("npx -y thing") == "")
+	var loop0 := {"name": "loop0", "kind": "http", "remote": true, "everywhere": false,
+		"last_test": {"ok": true, "at": 1000.0, "ms": 145, "tools": [{"name": "a"}, {"name": "b"}], "prompts": [{"name": "start"}]}}
+	var notes := {"name": "notes", "kind": "http", "remote": false, "everywhere": true, "last_test": null}
+	check("mcp: its prompt to begin as the first message", Mcp.first_prompt(loop0, "my \"idea\"") == "/mcp__loop0__start \"my 'idea'\"")
+	check("mcp: no prompt when never tested", Mcp.first_prompt(notes, "x") == "")
+	var sessions := [{"id": "a", "name": "Here", "tool": "claude", "cwd": "/home/dev", "state": "running", "mcps": ["loop0"]},
+		{"id": "b", "name": "Cloud", "tool": "claude", "cwd": "/work", "state": "running", "mcps": ["loop0"]},
+		{"id": "c", "name": "Shell", "tool": "shell", "cwd": "/home/dev", "state": "running", "mcps": ["loop0"]}]
+	check("mcp: a cloud session counts for a server on the internet", Mcp.users(loop0, sessions).map(func(u: Dictionary) -> String: return u["name"]) == ["Cloud", "Here"])
+	check("mcp: not for one on this computer", Mcp.users(notes, sessions).map(func(u: Dictionary) -> String: return u["name"]) == ["Here"])
+	var servers := [loop0, notes]
+	check("mcp: words here", Mcp.session_words(["loop0"], servers) == "This session gets loop0; and every agent session gets notes. Claude Code and Codex only.")
+	check("mcp: words on a cloud machine", Mcp.session_words(["loop0"], servers, true) == "On the cloud machine it gets loop0; notes stays on this computer (not on the machine).")
+	check("mcp: nothing reaches the machine", Mcp.session_words([], [notes], true).begins_with("None of these reaches a cloud machine"))
+
+
 func _sandbox_cases() -> void:
 	var now := 1800000000.0
 	var day := 86400.0

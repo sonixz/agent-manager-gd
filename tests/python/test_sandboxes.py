@@ -816,6 +816,48 @@ class SandboxesTest(unittest.TestCase):
         journal = self.s.vault.journal(limit=10)
         self.assertTrue(any("cloud machine" in str(j) for j in journal))
 
+    def test_each_session_of_a_cloud_machine_gets_its_own_mcp_servers_on_the_internet_only(self):
+        """Loop 49b (owner, 2026-11-16: « quand je crée une session, je serais capable d'y ajouter un MCP »)."""
+        from engine import sandbox_attach as sa
+        import shlex
+        import subprocess
+        self.s.sandboxes.prepare()
+        self.s.mcp.add("loop0", url="https://loop0.example/mcp")
+        self.s.mcp.add("notes", url="http://localhost:3000/mcp")                # on this computer: not on the machine
+        self.s.mcp.add("figma", url="https://figma.example/mcp", everywhere=True)
+        first = self.s.create("Main", "claude", "", host="sandbox", mcps=["loop0", "notes"])
+        sb = self.s.sandboxes.by_session(first["id"])
+        added = self.s.create("Worker", "codex", "", host="sandbox", sandbox=sb["id"])
+        with self.assertRaises(ValueError):
+            self.s.create("Typo", "claude", "", host="sandbox", sandbox=sb["id"], mcps=["lopo0"])
+        self.assertEqual(self.s.mcps_of(first["id"]), ["loop0", "notes"])
+        sent = []
+        real = sa.subprocess.run
+        sa.subprocess.run = lambda cmd, **kw: (sent.append((cmd[-1], kw.get("input", ""))), real(["true"]))[1]
+        try:
+            given = sa.give_mcp(self.s.sandboxes, self.s.sandboxes.get(sb["id"]), self.s.store, ["ssh"])
+        finally:
+            sa.subprocess.run = real
+        self.assertEqual(set(given[first["id"]]), {"loop0", "figma"})                # notes stays on this computer
+        self.assertEqual(set(given[added["id"]]), {"figma"})                         # every session's server only
+        # the script really writes one file per session, with only root reading it
+        root = tempfile.mkdtemp(prefix="agmgd-mcpcloud-")
+        script = sent[-1][1].replace("/root/", root + "/")
+        subprocess.run(["bash", "-s"], input=script, text=True, check=True)
+        with open(os.path.join(root, ".agmgd", f"mcp-{first['id']}.json")) as f:
+            conf = json.load(f)["mcpServers"]
+        self.assertEqual(conf["loop0"], {"type": "http", "url": "https://loop0.example/mcp"})
+        self.assertNotIn("notes", conf)
+        self.assertEqual(oct(os.stat(os.path.join(root, ".agmgd", f"mcp-{first['id']}.json")).st_mode & 0o777), "0o600")
+        shutil.rmtree(root, ignore_errors=True)
+        # the commands: Claude Code reads its own file, Codex gets each server by its URL, quoted for the machine's shell
+        main_cmd = sa.agent_command(self.s.store.get(first["id"]), False, given[first["id"]])
+        self.assertEqual(main_cmd, f"claude --mcp-config /root/.agmgd/mcp-{first['id']}.json")
+        codex_cmd = sa.agent_command(self.s.store.get(added["id"]), False, given[added["id"]])
+        self.assertEqual(shlex.split(codex_cmd), ["codex", "-c", 'mcp_servers.figma.url="https://figma.example/mcp"'])
+        seat = sa.seat_command("am-x", "/work", codex_cmd)
+        self.assertIn("mcp_servers.figma.url", seat)
+
     def test_an_online_machine_gets_its_repository_its_secrets_a_restart_policy_and_its_guide(self):
         from engine import sandbox_attach as sa
         self.s.sandboxes.prepare()

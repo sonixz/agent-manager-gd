@@ -53,12 +53,22 @@ AGENT_CMD = {"claude": "claude --mcp-config /root/.agmgd/mcp.json", "codex": "co
 SOURCE_SECRETS = "[ -f /root/.agmgd/secrets ] && . /root/.agmgd/secrets"   # Loop 43: the machine's secrets, if any
 
 
-def agent_command(rec: dict, exposed: bool = False) -> str:
+def mcp_file(sid: str) -> str:
+    """Loop 49b: a session's own MCP servers in the machine (several sessions share one machine, each its own ticks)."""
+    return f"/root/.agmgd/mcp-{sid}.json"
+
+
+def agent_command(rec: dict, exposed: bool = False, servers: dict | None = None) -> str:
     """The tool's command in the machine. A session an agent started (Loop 46) gets its level, which is never more than
     its parent's, and on an exposed machine it only reads (Claude Code's plan mode, Codex's read-only sandbox). The
-    owner's own sessions run as before: the tool's own defaults, which ask."""
+    owner's own sessions run as before: the tool's own defaults, which ask. Loop 49b: with `servers` (its MCP servers,
+    see give_mcp), Claude Code reads its own file and Codex is given each server by its URL."""
     tool = rec.get("tool", "shell")
     base = AGENT_CMD.get(tool, "bash -l")
+    if servers is not None and rec.get("id") and tool == "claude":
+        base = "claude --mcp-config " + mcp_file(rec["id"])
+    elif servers and tool == "codex":
+        base += "".join(" -c " + q(f'mcp_servers.{n}.url="{v["url"]}"') for n, v in sorted(servers.items()))
     if tool not in ("claude", "codex") or not rec.get("parent"):
         return base
     if exposed:
@@ -255,9 +265,10 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
         # the machine's secrets first: the setup starts the first session's tool, which must find them (live test of
         # 2026-11-14: written after the setup, the first session had none in its environment)
         give_secrets(sbs, sb, store, keys, base)
+        given = give_mcp(sbs, sb, store, base)   # Loop 49b: each session's MCP servers, before any tool starts
         if subprocess.run(base + ["root@127.0.0.1", "test -e /root/.agmgd/ready"], capture_output=True, timeout=60).returncode != 0:
             say("first start: setting up the sandbox…")
-            setup(sbs, sb, rec, keys, base, store)
+            setup(sbs, sb, rec, keys, base, store, given.get(sb["session_id"], {}))
             sb = sbs.get(sbid)  # the setup chose its working folder
         door = Sandboxes.door_kind(sb)
         if door == "relay":   # Loop 48: the door set again at each connection (a restart may have reset the disk)
@@ -270,7 +281,7 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
                                    "cp /root/.claude/CLAUDE.md /root/.codex/AGENTS.md"], input=guide, text=True, capture_output=True, timeout=60)
         # the first session's tmux, found again; started again with its tool and its secrets when it was gone (before,
         # `tmux new -A` opened a bare shell then, without them)
-        remote = seat_command("am", sb["workdir"], agent_command(rec, bool(sb.get("exposed"))))
+        remote = seat_command("am", sb["workdir"], agent_command(rec, bool(sb.get("exposed")), given.get(sb["session_id"], {})))
         if not seat["first"]:
             mine = store.get(sid) or {}
             workdir = sb["workdir"]
@@ -282,7 +293,7 @@ def connect(sbid: str, home: str, engine_port: int, may_start: bool = True, sid:
                     workdir = path
                 else:
                     say("its own worktree could not be made: it works in the sandbox's folder")
-            remote = seat_command(seat["tmux"], workdir, agent_command(mine, bool(sb.get("exposed"))))
+            remote = seat_command(seat["tmux"], workdir, agent_command(mine, bool(sb.get("exposed")), given.get(sid, {})))
         # The way back to the Second Brain lands on a relay of this terminal that lets through only the Brain's
         # route and the health, request by request; the rest of the engine is not reachable from the sandbox. When
         # the sandbox's lasting connection holds that port already, this one is not needed and fails quietly.
@@ -343,6 +354,33 @@ def give_experts(sbs, sb, store, base) -> str:
     return "\n# Experts on this machine (Agent Manager GD)\n" + "".join(text)
 
 
+def servers_of(store, sid: str) -> dict:
+    """Loop 49b: the owner's MCP servers this session gets in the machine: those on the internet, ticked or for all."""
+    from engine.mcp_catalog import McpCatalog
+    try:
+        chosen = json.loads((store.get(sid) or {}).get("mcps") or "[]")
+    except ValueError:
+        chosen = []
+    return McpCatalog(store.path).for_cloud(chosen)[0]
+
+
+def give_mcp(sbs, sb, store, base) -> dict:
+    """Loop 49b: at each connection, one file per session of the machine with its MCP servers (the Second Brain's way
+    back when the machine has it, then the owner's servers on the internet). A server ticked or taken back is there, or
+    gone, from the session's next start. Returns each session's servers."""
+    out, script = {}, ["umask 077", "mkdir -p /root/.agmgd"]
+    for i, sid in enumerate(sbs.sessions_on(sb["id"])):
+        servers = servers_of(store, sid)
+        out[sid] = servers
+        conf = {"mcpServers": {}}
+        if sb.get("brain_client"):
+            conf["mcpServers"]["second-brain"] = {"type": "http", "url": f"http://127.0.0.1:8765/sandbox-brain/{sb['secret']}/mcp"}
+        conf["mcpServers"].update(servers)
+        script.append(f"cat > {mcp_file(sid)} <<'AGMGD_MCP_{i}'\n{json.dumps(conf)}\nAGMGD_MCP_{i}")
+    subprocess.run(base + ["root@127.0.0.1", "bash -s"], input="\n".join(script) + "\n", text=True, capture_output=True, timeout=60)
+    return out
+
+
 def give_secrets(sbs, sb, store, keys, base) -> None:
     """Loop 43: the secrets given to the sessions of this machine (Keys › Secrets), written at each connection in
     one file only root reads (/root/.agmgd/secrets; on an Online machine also /data/.agmgd/secrets, for its start
@@ -371,7 +409,7 @@ def give_secrets(sbs, sb, store, keys, base) -> None:
     subprocess.run(base + ["root@127.0.0.1", cmd], input=text, text=True, capture_output=True, timeout=60)
 
 
-def setup(sbs, sb, rec, keys, base, store) -> None:
+def setup(sbs, sb, rec, keys, base, store, servers: dict | None = None) -> None:
     secret_files = {}
     if keys.get("anthropic"):
         secret_files["ANTHROPIC_API_KEY"] = keys.get("anthropic")
@@ -402,9 +440,10 @@ def setup(sbs, sb, rec, keys, base, store) -> None:
     else:
         subprocess.run(base + ["root@127.0.0.1", f"mkdir -p {workdir}"], timeout=60)
     sbs._set(sb["id"], workdir=workdir)
-    agent = agent_command(rec, bool(sb.get("exposed")))   # Loop 46: a child of an agent gets its level
-    start = (f"tmux has-session -t am 2>/dev/null || tmux new -d -s am -c {workdir} "
-             f"\"bash -lc '. /root/.agmgd/env; {SOURCE_SECRETS}; {agent}; exec bash -l'\"; touch /root/.agmgd/ready")
+    agent = agent_command(rec, bool(sb.get("exposed")), servers)   # Loop 46: a child of an agent gets its level
+    # quoted word by word (Loop 49b: Codex's servers carry quotes of their own)
+    start = (f"tmux has-session -t am 2>/dev/null || tmux new -d -s am -c {q(workdir)} "
+             + q("bash -lc " + q(f". /root/.agmgd/env; {SOURCE_SECRETS}; {agent}; exec bash -l")) + "; touch /root/.agmgd/ready")
     subprocess.run(base + ["root@127.0.0.1", start], timeout=60)
 
 

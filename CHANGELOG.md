@@ -5,6 +5,11 @@ Newest first.
 
 ## Unreleased: alpha
 
+### MCP servers on cloud machines (Loop 49b)
+- A session on a cloud machine gets the MCP servers ticked for it, and those for every agent session, when they are
+  on the internet; each session of the machine has its own. A server on this computer stays behind, and New session
+  says so.
+
 ### Your MCP servers (Loop 49a)
 - ⌁ MCP, in the top bar: add an MCP server once, by its address (HTTPS) or by the command that starts it, and Test it
   to see whether it answers, its tools and prompts, and how fast. Each one is a drawn card.

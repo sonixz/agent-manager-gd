@@ -469,8 +469,14 @@
             server's prompt <code>/mcp__&lt;server&gt;__&lt;prompt&gt;</code> (its menu shows it as <code>loop0:start</code>).
             Such a command is typed once Claude Code has started and its servers are connected: given on its command line,
             Claude Code read it too early and answered « Unknown command ». Plain words are given at once.</li>
-          <li>Claude Code gets the servers in its MCP configuration; Codex gets a server over HTTP by its URL. Not on a cloud
-            machine yet.</li>
+          <li>Claude Code gets the servers in its MCP configuration; Codex gets a server over HTTP by its URL.</li>
+          <li><b>On a cloud machine</b> (ours, on Fly.io), each session gets the servers ticked for it, and those for every
+            agent session, that are <b>on the internet</b>: the machine reaches them itself. A server on this computer
+            (<code>localhost</code>, or started by a command) is not on the machine, whose <code>localhost</code> is its own:
+            New session says which stay behind. Each session of the machine has its own file of servers
+            (<code>/root/.agmgd/mcp-&lt;session&gt;.json</code>, read by root only), written again at each connection: a
+            server ticked or taken back is there, or gone, from the session's next start. A first message is not given in a
+            cloud machine yet: write it in its terminal.</li>
         </ul>
 
         <h2 id="online">A public URL per machine</h2>

@@ -175,6 +175,7 @@ var f_first: LineEdit           # New session: its first message (an MCP server'
 var mcp_box: VBoxContainer      # the ⌁ MCP page (Loop 49a)
 var mcp_last: Array = []        # the servers as last read
 var mcp_testing := {}           # name -> true while its Test runs
+var mcp_form_servers: Array = []  # the servers New session's boxes were made from
 var usage_box: VBoxContainer
 var perms_box: VBoxContainer   # Loop 31: the Agent Permissions view
 var access_menu: PopupMenu     # a group's default file access
@@ -866,7 +867,9 @@ func _build_new_dialog() -> void:
 	g.add_child(f_first)
 	f_cwd.text_changed.connect(func(_t: String) -> void: _check_brief())
 	f_tool.item_selected.connect(func(_i: int) -> void: _check_brief())
-	f_where.item_selected.connect(func(_i: int) -> void: _check_remote())
+	f_where.item_selected.connect(func(_i: int) -> void:
+		_check_remote()
+		_mcp_words())
 	f_group.item_selected.connect(func(_i: int) -> void: _group_level_default())
 	new_dialog.confirmed.connect(_create)
 
@@ -5558,7 +5561,7 @@ func _mcp_card(s: Dictionary, now: float) -> Control:
 	var give := OptionButton.new()   # tick it for a session that does not have it, from that session's next start
 	give.add_item("Give to a session…")
 	for x in sessions:
-		if str(x.get("tool", "")) in ["claude", "codex"] and str(x.get("cwd", "")) != "/work" and not (name in (x.get("mcps", []) as Array)):
+		if str(x.get("tool", "")) in ["claude", "codex"] and (str(x.get("cwd", "")) != "/work" or bool(s.get("remote", false))) and not (name in (x.get("mcps", []) as Array)):
 			give.add_item(str(x["name"]))
 			give.set_item_metadata(give.item_count - 1, str(x["id"]))
 	give.disabled = give.item_count < 2 or bool(s.get("everywhere", false))
@@ -5672,6 +5675,7 @@ func _fill_mcp_boxes(pre := "") -> void:
 		c.queue_free()
 	var r := await engine.call_api("GET", "/mcp")
 	var servers: Array = r.get("servers", [])
+	mcp_form_servers = servers
 	if servers.is_empty():
 		f_mcps_words.text = "None of yours: add some in ⌁ MCP, then tick the ones a session needs."
 		return
@@ -5683,9 +5687,20 @@ func _fill_mcp_boxes(pre := "") -> void:
 		if cb.disabled:
 			cb.button_pressed = true
 			cb.tooltip_text = "Given to every agent session (⌁ MCP)"
-		cb.toggled.connect(func(_on: bool) -> void: f_mcps_words.text = McpView.session_words(_ticked_mcps(), servers))
+		cb.toggled.connect(func(_on: bool) -> void: _mcp_words())
 		f_mcps.add_child(cb)
-	f_mcps_words.text = McpView.session_words(_ticked_mcps(), servers)
+	_mcp_words()
+
+
+## The words under New session's MCP boxes, for where it will run (Loop 49b: a cloud machine gets those on the internet).
+func _mcp_words() -> void:
+	if f_mcps_words == null:
+		return
+	var cloud := f_where != null and f_where.item_count > 0 and str(f_where.get_selected_metadata()) == "sandbox"
+	f_mcps_words.text = McpView.session_words(_ticked_mcps(), mcp_form_servers, cloud)
+	if f_first != null:   # a first message is not given in a cloud machine yet
+		f_first.editable = not cloud
+		f_first.placeholder_text = "not on a cloud machine yet: write it in its terminal once it has started" if cloud else "optional: what the agent starts with, like /mcp__loop0__start \"my idea\""
 
 
 func _ticked_mcps() -> Array:
@@ -6930,7 +6945,7 @@ func _create_now() -> void:
 	var name := f_name.text.strip_edges()
 	if name == "":
 		name = str(f_tool.get_item_text(f_tool.selected)).substr(3)
-	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled, "level": str(f_level.get_selected_metadata()), "access": str(f_access.get_selected_metadata()), "secrets": _ticked_secrets(), "mcps": _ticked_mcps(), "first": f_first.text.strip_edges() if f_first != null else ""}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
+	var r := await engine.call_api("POST", "/sessions", {"name": name, "tool": f_tool.get_selected_metadata(), "cwd": f_cwd.text.strip_edges(), "group": str(f_group.get_selected_metadata()) if f_group.item_count > 0 else "", "worktree": f_worktree.button_pressed, "brain": f_brain.button_pressed, "brief": f_brief.button_pressed and not f_brief.disabled, "repo": str(f_repo.get_selected_metadata()) if f_repo.item_count > 0 else "", "host": str(f_where.get_selected_metadata()), "remote": f_remote.button_pressed and not f_remote.disabled, "document": f_document.button_pressed and not f_document.disabled, "level": str(f_level.get_selected_metadata()), "access": str(f_access.get_selected_metadata()), "secrets": _ticked_secrets(), "mcps": _ticked_mcps(), "first": f_first.text.strip_edges() if f_first != null and f_first.editable else ""}, true, 240.0 if str(f_where.get_selected_metadata()) == "sandbox" else 30.0)
 	if r.has("error"):
 		status_label.text = "Not started: " + str(r["error"])
 		return
